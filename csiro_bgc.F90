@@ -1937,6 +1937,9 @@ case(2)
 case(3)
 call bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)
 
+case(4)
+call bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)
+
 case default
 if (mpp_pe() == mpp_root_pe() )print*,'rjm do no bio version'
 
@@ -2890,5 +2893,6 @@ end subroutine  csiro_bgc_tracer  !}
 ! </SUBROUTINE> NAME="csiro_bgc_tracer"
 
 include "bio_v3.inc" 
+include "bio_v4.inc" 
 
 end module  csiro_bgc_mod  !}
