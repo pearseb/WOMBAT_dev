@@ -1855,6 +1855,8 @@ end subroutine csiro_bgc_init  !}
 subroutine csiro_bgc_source(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)  !{
 
 use field_manager_mod,        only: fm_get_index
+use time_manager_mod, only: days_in_year, days_in_month,        &
+     get_date, set_date
 
 !-----------------------------------------------------------------------
 !     arguments
@@ -1891,6 +1893,7 @@ integer :: i
 integer :: j
 integer :: k
 integer :: n
+integer :: m
 logical :: used
 integer :: day
 integer :: month
@@ -1905,6 +1908,7 @@ integer :: nn, ntr_bgc
 ! include "bio_v1.par"
 
 real    :: total_trc
+real    :: days_in_this_year
 !
 ! =====================================================================
 !     begin executable code
@@ -1916,6 +1920,15 @@ call mpp_clock_begin(id_clock_csiro_obgc)
 
 call get_date(time%model_time, year, month, day,                &
               hour, minute, second)
+
+! calculate the day in the year
+days_in_this_year = 0.0
+do m = 1, month - 1
+  days_in_this_year = days_in_this_year +                     &
+                      days_in_month(set_date(year, m, 1))
+enddo
+days_in_this_year = days_in_this_year + day - 1 + hour/24.0 + &
+                    minute/1440.0 + second/86400.0
 
 !-----------------------------------------------------------------------
 !     calculate the source terms for BIOTICs
