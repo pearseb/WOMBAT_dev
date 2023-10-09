@@ -177,7 +177,7 @@ do n = 1, instances  !{
   ind_phy  = biotic(n)%ind_bgc(id_phy)
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)
   ind_det  = biotic(n)%ind_bgc(id_det)
-  ind_mytrc  = biotic(n)%ind_bgc(id_mytrc)  ! pjb
+  ind_pchl  = biotic(n)%ind_bgc(id_pchl)  ! pjb
 
 
 !chd calculate biotic source terms using Euler
@@ -198,8 +198,8 @@ do n = 1, instances  !{
               biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
            if (id_fe.ne.0) &
               biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
-           if (id_mytrc.ne.0) &  
-              biotr(i,k,id_mytrc) = max(0.0,t_prog(ind_mytrc)%field(i,j,k,Time%taum1)) ! pjb
+           if (id_pchl.ne.0) &  
+              biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1)) ! pjb
           enddo
         enddo
 
@@ -419,8 +419,8 @@ do n = 1, instances  !{
            t_prog(ind_alk)%field(i,j,k,time%taum1) +  &  
            ( - 2.0 * caco3_bgc_change - no3_bgc_change)
 
-        if ( id_mytrc .ne. 0 ) &
-          t_prog(ind_mytrc)%field(i,j,k,time%taum1) = biotr(i,k,id_mytrc)  ! pjb
+        if ( id_pchl .ne. 0 ) &
+          t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl)  ! pjb
 
         pprod_gross(i,j,k)=rdtts*pprod_gross(i,j,k)*grid%tmask(i,j,k)
         zprod_gross(i,j,k)=rdtts*zprod_gross(i,j,k)*grid%tmask(i,j,k)

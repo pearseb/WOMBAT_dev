@@ -32,6 +32,9 @@
 !<CONTACT EMAIL="Matthew.Chamberlain@csiro.au"> Matt Chamberlain
 !</CONTACT>
 !
+!<CONTACT EMAIL="Pearse.Buchanan@csiro.au"> Pearse Buchanan
+!</CONTACT>
+!
 !<REVIEWER EMAIL=""> 
 !</REVIEWER>
 !
@@ -223,7 +226,7 @@ integer :: id_po4, id_no3, id_fe,                    &
            id_o2,                                    &
            id_phy, id_det, id_zoo,                   &
            id_caco3_sediment, id_det_sediment,       &
-           id_mytrc    ! pjb
+           id_pchl    ! pjb
 ! internal pointer to make reading the code easier
 integer,public :: ind_po4 = -1
 integer,public :: ind_dic = -1 
@@ -236,7 +239,7 @@ integer,public :: ind_zoo = -1
 integer,public :: ind_caco3 = -1
 integer,public :: ind_adic = -1
 integer,public :: ind_fe = -1
-integer,public :: ind_mytrc = -1  ! pjb
+integer,public :: ind_pchl = -1  ! pjb
 character*6  :: qbio_model
 integer      :: bio_version    ! version of the bgc module to use
 logical      :: zero_floor     ! apply hard floor to bgc tracers 
@@ -1612,7 +1615,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_det',0)      
   call fm_util_set_value('id_caco3',0)      
   call fm_util_set_value('id_fe',0)      
-  call fm_util_set_value('id_mytrc',0)   !pjb     
+  call fm_util_set_value('id_pchl',0)   !pjb     
 
   atmpress_file      =  fm_util_get_string ('atmpress_file', scalar = .true.)
   atmpress_name      =  fm_util_get_string ('atmpress_name', scalar = .true.)
@@ -1646,7 +1649,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_det   =   fm_util_get_integer ('id_det', scalar = .true.)
   id_caco3 =   fm_util_get_integer ('id_caco3', scalar = .true.)
   id_fe    =   fm_util_get_integer ('id_fe', scalar = .true.)
-  id_mytrc=   fm_util_get_integer ('id_mytrc', scalar = .true.)  ! pjb
+  id_pchl=   fm_util_get_integer ('id_pchl', scalar = .true.)  ! pjb
 
 
 call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check = .true.)
@@ -1655,7 +1658,7 @@ sum_ntr = min(1,id_po4) + min(1,id_no3) + min(1,id_fe) +                      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
           min(1,id_o2) +                                                      &
           min(1,id_phy) + min(1,id_zoo) + min(1,id_det) +                     &
-          min(1,id_mytrc)   ! pjb
+          min(1,id_pchl)   ! pjb
 if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',sum_ntr
 
 
@@ -1675,7 +1678,7 @@ do n = 1, instances  !{
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
                       min(1,id_o2) +                                                      &
                       min(1,id_phy) + min(1,id_zoo) + min(1,id_det) +                     &
-                      min(1,id_mytrc)  ! pjb
+                      min(1,id_pchl)  ! pjb
   if (mpp_pe() == mpp_root_pe() ) print*,'Number bgc tracers = ',biotic(n)%ntr_bgc
       
 
@@ -1735,8 +1738,8 @@ do n = 1, instances  !{
           bgc_trc='po4'
           min_range=0.0
           max_range=100.0
-    else if (nn == id_mytrc ) then  ! pjb
-          bgc_trc='mytrc'
+    else if (nn == id_pchl ) then  ! pjb
+          bgc_trc='pchl'
           min_range=0.0
           max_range=100.0
     else 
@@ -1815,7 +1818,7 @@ do n = 1, instances  !{
    ind_zoo  = biotic(n)%ind_bgc(id_zoo)
    ind_det  = biotic(n)%ind_bgc(id_det)
 
-   if(id_mytrc .ne. 0 ) ind_mytrc= biotic(n)%ind_bgc(id_mytrc)  ! pjb
+   if(id_pchl .ne. 0 ) ind_pchl= biotic(n)%ind_bgc(id_pchl)  ! pjb
 
 enddo  !} n
 
@@ -2709,11 +2712,11 @@ do n = 1, instances  !{
   else
    bgc_si_prefix = 'm'
   endif
-  if (nn .eq. id_mytrc) then ! pjb 
-   name1 = 'Flux into ocean - new tracer'
-   name2 = 'Virtual flux into ocean - new tracer'
-   name3 = 'Source term - new tracer'
-   name4 = 'Flux into sediment - new tracer'
+  if (nn .eq. id_pchl) then ! pjb 
+   name1 = 'Flux into ocean - chlorophyll'
+   name2 = 'Virtual flux into ocean - chlorophyll'
+   name3 = 'Source term - chlorophyll'
+   name4 = 'Flux into sediment - chlorophyll'
   endif
   if (mpp_pe() == mpp_root_pe() )print*,'rjm bio',bgc_stf,'v'//bgc_stf
 
