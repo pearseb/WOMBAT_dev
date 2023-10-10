@@ -60,6 +60,9 @@ integer :: index_temp, index_salt
       real :: adv_fb(isc:iec,1:grid%nk+1)
       real, dimension(isd:ied,jsd:jed) :: mld
       real :: caco3_bgc_change, no3_bgc_change
+! PJB additions
+      real :: day_angle, declination, cos_hour_angle, daylight_hours
+
 
 !
 ! =====================================================================
@@ -217,6 +220,12 @@ do n = 1, instances  !{
           enddo
         enddo
        enddo
+
+! pjb - Calculate the daylength (hours per day) given the latitude and day of year
+       day_angle = 2.0*pi*(days_in_this_year-1)/365.0
+       declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
+       cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
+       daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
 
 
        avej(:,:)= 0.0
