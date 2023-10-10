@@ -1951,7 +1951,8 @@ case(3)
 call bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)
 
 case(4)
-call bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)
+call bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt, &
+            days_in_this_year)
 
 case default
 if (mpp_pe() == mpp_root_pe() )print*,'rjm do no bio version'

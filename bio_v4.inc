@@ -1,6 +1,7 @@
 !
 
-subroutine bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dtts, Thickness, Dens, swflx, sw_frac_zt)
+subroutine bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dtts, Thickness, Dens, swflx, sw_frac_zt, &
+                  days_in_this_year)
 
 
 ! Based on the pt_npzd.aos version  - which is the optimized version
@@ -22,6 +23,7 @@ type(ocean_thickness_type), intent(in)                          :: Thickness
 type(ocean_density_type), intent(in)                            :: Dens
 real, intent(in), dimension(isd:ied,jsd:jed)                    :: swflx        ! short wave radiation flux (W/m^2)
 real, intent(in), dimension(isd:,jsd:,:)                    :: sw_frac_zt        ! short wave fraction on T grid (none)
+real, intent(in)                                                :: days_in_this_year
 
 !-----------------------------------------------------------------------
 !     local variables
