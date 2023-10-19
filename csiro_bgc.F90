@@ -278,6 +278,7 @@ integer                                 :: id_radbio_int100 = -1
 integer                                 :: id_radbio1 = -1
 integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
+integer                                 :: id_zeuphot = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -356,6 +357,7 @@ real, allocatable, dimension(:,:) :: npp2d
 real, allocatable, dimension(:,:,:) :: npp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross
 real, allocatable, dimension(:,:) :: pprod_gross_2d
+real, allocatable, dimension(:,:) :: zeuphot
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
 real, allocatable, dimension(:) :: dummy
@@ -529,6 +531,7 @@ allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
+allocate( zeuphot(isc:iec,jsc:jec) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -2139,6 +2142,12 @@ if (id_radbio_int100 .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
+! Euphotic Zone depth (1% light level, function of chlorophyll).
+if (id_zeuphot .gt. 0) then
+  used = send_data(id_zeuphot, zeuphot(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
 ! PAR for phytoplankton at surface.
 
 if (id_radbio1 .gt. 0) then
@@ -2557,6 +2566,10 @@ id_radbio_int100 = register_diag_field('ocean_model','radbio_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
      '100m-integrated photosynthetically active radiation for phytoplankton growth', &
      'W m-1',missing_value = -1.0e+10)      
+id_zeuphot = register_diag_field('ocean_model','zeuphot', &
+     grid%tracer_axes(1:2),Time%model_time, &
+     'euphotic zone depth', &
+     'metres',missing_value = -1.0e+10)     
 
 id_radbio1 = register_diag_field('ocean_model','radbio1', &
      grid%tracer_axes(1:2),Time%model_time, 'Photosynthetically active radiation for phytoplankton growth at surface', &

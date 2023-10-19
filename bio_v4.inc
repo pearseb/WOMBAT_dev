@@ -146,7 +146,8 @@ integer :: index_temp, index_salt
       real :: day_angle, declination, cos_hour_angle, daylight_hours, zchl
       real, dimension(4,61) :: zrgb
       real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
-      real, dimension(isc:iec,grid%nk)   :: par_phy
+      real, dimension(isc:iec,grid%nk)   :: par_phy, par_tot
+      real, dimension(isc:iec,jsc:jec)   :: zeuphot
 
       ! Chlorophyll      ! Blue attenuation    ! Green attenuation   ! Red attenuation
       zrgb(1, 1) =  0.010; zrgb(2, 1) = 0.01618; zrgb(3, 1) = 0.07464; zrgb(4, 1) = 0.3780
@@ -314,6 +315,7 @@ do n = 1, instances  !{
   pprod_gross_int100(:,:) = 0.0
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
+  zeuphot(:,:) = 0.0
 
 
 ! possible tracers in model
@@ -373,7 +375,9 @@ do n = 1, instances  !{
        ! Reset some arrays 
        ek_rgb(:,:,:) = 0.0
        par_rgb(:,:,:) = 0.0
+       par_tot(:,:) = 0.0
        par_phy(:,:) = 0.0
+       zeuphot(:,:) = 1.0 ! sets minimum euphotic zone depth
 
        do k=1,grid%nk
          do i=isc,iec
@@ -390,25 +394,33 @@ do n = 1, instances  !{
            ek_rgb(i,k,3) = zrgb(4,ichl) * thickness%dzt(i,j,k)
 ! pjb - Estimate the amount of RGB light available in the water column given RGB attenuation
            if (k.eq.1) then
-             par_rgb(i,k,1) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,1))
-             par_rgb(i,k,2) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,2))
-             par_rgb(i,k,3) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,3))
+             par_rgb(i,k,1) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,1))
+             par_rgb(i,k,2) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,2))
+             par_rgb(i,k,3) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,3))
            else
              par_rgb(i,k,1) = par_rgb(i,k-1,1) * EXP(-0.5 * (ek_rgb(i,k-1,1)+ek_rgb(i,k,1)))
              par_rgb(i,k,2) = par_rgb(i,k-1,2) * EXP(-0.5 * (ek_rgb(i,k-1,2)+ek_rgb(i,k,2)))
              par_rgb(i,k,3) = par_rgb(i,k-1,3) * EXP(-0.5 * (ek_rgb(i,k-1,3)+ek_rgb(i,k,3)))
            endif
-! pjb - Calculate the amount of light available for phytoplankton
+! pjb - Calculate the amount of light available for phytoplankton and the euphotic depth
+           par_tot(i,k) =        par_rgb(i,k,1) +        par_rgb(i,k,2) +        par_rgb(i,k,3)
            par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
+           if (par_tot(i,k) .gt. (swflx(i,j) * parbio(i,j) * 0.01)) then
+             zeuphot(i,j) = grid%zw(k)
+           endif
 
            !if (i.eq.112) then
            !  if (j.eq.222) then
-           !    print*, grid%xt(i,j), grid%yt(i,j), grid%zt(k), swflx(i,j)*parbio(i,j), par_rgb(i,k,1), par_rgb(i,k,2), par_rgb(i,k,3)
+           !    print*, grid%zt(k), grid%zw(k), swflx(i,j)*parbio(i,j), zeuphot(i,j), par_tot(i,k) 
            !  endif
            !endif
 
          enddo
        enddo
+
+! pjb - Calculate euphotic zone depth
+
+
 
 
        avej(:,:)= 0.0
