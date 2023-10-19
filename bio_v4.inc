@@ -5,7 +5,88 @@ subroutine bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 
 
 ! Based on the pt_npzd.aos version  - which is the optimized version
-
+!
+!
+!     (\___/)
+!     / o o \
+!    (   "   )
+!     \__ __/
+!     
+!
+! World Ocean Model of Biogeochemistry And Trophic-dynamics (WOMBAT)
+!
+!  Authors:
+!   Richard Matear          (Richard.Matear@csiro.au)
+!   Matthew Chamberlain     (Matt.Chamberlain@csiro.au)
+!   Pearse Buchanan         (Pearse.Buchanan@csiro.au)
+!
+!
+!
+!   Purpose
+!   -------
+!       This code calculates...
+!
+!
+!   Sequence
+!   --------
+!   - Set up
+!       1.  Retrieve key biotic parameters from input file
+!       2.  Get time information (timestep length and nested timestep for source and sink equations)
+!       3.  Calculate mixed layer depth
+!       4.  Initialise diagnostic arrays
+!       5.  Retrieve indices of the active tracers
+!       6.  Retrieve active tracers
+!       7.  Create tracer mask
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Light
+!       8.  Calculate short-wave irradiance intensity as a function of depth
+!       9.  Include effect of sea-ice concentration
+!   - Phytoplankton growth
+!       10. Calculate phytoplankton growth rate as a function of light and temperature
+!       11. Collect the average light limitition over the mixed layer depth ["light_limit"]
+!
+!               [ END do loop over k and i indices ]
+!
+!
+!               [ BEGIN do loop over t, k and i indices ]
+!
+!       12. Apply nutrient limitation terms to maximum phytoplankton growth, taking the
+!           minimum of light, no3 and dfe limitations
+!   - Zooplankton grazing
+!       13. Apply typeIII disk formulation for grazing of phytoplankton biomass
+!       14. Calculate a scaling term according to the temperature
+!   - Source and sinks
+!       15. Collect all the source and sink terms for:
+!           i.   Phytoplankton growth and mortality
+!           ii.  Zooplankton growth and mortality
+!           iii. And how these route to detritus, CaCO3 and inorganic nutrients
+!       16. Reduce decay rates of detrius below 180 metres
+!       17. Apply source and sink terms to the tracers
+!
+!               [ END do loop over t, k and i indices ]
+!
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Tracer tendencies and diagnostics
+!       18. Apply the tracer tendencies to the prognostic tracers in the model
+!       19. Collect the diagnostics
+!
+!               [ END do loop over k and i indices ]
+!
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Sinking
+!       20. Sink detritus and CaCO3
+!       21. Deposit some tracer into the sediment
+!       22. Apply change to detritus and CaCO3
+!
+!               [ END do loop over k and i indices ]
+!
+!
 !-----------------------------------------------------------------------
 !     arguments
 !-----------------------------------------------------------------------
@@ -43,6 +124,7 @@ integer :: index_temp, index_salt
       integer :: ts_npzd ! number of time steps within NPZD model
       integer :: kmeuph = 20 ! deepest level of  euphotic zone
       integer :: tn, trn
+      integer :: ichl
 
       real :: pi    = 3.14159265358979  !yes, this is pi
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
@@ -61,8 +143,10 @@ integer :: index_temp, index_salt
       real, dimension(isd:ied,jsd:jed) :: mld
       real :: caco3_bgc_change, no3_bgc_change
 ! PJB additions
-      real :: day_angle, declination, cos_hour_angle, daylight_hours
+      real :: day_angle, declination, cos_hour_angle, daylight_hours, zchl
       real, dimension(4,61) :: zrgb
+      real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
+      real, dimension(isc:iec,grid%nk)   :: par_phy
 
       ! Chlorophyll      ! Blue attenuation    ! Green attenuation   ! Red attenuation
       zrgb(1, 1) =  0.010; zrgb(2, 1) = 0.01618; zrgb(3, 1) = 0.07464; zrgb(4, 1) = 0.3780
@@ -270,6 +354,8 @@ do n = 1, instances  !{
           enddo
         enddo
 
+! pjb - I don't know why you would do this for every tracer... Just use one? One we trust, like DIC?
+!       Because otherwise we could be masking places where tracers go negative, like O2 in the anoxic zones
 !chd   create mask bioma, which is 0 for biotr < epsi and 1
 !chd   otherwise
        do trn=1,ntr_bmax   
@@ -283,12 +369,46 @@ do n = 1, instances  !{
         enddo
        enddo
 
+
+       ! Reset some arrays 
+       ek_rgb(:,:,:) = 0.0
+       par_rgb(:,:,:) = 0.0
+       par_phy(:,:) = 0.0
+
+       do k=1,grid%nk
+         do i=isc,iec
 ! pjb - Calculate the daylength (hours per day) given the latitude and day of year
-       day_angle = 2.0*pi*(days_in_this_year-1)/365.0
-       declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
-       cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
-       daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
-! pjb - Get the attenuation coefficients
+           day_angle = 2.0*pi*(days_in_this_year-1)/365.0
+           declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
+           cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
+           daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+! pjb - Get the attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
+           zchl = MAX(0.01, MIN(10.0, biotr(i,k,id_pchl) ))
+           ichl = NINT( 41 + 20.0*LOG10(zchl) + epsi )
+           ek_rgb(i,k,1) = zrgb(2,ichl) * thickness%dzt(i,j,k)
+           ek_rgb(i,k,2) = zrgb(3,ichl) * thickness%dzt(i,j,k)
+           ek_rgb(i,k,3) = zrgb(4,ichl) * thickness%dzt(i,j,k)
+! pjb - Estimate the amount of RGB light available in the water column given RGB attenuation
+           if (k.eq.1) then
+             par_rgb(i,k,1) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,1))
+             par_rgb(i,k,2) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,2))
+             par_rgb(i,k,3) = swflx(i,j) * parbio(i,j) * EXP(-0.5 * ek_rgb(i,k,3))
+           else
+             par_rgb(i,k,1) = par_rgb(i,k-1,1) * EXP(-0.5 * (ek_rgb(i,k-1,1)+ek_rgb(i,k,1)))
+             par_rgb(i,k,2) = par_rgb(i,k-1,2) * EXP(-0.5 * (ek_rgb(i,k-1,2)+ek_rgb(i,k,2)))
+             par_rgb(i,k,3) = par_rgb(i,k-1,3) * EXP(-0.5 * (ek_rgb(i,k-1,3)+ek_rgb(i,k,3)))
+           endif
+! pjb - Calculate the amount of light available for phytoplankton
+           par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
+
+           !if (i.eq.112) then
+           !  if (j.eq.222) then
+           !    print*, grid%xt(i,j), grid%yt(i,j), grid%zt(k), swflx(i,j)*parbio(i,j), par_rgb(i,k,1), par_rgb(i,k,2), par_rgb(i,k,3)
+           !  endif
+           !endif
+
+         enddo
+       enddo
 
 
        avej(:,:)= 0.0
