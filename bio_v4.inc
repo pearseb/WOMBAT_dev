@@ -130,9 +130,9 @@ integer :: index_temp, index_salt
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
       real :: bion,biop,bioz,biod,bioo,biocaco3,bioi
       real :: u_npz,g_npz
-      real :: fx1,fx2,fx3,fx4,fu1,fu2,radbio, sw_zt, sw_zt1, sw_zt2
-      real :: vpbio(isc:iec,grid%nk)
-      real :: avej(isc:iec,grid%nk)
+      real :: fx1,fx2,fx3,fx4,fu1,fu2
+      real :: mumax_phy(isc:iec,grid%nk)
+      real :: mu_phy(isc:iec,grid%nk)
 !chd auxiliary variables to prevent unnecessary computation
       real :: fbc
       real :: f11,f21,f22,f23,f31,f32,f41,f51 
@@ -147,7 +147,9 @@ integer :: index_temp, index_salt
       real, dimension(4,61) :: zrgb
       real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
       real, dimension(isc:iec,grid%nk)   :: par_phy, par_tot
-      real, dimension(isc:iec,jsc:jec)   :: zeuphot
+      real, dimension(isc:iec,grid%nk)   :: lday_phy, lday_chl
+      real, dimension(isc:iec) :: par_phy_mldsum, par_tot_mldsum, par_z_mldsum
+      real :: z1_dep, zval
 
       ! Chlorophyll      ! Blue attenuation    ! Green attenuation   ! Red attenuation
       zrgb(1, 1) =  0.010; zrgb(2, 1) = 0.01618; zrgb(3, 1) = 0.07464; zrgb(4, 1) = 0.3780
@@ -315,7 +317,6 @@ do n = 1, instances  !{
   pprod_gross_int100(:,:) = 0.0
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
-  zeuphot(:,:) = 0.0
 
 
 ! possible tracers in model
@@ -372,15 +373,25 @@ do n = 1, instances  !{
        enddo
 
 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! Light (Red, Green and Blue) !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
        ! Reset some arrays 
        ek_rgb(:,:,:) = 0.0
        par_rgb(:,:,:) = 0.0
        par_tot(:,:) = 0.0
        par_phy(:,:) = 0.0
-       zeuphot(:,:) = 1.0 ! sets minimum euphotic zone depth
+       par_tot_mldsum = 0.0
+       par_phy_mldsum = 0.0
+       par_z_mldsum = 0.0
+       lday_phy(:,:) = 0.0 + epsi
+       lday_chl(:,:) = 0.0 + epsi
+       zeuphot(isc:iec,1:grid%nk) = 1.0
 
        do k=1,grid%nk
          do i=isc,iec
+
 ! pjb - Calculate the daylength (hours per day) given the latitude and day of year
            day_angle = 2.0*pi*(days_in_this_year-1)/365.0
            declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
@@ -408,71 +419,76 @@ do n = 1, instances  !{
            if (par_tot(i,k) .gt. (swflx(i,j) * parbio(i,j) * 0.01)) then
              zeuphot(i,j) = grid%zw(k)
            endif
+! pjb - Calculate the integrated light level in the mixed layer
+           if (grid%zw(k) .le. mld(i,j)) then
+             par_tot_mldsum(i) = par_tot_mldsum(i) + par_tot(i,k) * thickness%dzt(i,j,k)
+             par_phy_mldsum(i) = par_phy_mldsum(i) + par_phy(i,k) * thickness%dzt(i,j,k)
+             par_z_mldsum(i) = par_z_mldsum(i) + thickness%dzt(i,j,k)
+           endif
 
            !if (i.eq.112) then
            !  if (j.eq.222) then
-           !    print*, grid%zt(k), grid%zw(k), swflx(i,j)*parbio(i,j), zeuphot(i,j), par_tot(i,k) 
+           !    print*, grid%zt(k), grid%zw(k), par_tot_mldsum(i), par_z_mldsum(i) 
            !  endif
            !endif
 
          enddo
        enddo
 
-! pjb - Calculate euphotic zone depth
+       do k=1,grid%nk
+         do i=isc,iec
 
+! pjb - Calculate average light level in the mixed layer
+           if (grid%zw(k) .le. mld(i,j)) then
+             z1_dep = 1.0/par_z_mldsum(i)
+             par_tot(i,k) = par_tot_mldsum(i) * z1_dep
+             par_phy(i,k) = par_phy_mldsum(i) * z1_dep
+           endif
+! pjb - Calculate impact of daylength on phytoplankton and chlorophyll production
+           if (grid%zw(k) .le. mld(i,j)) then
+             zval = MAX(1.0, daylight_hours) * MIN(1.0, (zeuphot(i,j)+epsi)/(mld(i,j)+epsi))
+             lday_chl(i,k) = zval / 24.0
+             lday_phy(i,k) = 1.5 * zval / (12.0 * zval)
+           endif
 
+           !if (i.eq.112) then
+           !  if (j.eq.222) then
+           !    print*, grid%zt(k), grid%zw(k), par_tot(i,k), lday_chl(i,k), lday_phy(i,k) 
+           !  endif
+           !endif
 
+         enddo
+       enddo
 
-       avej(:,:)= 0.0
-       vpbio(:,:)= 0.0
+      
 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! Phytoplankton growth and chlorophyll !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+       ! Initialise some arrays
+       mumax_phy(:,:)= 0.0  ! phytoplankton maximum growth rate (temperature-dependent)
+       mu_phy(:,:)= 0.0     ! phytoplankton realised growth rate (light limited)
+
+       ! Make calculations
        do k=1,kmeuph  
         do i=isc,iec
+          
+          radbio3d(i,j,k) = par_tot(i,k)
 
-! Shortwave intensity averaged over layer
-	   sw_zt2 = (sw_frac_zt(i,j,k)-sw_frac_zt(i,j,k+1))/(grid%zt(k)-grid%zt(k+1) ) * (grid%zw(k)-grid%zt(k)) + sw_frac_zt(i,j,k)   
-	  if(k.eq.1) then
-            sw_zt1=1.
-	   else
-           sw_zt1 = (sw_frac_zt(i,j,k-1)-sw_frac_zt(i,j,k))/(grid%zt(k-1)-grid%zt(k) ) * (grid%zw(k-1)-grid%zt(k-1)) + sw_frac_zt(i,j,k-1)  
-	   endif
-	   sw_zt = (sw_zt1 + sw_zt2)*.5 * swflx(i,j)
-!
-
-! add ice feedback on growth ......
-! Use sw_thru_ice = .true. to indicate ice term already included in swflx when running with ice model
-!    otherwise shortwave flux from the ocean model is corrected here.  mac, sep11.  
-          if (sw_thru_ice) then
-            radbio = max(0.0,parbio(i,j)*sw_zt)
-          else
-            radbio = max(0.0,parbio(i,j)*(1.0-fice_t(i,j))*sw_zt)
-          endif
-
-
-! Assume now that shortwave flux from ocean model has been modified for ice.  mac, aug12
-!          radbio = max(0.0,parbio(i,j)*sw_zt)
-! well, now doing an experiment without ice, so assumption no longer true.  mac, oct12. 
-
-          radbio3d(i,j,k) = radbio
-
-          vpbio(i,k) = abio(i,j)*bbio(i,j)**                                  &
+          ! Temperature-dependent maximum growth rate (Eppley curve)
+          mumax_phy(i,k) = abio(i,j)*bbio(i,j)**                                  &
                   (cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
 
-!          vpbio(i,k)= 0.6* (1.006)**T_prog(index_temp)%field(i,j,k,Time%tau) 
-
-!          avej(i,k) = vpbio(i,k)*alphabio*radbio/(vpbio(i,k)+(alphabio*radbio)**2)
-!    Growth term from Evans and Parslow 1985, mac Apr10
-!         avej(i,k) = vpbio(i,k)*alphabio*radbio/(vpbio(i,k)**2+(alphabio*radbio)**2)**0.5
-
-!    Growth term from Brian Griffiths
-        avej(i,k) = vpbio(i,k)*(1.0-exp(-1.0*(alphabio(i,j)*radbio)/vpbio(i,k)))
+          ! Determine light limitation
+!          pislope = alphabio(i,j) / (mumax_phy(i,k) * 86400 * 12) 
+          mu_phy(i,k) = mumax_phy(i,k)*(1.0-exp(-1.0*(alphabio(i,j)*par_phy(i,k))/mumax_phy(i,k)))
         
-        if (Grid%zw(k) .le. mld(i,j)) &
-          light_limit(i,j)=light_limit(i,j) +   &
-            (1.0-exp(-1.0*(alphabio(i,j)*radbio)/vpbio(i,k))) * &
-            thickness%dzt(i,j,k)
+          if (Grid%zw(k) .le. mld(i,j)) then
+            light_limit(i,j) = light_limit(i,j) +   &
+                               (1.0-exp(-1.0*(alphabio(i,j)*par_phy(i,k))/mumax_phy(i,k))) * thickness%dzt(i,j,k)
+          endif
 
-!	avej(i,k)=0.   ! zero phyto growth
         enddo
        enddo
 
@@ -509,15 +525,15 @@ do n = 1, instances  !{
 !chdc      depending on light- or nutrient-limited growth.
 !chdc      --> Hurtt and Armstrong, 1996)
 !chdc      saturation growth rate (infinite light, infinite nutrients)
-!chd          vpbio = abio*bbio**(cbio*t_prog(index_temp)%field(i,j,k,tau))
+!chd          mumax_phy = abio*bbio**(cbio*t_prog(index_temp)%field(i,j,k,tau))
 !chd      growth rate
-          u_npz = min(avej(i,k),vpbio(i,k)*bion/(k1bio(i,j)+bion))
+          u_npz = min(mu_phy(i,k),mumax_phy(i,k)*bion/(k1bio(i,j)+bion))
 ! rjm - iron limitation
-         if(id_fe.ne.0) u_npz = min(u_npz,vpbio(i,k)*bioi/(0.1+bioi))
+         if(id_fe.ne.0) u_npz = min(u_npz,mumax_phy(i,k)*bioi/(0.1+bioi))
 
 !chd          if (k .eq. 1) then
 !chd           write(stdout(),*) 'ave'
-!chd           write(stdout(),*) avej(i,k)
+!chd           write(stdout(),*) mu_phy(i,k)
 !chd          endif
 !chd      grazing function
           g_npz = gbio(i,j)*epsbio(i,j)*biop*biop/(gbio(i,j)+epsbio(i,j)*biop*biop)
