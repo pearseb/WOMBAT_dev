@@ -121,14 +121,14 @@ integer :: index_temp, index_salt
 ! BGC parameters now read from bgc_param.nc at run time. mac, aug11.  
 ! include "rjm_param_201005.inc"
 
-      integer :: ts_npzd ! number of time steps within NPZD model
-      integer :: kmeuph = 20 ! deepest level of  euphotic zone
+      integer :: ts_npzd     ! number of time steps within NPZD model
       integer :: tn, trn
       integer :: ichl
 
       real :: pi    = 3.14159265358979  !yes, this is pi
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
-      real :: bion,biop,bioz,biod,bioo,biocaco3,bioi
+      real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe, biopchl
+      real :: limno3, limfe
       real :: u_npz,g_npz
       real :: fx1,fx2,fx3,fx4,fu1,fu2
       real :: mumax_phy(isc:iec,grid%nk)
@@ -145,11 +145,20 @@ integer :: index_temp, index_salt
 ! PJB additions
       real :: day_angle, declination, cos_hour_angle, daylight_hours, zchl
       real, dimension(4,61) :: zrgb
+      real, dimension(isc:iec)           :: keuphot
       real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
-      real, dimension(isc:iec,grid%nk)   :: par_phy, par_tot
-      real, dimension(isc:iec,grid%nk)   :: lday_phy, lday_chl
+      real, dimension(isc:iec,grid%nk)   :: par_tot, par_phy, par_phymld, par_eup
+      real, dimension(isc:iec,grid%nk)   :: phy_lday, chl_lday, phy_lpar, chl_lpar
+      real, dimension(isc:iec,grid%nk)   :: phy_chl_lpar, phy_chl_prod
       real, dimension(isc:iec) :: par_phy_mldsum, par_tot_mldsum, par_z_mldsum
       real :: z1_dep, zval
+      real :: phy_chlc, phy_pisl, phy_pisl2
+      real :: phy_chl_pisl
+
+
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! Read in attenuation coefficients for blue, green and red light depending on chlorophyll !
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       ! Chlorophyll      ! Blue attenuation    ! Green attenuation   ! Red attenuation
       zrgb(1, 1) =  0.010; zrgb(2, 1) = 0.01618; zrgb(3, 1) = 0.07464; zrgb(4, 1) = 0.3780
@@ -214,13 +223,15 @@ integer :: index_temp, index_salt
       zrgb(1,60) =  8.912; zrgb(2,60) = 0.44336; zrgb(3,60) = 0.25725; zrgb(4,60) = 0.55457
       zrgb(1,61) = 10.000; zrgb(2,61) = 0.47804; zrgb(3,61) = 0.27178; zrgb(4,61) = 0.56870
 
-
 !
 ! =====================================================================
 !     begin executable code
 ! =====================================================================
+!
 
-! read biotic parameters
+  !!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! read biotic parameters !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!
 
   call time_interp_external(alphabio_id, time%model_time, alphabio)
   call time_interp_external(parbio_id, time%model_time, parbio)
@@ -247,42 +258,41 @@ integer :: index_temp, index_salt
 
 
 
-! set the maximum index for euphotic depth
-      do k=1,grid%nk
-         if (grid%zw(k).le. 400) kmeuph=k
-      enddo
-!        print*,'rjm euphotic ', kmeuph
+  !!!!!!!!!!!!!!!!!!!!!!!!
+  ! get basic parameters !
+  !!!!!!!!!!!!!!!!!!!!!!!!
 
-!
+  ! Get indices of temperature and salinity  
+  index_temp = fm_get_index('/ocean_mod/prog_tracers/temp')
+  index_salt = fm_get_index('/ocean_mod/prog_tracers/salt')
+
+  ! Get the number of timesteps for the ecosystem model per model timestep
+  ts_npzd = max(1, nint(dtts / 900.))
+  
+  ! Calculate inverse of total number of seconds per timestep
+  rdtts  = 1/dtts
+
+  ! Number of seconds per nested ecosystem timestep
+  dtsb=dtts/float(ts_npzd)
+
+  ! Calculate the mixed layer depth. 
+  call calc_mixed_layer_depth(Thickness,                                                      &
+                              T_prog(index_salt)%field(isd:ied,jsd:jed,:,Time%tau),           &
+                              T_prog(index_temp)%field(isd:ied,jsd:jed,:,Time%tau),           &
+                              Dens%rho(isd:ied,jsd:jed,:,Time%tau),                           &
+                              Dens%pressure_at_depth(isd:ied,jsd:jed,:), mld)
+
+
+!  write (stdout(),*) ' AO-NPZD model will do ',ts_npzd,' time steps'
+!  write (stdout(),*) ' time step in NPZD model will be ',  dtts/ts_npzd,'sec.'
+       
+
+                              
 !
 !-----------------------------------------------------------------------
 !     calculate the source terms for BIOTICs
 !-----------------------------------------------------------------------
 !
-
-  
-  index_temp = fm_get_index('/ocean_mod/prog_tracers/temp')
-  index_salt = fm_get_index('/ocean_mod/prog_tracers/salt')
-
-
-  ts_npzd= max(1,nint(dtts / 900.))
-  rdtts  = 1/dtts
-
-!  write (stdout(),*) ' AO-NPZD model will do ',ts_npzd,' time steps'
-!  write (stdout(),*) ' time step in NPZD model will be ',      &
-!                dtts/ts_npzd,'sec.'
-       
-!chd   time step within NPZD model
-!chd
-      dtsb=dtts/float(ts_npzd)
-
-! Calculate the mixed layer depth.  mac, aug11.  
-       call calc_mixed_layer_depth(Thickness, &
-        T_prog(index_salt)%field(isd:ied,jsd:jed,:,Time%tau), &
-        T_prog(index_temp)%field(isd:ied,jsd:jed,:,Time%tau), &
-        Dens%rho(isd:ied,jsd:jed,:,Time%tau),                 &
-        Dens%pressure_at_depth(isd:ied,jsd:jed,:),       &
-        mld)
 
 !
 !       Loop over multiple instances
@@ -291,6 +301,10 @@ integer :: index_temp, index_salt
 
 
 do n = 1, instances  !{
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Initialise diagnostic arrays for saving later !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   pprod_gross(:,:,:) = 0.0
   zprod_gross(:,:,:) = 0.0
@@ -317,77 +331,92 @@ do n = 1, instances  !{
   pprod_gross_int100(:,:) = 0.0
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
+  zeuphot(:,:) = 20.0
 
 
-! possible tracers in model
-  ind_po4 = biotic(n)%ind_bgc(id_po4)
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! possible tracers in model !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  ind_po4  = biotic(n)%ind_bgc(id_po4)
   ind_no3  = biotic(n)%ind_bgc(id_no3)
   ind_fe   = biotic(n)%ind_bgc(id_fe)
-  ind_o2  = biotic(n)%ind_bgc(id_o2)
-  ind_dic = biotic(n)%ind_bgc(id_dic)
-  ind_alk = biotic(n)%ind_bgc(id_alk)
+  ind_o2   = biotic(n)%ind_bgc(id_o2)
+  ind_dic  = biotic(n)%ind_bgc(id_dic)
+  ind_alk  = biotic(n)%ind_bgc(id_alk)
   ind_caco3= biotic(n)%ind_bgc(id_caco3)
   ind_adic = biotic(n)%ind_bgc(id_adic)
   ind_phy  = biotic(n)%ind_bgc(id_phy)
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)
   ind_det  = biotic(n)%ind_bgc(id_det)
-  ind_pchl  = biotic(n)%ind_bgc(id_pchl)  ! pjb
+  ind_pchl = biotic(n)%ind_bgc(id_pchl) 
 
 
-!chd calculate biotic source terms using Euler
-!chd forward timestepping
-
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! biotic source-sink terms using Euler forward timestepping !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  
   do j = jsc, jec  !{ 
 
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! transfer tracers at tau-1 to temporary arrays !
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!chd    transfer tracers at tau-1 to temporary arrays
         do k=1,grid%nk
           do i=isc,iec
+
             biotr(i,k,id_no3) = max(0.0,t_prog(ind_no3)%field(i,j,k,Time%taum1)) 
             biotr(i,k,id_phy) = max(0.0,t_prog(ind_phy)%field(i,j,k,Time%taum1))
             biotr(i,k,id_zoo) = max(0.0,t_prog(ind_zoo)%field(i,j,k,Time%taum1))
             biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
-            biotr(i,k,id_o2) = max(0.0,t_prog(ind_o2)%field(i,j,k,Time%taum1)) 
-           if (id_caco3.ne.0) &
-              biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
-           if (id_fe.ne.0) &
-              biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
-           if (id_pchl.ne.0) &  
-              biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1)) ! pjb
-          enddo
-        enddo
+            biotr(i,k,id_o2)  = max(0.0,t_prog(ind_o2)%field(i,j,k,Time%taum1)) 
+            if (id_caco3.ne.0) biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
+            if (id_fe.ne.0)    biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
+            if (id_pchl.ne.0)  biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1))
+
+          enddo  ! i
+        enddo  ! k
+
 
 ! pjb - I don't know why you would do this for every tracer... Just use one? One we trust, like DIC?
 !       Because otherwise we could be masking places where tracers go negative, like O2 in the anoxic zones
-!chd   create mask bioma, which is 0 for biotr < epsi and 1
-!chd   otherwise
+
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! create mask bioma, which is 0 for tracer concentration < epsi and 1 when > epsi !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
        do trn=1,ntr_bmax   
         do k=1,grid%nk
           do i=isc,iec
-           bioma(i,k,trn) = 0.
+
            if (biotr(i,k,trn) .gt. epsi) then
             bioma(i,k,trn) = 1.
+           else
+            bioma(i,k,trn) = 0.
            endif 
+
           enddo
         enddo
        enddo
 
 
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! Light (Red, Green and Blue) !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! Light attenuation (Red, Green and Blue) and Euphotic zone depth !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
        ! Reset some arrays 
        ek_rgb(:,:,:) = 0.0
        par_rgb(:,:,:) = 0.0
        par_tot(:,:) = 0.0
+       par_eup(:,:) = 0.0
        par_phy(:,:) = 0.0
+       par_phymld(:,:) = 0.0
        par_tot_mldsum = 0.0
        par_phy_mldsum = 0.0
        par_z_mldsum = 0.0
-       lday_phy(:,:) = 0.0 + epsi
-       lday_chl(:,:) = 0.0 + epsi
-       zeuphot(isc:iec,1:grid%nk) = 1.0
+       phy_lday(:,:) = 1e-2
+       chl_lday(:,:) = 1e-2
+       keuphot(:) = 6  ! set k level of euphotic zone to 20 metres
 
        do k=1,grid%nk
          do i=isc,iec
@@ -397,28 +426,54 @@ do n = 1, instances  !{
            declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
            cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
            daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+
 ! pjb - Get the attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
            zchl = MAX(0.01, MIN(10.0, biotr(i,k,id_pchl) ))
            ichl = NINT( 41 + 20.0*LOG10(zchl) + epsi )
            ek_rgb(i,k,1) = zrgb(2,ichl) * thickness%dzt(i,j,k)
            ek_rgb(i,k,2) = zrgb(3,ichl) * thickness%dzt(i,j,k)
            ek_rgb(i,k,3) = zrgb(4,ichl) * thickness%dzt(i,j,k)
+
 ! pjb - Estimate the amount of RGB light available in the water column given RGB attenuation
            if (k.eq.1) then
+            if (swflx(i,j).gt.0.0) then
              par_rgb(i,k,1) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,1))
              par_rgb(i,k,2) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,2))
              par_rgb(i,k,3) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,3))
+            else
+             par_rgb(i,k,1) = 1./3. * EXP(-0.5 * ek_rgb(i,k,1))
+             par_rgb(i,k,2) = 1./3. * EXP(-0.5 * ek_rgb(i,k,2))
+             par_rgb(i,k,3) = 1./3. * EXP(-0.5 * ek_rgb(i,k,3))
+            endif
            else
              par_rgb(i,k,1) = par_rgb(i,k-1,1) * EXP(-0.5 * (ek_rgb(i,k-1,1)+ek_rgb(i,k,1)))
              par_rgb(i,k,2) = par_rgb(i,k-1,2) * EXP(-0.5 * (ek_rgb(i,k-1,2)+ek_rgb(i,k,2)))
              par_rgb(i,k,3) = par_rgb(i,k-1,3) * EXP(-0.5 * (ek_rgb(i,k-1,3)+ek_rgb(i,k,3)))
            endif
-! pjb - Calculate the amount of light available for phytoplankton and the euphotic depth
-           par_tot(i,k) =        par_rgb(i,k,1) +        par_rgb(i,k,2) +        par_rgb(i,k,3)
-           par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
-           if (par_tot(i,k) .gt. (swflx(i,j) * parbio(i,j) * 0.01)) then
-             zeuphot(i,j) = grid%zw(k)
+
+! pjb - Calculate the amount of light available for phytoplankton
+           if (swflx(i,j).gt.0.0) then
+             par_tot(i,k) =        par_rgb(i,k,1) +        par_rgb(i,k,2) +        par_rgb(i,k,3)
+             par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
+           else
+             par_tot(i,k) = 0.0
+             par_phy(i,k) = 0.0
            endif
+           par_eup(i,k) = par_rgb(i,k,1) + par_rgb(i,k,2) + par_rgb(i,k,3)
+
+! pjb - Calculate the euphotic zone depth
+           if (swflx(i,j).gt.0.0) then
+            if (par_eup(i,k) .gt. (swflx(i,j)*parbio(i,j)*0.01)) then
+             zeuphot(i,j) = grid%zw(k)
+             keuphot(i) = k
+            endif
+           else
+            if (par_eup(i,k) .gt. 0.01) then
+             zeuphot(i,j) = grid%zw(k)
+             keuphot(i) = k
+            endif
+           endif
+
 ! pjb - Calculate the integrated light level in the mixed layer
            if (grid%zw(k) .le. mld(i,j)) then
              par_tot_mldsum(i) = par_tot_mldsum(i) + par_tot(i,k) * thickness%dzt(i,j,k)
@@ -426,14 +481,14 @@ do n = 1, instances  !{
              par_z_mldsum(i) = par_z_mldsum(i) + thickness%dzt(i,j,k)
            endif
 
-           !if (i.eq.112) then
-           !  if (j.eq.222) then
-           !    print*, grid%zt(k), grid%zw(k), par_tot_mldsum(i), par_z_mldsum(i) 
-           !  endif
-           !endif
+           if (i.eq.112) then
+             if (j.eq.10) then
+               print*, grid%xt(i,j), grid%yt(i,j), grid%zt(k), days_in_this_year, daylight_hours, par_eup(i,k), zeuphot(i,j)
+             endif
+           endif
 
-         enddo
-       enddo
+         enddo  ! i
+       enddo  ! k
 
        do k=1,grid%nk
          do i=isc,iec
@@ -441,214 +496,270 @@ do n = 1, instances  !{
 ! pjb - Calculate average light level in the mixed layer
            if (grid%zw(k) .le. mld(i,j)) then
              z1_dep = 1.0/par_z_mldsum(i)
-             par_tot(i,k) = par_tot_mldsum(i) * z1_dep
-             par_phy(i,k) = par_phy_mldsum(i) * z1_dep
+             par_phymld(i,k) = par_phy_mldsum(i) * z1_dep
+           else
+             par_phymld(i,k) = par_phy(i,k)
            endif
+
 ! pjb - Calculate impact of daylength on phytoplankton and chlorophyll production
-           if (grid%zw(k) .le. mld(i,j)) then
+           if (grid%zw(k) .le. zeuphot(i,j)) then
              zval = MAX(1.0, daylight_hours) * MIN(1.0, (zeuphot(i,j)+epsi)/(mld(i,j)+epsi))
-             lday_chl(i,k) = zval / 24.0
-             lday_phy(i,k) = 1.5 * zval / (12.0 * zval)
+             chl_lday(i,k) = zval / 24.0
+             phy_lday(i,k) = 1.5 * zval / (12.0 + zval)
            endif
 
            !if (i.eq.112) then
            !  if (j.eq.222) then
-           !    print*, grid%zt(k), grid%zw(k), par_tot(i,k), lday_chl(i,k), lday_phy(i,k) 
+           !    print*, grid%zt(k), grid%zw(k), par_tot(i,k), chl_lday(i,k), phy_lday(i,k) 
            !  endif
            !endif
 
-         enddo
-       enddo
+         enddo  ! i
+       enddo  ! k
 
       
 
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! Phytoplankton growth and chlorophyll !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! Phytoplankton growth and chlorophyll production !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
        ! Initialise some arrays
-       mumax_phy(:,:)= 0.0  ! phytoplankton maximum growth rate (temperature-dependent)
-       mu_phy(:,:)= 0.0     ! phytoplankton realised growth rate (light limited)
+       mumax_phy(:,:) = 0.0     ! phytoplankton maximum growth rate (temperature-dependent)
+       mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
+       phy_lpar(:,:) = 0.0      ! light limitation of phytoplankton growth
+       phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
+       phy_chl_prod(:,:) = 0.0  ! phytoplankton chlorophyll realised growth rate
 
-       ! Make calculations
-       do k=1,kmeuph  
+       do k=1,grid%nk  
         do i=isc,iec
-          
+         
+          ! Save total PAR to radbio array for diagnostic output
           radbio3d(i,j,k) = par_tot(i,k)
 
-          ! Temperature-dependent maximum growth rate (Eppley curve)
-          mumax_phy(i,k) = abio(i,j)*bbio(i,j)**                                  &
-                  (cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
+          ! Iterate over the euphotic zone (function of chlorophyll concentration and 1% light level)
+          if (k.le.keuphot(i)) then
+  
+            ! Temperature-dependent maximum growth rate (Eppley curve)
+            mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
+  
+            ! Determine light limitation, taking chlorophyll:C ratio into account (increases PI slope)
+            phy_chlc = MAX(0.004, MIN(0.033, (biotr(i,k,id_pchl) + epsi) /                           &
+                                             (biotr(i,k,id_phy) * 106/16.0 * 12 + epsi) ))
+            phy_chlc = 0.03
+            !phy_pisl = MAX(alphabio(i,j) * phy_chlc, alphabio(i,j) * phy_chlc_min(i,j)) 
+            phy_pisl = MAX(alphabio(i,j)*86400.0*10.0 * phy_chlc, alphabio(i,j)*86400.0*10.0 * 0.004) 
+            phy_pisl2= phy_pisl / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
+            phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
+            mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
+  
+            phy_chl_pisl = phy_pisl / (mumax_phy(i,k) * 86400.0 * chl_lday(i,k) + epsi) 
+            phy_chl_lpar(i,k) = 1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))
+            phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
+  
+            !if (i.eq.112) then
+            !  if (j.eq.222) then
+            !    print*, grid%zt(k), zeuphot(i,j), mumax_phy(i,k), phy_lpar(i,k), phy_chl_lpar(i,k)
+            !  endif
+            !endif
+          
+            if (Grid%zw(k) .le. mld(i,j)) then
+              light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
+            endif
 
-          ! Determine light limitation
-!          pislope = alphabio(i,j) / (mumax_phy(i,k) * 86400 * 12) 
-          mu_phy(i,k) = mumax_phy(i,k)*(1.0-exp(-1.0*(alphabio(i,j)*par_phy(i,k))/mumax_phy(i,k)))
-        
-          if (Grid%zw(k) .le. mld(i,j)) then
-            light_limit(i,j) = light_limit(i,j) +   &
-                               (1.0-exp(-1.0*(alphabio(i,j)*par_phy(i,k))/mumax_phy(i,k))) * thickness%dzt(i,j,k)
+          endif  ! k.le.keuphot(i)
+
+        enddo  ! i
+       enddo  ! k
+
+
+
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! Begin nested time-stepping for ecosystem model !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+       ! Time stepping over dtts with ecosystem model
+       !  
+       !    (P: phytoplankton, Z: Zooplankton, N: Nitrate and D: Detritus)
+       !
+       !    dP/dt = u(Temp,Light(Chl),N,Fe) P - p_P P - g(P) P Z
+       !
+       !    dZ/dt = a g(P) P Z - d Z - p_Z Z^2
+       !
+       !    dN/dt = r D + d Z - u(N,Temp.,Light) P  [ + r_d DOC ]
+       !
+       !    dD/dt = (1-s)[ (1-a) g(P) P Z + p_P P + p_Z Z^2] -r D + w_D dD/dz
+
+
+       do tn = 1,ts_npzd
+        do k=1,grid%nk
+         do i=isc,iec
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Get the tracers and save to a scalar variable !
+          !   - Remember, tracer values are updated at    !
+          !     each of the nested timesteps of the       !
+          !     ecosystem model.
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          biono3 = max(0.0,biotr(i,k,id_no3))
+          biophy = max(0.0,biotr(i,k,id_phy))
+          biozoo = max(0.0,biotr(i,k,id_zoo))
+          biodet = max(0.0,biotr(i,k,id_det))
+          biooxy = max(0.0,biotr(i,k,id_o2))
+          if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
+          if (id_fe.ne.0)    biofe = max(0.0,biotr(i,k,id_fe))
+          if (id_pchl.ne.0)  biopchl = max(0.0,biotr(i,k,id_pchl))
+
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Limitation terms for resource availability !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          limno3 = biono3 / (k1bio(i,j) + biono3)
+          if (id_fe.ne.0) then 
+            limfe  = biofe / (0.1 + biofe)
+          else
+            limfe = 1.0
           endif
 
-        enddo
-       enddo
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Realised growth rate given resource availability !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          u_npz = min(limno3, limfe) * mu_phy(i,k)
 
 
-!chd  begin time stepping over dtts in NPZD model with Euler forward
-!chd     This is the NPZD model:
-!chd      (P: phytoplankton, Z: Zooplankton, N: Nitrate and D: Detritus)
-!chd
-!chd      dP/dt = u(N,Temp.,Light) P - p_P P - g(P) P Z
-!chd
-!chd      dZ/dt = a g(P) P Z - d Z - p_Z Z^2
-!chd
-!chd      dN/dt = r D + d Z - u(N,Temp.,Light) P  [ + r_d DOC ]
-!chd
-!chd      dD/dt = (1-s)[ (1-a) g(P) P Z + p_P P + p_Z Z^2] -r D + w_D dD/dz
+          !!!!!!!!!!!!!!!!!!!!
+          ! Grazing function !
+          !!!!!!!!!!!!!!!!!!!!
 
-       do tn = 1,ts_npzd  !{
-        do k=1,grid%nk  !{
-         do i=isc,iec  !{
-          bion = max(0.0,biotr(i,k,id_no3))
-          biop = max(0.0,biotr(i,k,id_phy))
-          bioz = max(0.0,biotr(i,k,id_zoo))
-          biod = max(0.0,biotr(i,k,id_det))
-          bioo = max(0.0,biotr(i,k,id_o2))
-         if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
-         if (id_fe.ne.0) bioi = max(0.0,biotr(i,k,id_fe))
+          g_npz = gbio(i,j) * epsbio(i,j) * biophy*biophy /                                        &
+                  ( gbio(i,j) + epsbio(i,j)*  biophy*biophy )
 
-!chd   -- phytoplankton equation
-!chdc
-!chdc      use Liebigs Law of the Minimum (Liebig, 1845) for growth rate
-!chdc      (minimum of light-limited and nutrient limited growth rates;
-!chdc      although chlorophyll is not explicitly considered, this will
-!chdc      later allow for a diagnostic determination of a Chl:N ratio
-!chdc      depending on light- or nutrient-limited growth.
-!chdc      --> Hurtt and Armstrong, 1996)
-!chdc      saturation growth rate (infinite light, infinite nutrients)
-!chd          mumax_phy = abio*bbio**(cbio*t_prog(index_temp)%field(i,j,k,tau))
-!chd      growth rate
-          u_npz = min(mu_phy(i,k),mumax_phy(i,k)*bion/(k1bio(i,j)+bion))
-! rjm - iron limitation
-         if(id_fe.ne.0) u_npz = min(u_npz,mumax_phy(i,k)*bioi/(0.1+bioi))
 
-!chd          if (k .eq. 1) then
-!chd           write(stdout(),*) 'ave'
-!chd           write(stdout(),*) mu_phy(i,k)
-!chd          endif
-!chd      grazing function
-          g_npz = gbio(i,j)*epsbio(i,j)*biop*biop/(gbio(i,j)+epsbio(i,j)*biop*biop)
-!chd      temperature dependance of growth rates
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Temperature dependence of growth rates !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
           fbc = bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
 
-        f11 = u_npz*biop         * bioma(i,k,id_no3)
-        f21 = g_npz*bioz         * bioma(i,k,id_phy)
-        f22 = muepbio(i,j)*fbc*biop   * bioma(i,k,id_phy)
-        f23 = muepsbio(i,j)*biop*biop * bioma(i,k,id_phy)
-        f31 = gam2bio(i,j)*fbc*bioz   * bioma(i,k,id_zoo)
-        f32 = muezbio(i,j)*bioz*bioz  * bioma(i,k,id_zoo)
-        f41 = muedbio(i,j)*fbc*biod   * bioma(i,k,id_det)
-! if (grid%zw(k) .ge. 180) f41 = f41*.2   ! reduce decay below 300m
-! change the ratio of remineralisation of det in upper to lower ocean from 5 to 2,
-!  but keep the remin rate the same at depth, so change the value in rjm_param_2010.... as well
-!  mac, jun10.
-        if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 300m
 
-        if (id_caco3.ne.0) then 
-          f51 = muecaco3(i,j)*biocaco3 *bioma(i,k,id_caco3)
-        endif
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Collect biomass gain and loss terms !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-!chd   -- nutrient equation
-          biotr(i,k,id_no3)  = biotr(i,k,id_no3)  + dtsb * (                     &
-               f41 + f31 + f22 - f11) 
+          f11 = u_npz*biophy                 * bioma(i,k,id_no3)
+          f21 = g_npz*biozoo                 * bioma(i,k,id_phy)
+          f22 = muepbio(i,j)*fbc*biophy      * bioma(i,k,id_phy)
+          f23 = muepsbio(i,j)*biophy*biophy  * bioma(i,k,id_phy)
+          f31 = gam2bio(i,j)*fbc*biozoo      * bioma(i,k,id_zoo)
+          f32 = muezbio(i,j)*biozoo*biozoo   * bioma(i,k,id_zoo)
+          f41 = muedbio(i,j)*fbc*biodet      * bioma(i,k,id_det)
 
-!chd   -- phyto plankton equation
-          biotr(i,k,id_phy)  = biotr(i,k,id_phy)  + dtsb * (                     &
-               f11 - f21 - f22 - f23)
+          ! Decrease the remineralisation rate beneath a certain depth
+          !     ( This will be irrelevant once explicit bacteria is in )
+          if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 300m
 
-! Estimate primary productivity from phytoplankton growth
+          if (id_caco3.ne.0) f51 = muecaco3(i,j)*biocaco3 *bioma(i,k,id_caco3)
+
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Apply biomass gain and loss terms !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          ! oxygen equation
+          biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172./16.                     &
+                                                 * dtsb * (f41 + f31 + f22 - f11)
+
+          ! nitrate equation
+          biotr(i,k,id_no3)  = biotr(i,k,id_no3) + dtsb * (f41 + f31 + f22 - f11) 
+
+          if (id_fe.ne.0) &
+          biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * 2.0e-2 * (f41 + f31 + f22 - f11)
+
+          ! phytoplankton equation
+          biotr(i,k,id_phy)  = biotr(i,k,id_phy) + dtsb * (f11 - f21 - f22 - f23)
+
+          ! zooplankton equation
+          biotr(i,k,id_zoo)  = biotr(i,k,id_zoo) + dtsb * (gam1bio(i,j)*f21 - f31 - f32)
+
+          ! detritus equation
+          biotr(i,k,id_det)  = biotr(i,k,id_det) + dtsb * ((1.-gam1bio(i,j))*f21 + f23 + f32 - f41)
+
+          ! caco3 equation
+          if (id_caco3.ne.0) &
+          biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (   &
+                                (1.-gam1bio(i,j))*f21 + f23 + f32 ) * f_inorg(i,j) * 106./16. - f51)   
+
+          ! phytoplankton chlorophyll equation
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Estimate primary and secondary production !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          ! Gross NPP
           pprod_gross(i,j,k) = pprod_gross(i,j,k) + dtsb*f11
-! Net primary productivity (gross PP minus linear mortality)
-	  npp3d(i,j,k) = npp3d(i,j,k) + dtsb*(f11 - f21)
 
-!chd   -- zooplankton equation
-          biotr(i,k,id_zoo)  = biotr(i,k,id_zoo)  + dtsb * (                     &
-               gam1bio(i,j)*f21 - f31 - f32)
+          ! Net NPP (gross minus linear mortality)
+	      npp3d(i,j,k) = npp3d(i,j,k) + dtsb*(f11 - f21)
 
-! Estimate secondary productivity from zooplankton growth
+          ! Secondary productivity
           zprod_gross(i,j,k) = zprod_gross(i,j,k) + dtsb*f21
 
-!chd   -- detritus equation
-          biotr(i,k,id_det)  = biotr(i,k,id_det)  + dtsb * (                     &
-               (1-gam1bio(i,j))*f21 + f23 + f32 - f41)    
 
-!chd   -- oxygen equation
-          biotr(i,k,id_o2)  = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172 / 16 * dtsb * ( &
-               f41 + f31 + f22 - f11)
-
-! rjm -- extra equation for caco3 - alkalinity
-        if (id_caco3.ne.0) &
-         biotr(i,k,id_caco3) = biotr(i,k,id_caco3)  + dtsb * ( (   &
-               (1-gam1bio(i,j))*f21 + f23 + f32)*f_inorg(i,j)*106/16 - f51)  ! 8% of POC 106/16*.08   
- 
-! rjm -- extra equation for iron
-!        if (id_fe.ne.0) &
-!          biotr(i,k,id_fe)  = biotr(i,k,id_fe)  +dtsb * 200./16.* (           &
-!               f41 + f31 + f22 - f11)
-
-! mac -- extra equation for iron, molar Fe:N = 1.98e-5:1.0 (Christian et al. 2002), and Fe units are micro mole/m3 cf milli mole/m3 for others.
-        if (id_fe.ne.0) &
-          biotr(i,k,id_fe)  = biotr(i,k,id_fe)  +dtsb * 2.0e-2* (           &
-               f41 + f31 + f22 - f11)
+         enddo  ! i
+        enddo  ! k
+       enddo  ! tn 
 
 
-         enddo  !} i
-        enddo  !} k
-       enddo  !} tn 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! add biotically induced tendency to biotracers !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+       do k = 1,grid%nk  
+        do i = isc,iec 
 
-!chd  add biotically induced tendency to biotracers,
-        do k = 1, grid%nk  !{
-         do i = isc, iec  !{
+         ! Collect total change in NO3, but add back NO3 if negative at tau-1
+         no3_bgc_change = grid%tmask(i,j,k) *                                                      &
+             (biotr(i,k,id_no3) - max(0.0,t_prog(ind_no3)%field(i,j,k,time%taum1)))
+         
+         ! Collect total change in CaCO3, but add back CaCO3 if negative at tau-1
+         caco3_bgc_change = grid%tmask(i,j,k) *                                                    &
+            (biotr(i,k,id_caco3) - max(0.0,t_prog(ind_caco3)%field(i,j,k,time%taum1)))
 
-        no3_bgc_change = grid%tmask(i,j,k)* &
-            (biotr(i,k,id_no3) - max(0.0,t_prog(ind_no3)%field(i,j,k,time%taum1)))
-        caco3_bgc_change = grid%tmask(i,j,k)* &
-           (biotr(i,k,id_caco3) - max(0.0,t_prog(ind_caco3)%field(i,j,k,time%taum1)))
+          
+         ! Add sources and sinks of BGC tracers to tracer arrays
+         t_prog(ind_o2)%field(i,j,k,time%taum1)  = biotr(i,k,id_o2)
+         t_prog(ind_no3)%field(i,j,k,time%taum1) = biotr(i,k,id_no3)
+         t_prog(ind_phy)%field(i,j,k,time%taum1) = biotr(i,k,id_phy)
+         t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
+         t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
+         if ( id_caco3.ne.0)                                                                       &
+         t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
+         if ( id_fe.ne.0)                                                                          &
+         t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe) - dtts * tscav_fe(i,j) *        &
+                                                  max(0.0, (biotr(i,k,id_fe) - fe_bkgnd(i,j)) ) 
+         if (id_dic.ne.0) &
+         t_prog(ind_dic)%field(i,j,k,time%taum1) = t_prog(ind_dic)%field(i,j,k,time%taum1) +       &
+                                                   106./16. * no3_bgc_change - caco3_bgc_change
+         if (id_adic.ne.0) &
+         t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +     &
+                                                    106./16. * no3_bgc_change - caco3_bgc_change 
+         if (id_alk.ne.0) &
+         t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +       &  
+                                                   ( -2.0 * caco3_bgc_change - no3_bgc_change)
+         if (id_pchl.ne.0) &
+         t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl) 
 
-        t_prog(ind_no3)%field(i,j,k,time%taum1) = biotr(i,k,id_no3)
-        t_prog(ind_phy)%field(i,j,k,time%taum1) = biotr(i,k,id_phy)
-        t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
-        t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
-     	t_prog(ind_o2)%field(i,j,k,time%taum1) = biotr(i,k,id_o2)
-        if ( id_caco3 .ne. 0 ) &
-          t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
-        if ( id_fe .ne. 0 ) &
-          t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe) - &
-           dtts * tscav_fe(i,j) * max(0.0,(biotr(i,k,id_fe) - fe_bkgnd(i,j)) ) 
+         
+         ! Collect primary and secondary production diagnostic terms
+         pprod_gross(i,j,k) = rdtts * pprod_gross(i,j,k) * grid%tmask(i,j,k)
+         zprod_gross(i,j,k) = rdtts * zprod_gross(i,j,k) * grid%tmask(i,j,k)
+         npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
 
-        if (id_dic.ne.0) &
-          t_prog(ind_dic)%field(i,j,k,time%taum1) = &
-           t_prog(ind_dic)%field(i,j,k,time%taum1) + &
-           106./16. * no3_bgc_change - caco3_bgc_change
-
-        if (id_adic.ne.0) &
-          t_prog(ind_adic)%field(i,j,k,time%taum1) = &
-           t_prog(ind_adic)%field(i,j,k,time%taum1) + &
-           106./16. * no3_bgc_change - caco3_bgc_change 
-
-        if (id_alk.ne.0) &
-          t_prog(ind_alk)%field(i,j,k,time%taum1) =  &
-           t_prog(ind_alk)%field(i,j,k,time%taum1) +  &  
-           ( - 2.0 * caco3_bgc_change - no3_bgc_change)
-
-        if ( id_pchl .ne. 0 ) &
-          t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl)  ! pjb
-
-        pprod_gross(i,j,k)=rdtts*pprod_gross(i,j,k)*grid%tmask(i,j,k)
-        zprod_gross(i,j,k)=rdtts*zprod_gross(i,j,k)*grid%tmask(i,j,k)
-        npp3d(i,j,k)=rdtts*npp3d(i,j,k)*grid%tmask(i,j,k)
-
-          if (Grid%zw(k) .le. mld(i,j)) then
+         ! Collect other diagnostic terms
+         if (Grid%zw(k) .le. mld(i,j)) then
             adic_intmld(i,j)= adic_intmld(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
             dic_intmld(i,j) = dic_intmld(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
             o2_intmld(i,j)  = o2_intmld(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
@@ -659,9 +770,8 @@ do n = 1, instances  !{
             pprod_gross_intmld(i,j) = pprod_gross_intmld(i,j) + pprod_gross(i,j,k) * thickness%dzt(i,j,k)
             npp_intmld(i,j) = npp_intmld(i,j) + npp3d(i,j,k) * thickness%dzt(i,j,k)
             radbio_intmld(i,j) = radbio_intmld(i,j) + radbio3d(i,j,k) * thickness%dzt(i,j,k)
-          endif
-
-          if (Grid%zw(k) .le. 100) then
+         endif
+         if (Grid%zw(k) .le. 100) then
             adic_int100(i,j)= adic_int100(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
             dic_int100(i,j) = dic_int100(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
             o2_int100(i,j)  = o2_int100(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
@@ -672,35 +782,33 @@ do n = 1, instances  !{
             pprod_gross_int100(i,j) = pprod_gross_int100(i,j) + pprod_gross(i,j,k) * thickness%dzt(i,j,k)
             npp_int100(i,j) = npp_int100(i,j) + npp3d(i,j,k) * thickness%dzt(i,j,k)
             radbio_int100(i,j) = radbio_int100(i,j) + radbio3d(i,j,k) * thickness%dzt(i,j,k)
-          endif
+         endif
 
-         enddo  !} i
-        enddo  !} k
-
-!RASF upstream sinking of detritus
-! change field(..,k,..) to field(..,k-1,..), mac apr10
-     do k=2,grid%nk+1
-      do i=isc,iec
-!      adv_fb(i,k)=wdetbio(i,j)*t_prog(ind_det)%field(i,j,k-1,time%taum1) 
-       adv_fb(i,k)=wdetbio(i,j)*biotr(i,k-1,id_det)
-      enddo
-     enddo
+        enddo  ! i
+       enddo  ! k
 
 
-!RASF no flux boundary conditions
-     do i=isc,iec
-      adv_fb(i,1)               = 0.0
-     enddo 
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! RASF upstream sinking of detritus !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       do k=2,grid%nk+1
+        do i=isc,iec
+         adv_fb(i,k) = wdetbio(i,j) * biotr(i,k-1,id_det)
+        enddo  ! i
+       enddo  ! k
 
-! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
-     do i = isc, iec 
-       k = grid%kmt(i,j)
-       if (k .gt. 0) then 
+       ! Set the flux coming through the top face of surface box to zero
+       do i=isc,iec
+        adv_fb(i,1)  = 0.0
+       enddo  ! i 
 
+       ! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
+       do i = isc,iec 
+        k = grid%kmt(i,j)
+        if (k.gt.0) then 
          biotic(n)%det_sed_depst(i,j) = adv_fb(i,k+1)
-
-       endif ! k .gt. 0
-     enddo  ! i
+        endif  ! k.gt.0
+       enddo  ! i
 
 
 !!mac remineralise tracer sinking through the base of the column.
@@ -745,37 +853,37 @@ do n = 1, instances  !{
 !     enddo  ! i
 
 
-     do k =1,grid%nk  !{
-      do i =isc,iec  !{
-        t_prog(ind_det)%field(i,j,k,time%taum1) = t_prog(ind_det)%field(i,j,k,time%taum1) + &
-            grid%tmask(i,j,k) * dtts * &
-            (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
-      enddo  !} i
-     enddo  !} k
-
-!RASF upstream sinking of caco3
-if (id_caco3.ne.0) then
-     do k=2,grid%nk+1
-      do i=isc,iec
-!      adv_fb(i,k)=wcaco3(i,j)*t_prog(ind_caco3)%field(i,j,k-1,time%taum1)
-       adv_fb(i,k)=wcaco3(i,j)*biotr(i,k-1,id_caco3)
-      enddo
-     enddo
-! no flux boundary conditions
-     do i=isc,iec
-      adv_fb(i,1)               = 0.0
-     enddo 
+       do k =1,grid%nk  !{
+        do i =isc,iec  !{
+          t_prog(ind_det)%field(i,j,k,time%taum1) = t_prog(ind_det)%field(i,j,k,time%taum1) + &
+              grid%tmask(i,j,k) * dtts * &
+              (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
+        enddo  !} i
+       enddo  !} k
 
 
-! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
-     do i = isc, iec 
-       k = grid%kmt(i,j)
-       if (k .gt. 0) then 
-       
-        biotic(n)%caco3_sed_depst(i,j) = adv_fb(i,k+1)
-       
-       endif ! k .gt. 0
-     enddo ! i
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! RASF upstream sinking of caco3 !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       if (id_caco3.ne.0) then
+        do k=2,grid%nk+1
+         do i=isc,iec
+          adv_fb(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
+         enddo
+        enddo
+
+        ! Set the flux coming through the top face of surface box to zero
+        do i=isc,iec
+         adv_fb(i,1)  = 0.0
+        enddo 
+
+        ! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
+        do i = isc, iec 
+         k = grid%kmt(i,j)
+         if (k .gt. 0) then 
+          biotic(n)%caco3_sed_depst(i,j) = adv_fb(i,k+1)
+         endif ! k .gt. 0
+        enddo ! i
 
 
 !!mac remineralise tracer sinking through the base of the column.
@@ -804,20 +912,17 @@ if (id_caco3.ne.0) then
 !     enddo ! i
 !
 
+        do k =1,grid%nk  !{
+         do i =isc,iec  !{
+           t_prog(ind_caco3)%field(i,j,k,time%taum1)=t_prog(ind_caco3)%field(i,j,k,time%taum1) +&
+               grid%tmask(i,j,k) * dtts * &
+               (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
+         enddo  ! i
+        enddo  ! k
 
-     do k =1,grid%nk  !{
-      do i =isc,iec  !{
-        t_prog(ind_caco3)%field(i,j,k,time%taum1)=t_prog(ind_caco3)%field(i,j,k,time%taum1) +&
-            grid%tmask(i,j,k) * dtts * &
-            (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
-      enddo  !} i
-     enddo  !} k
-endif                   ! end loop for caco3
+       endif  ! end loop for caco3
 
-
-
-
- enddo  !} j
+  enddo  !} j
 
 enddo  !} n
 

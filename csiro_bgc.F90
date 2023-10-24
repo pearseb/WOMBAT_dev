@@ -353,11 +353,10 @@ real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d
 real, allocatable, dimension(:,:) :: wdet100
-real, allocatable, dimension(:,:) :: npp2d
+real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross
 real, allocatable, dimension(:,:) :: pprod_gross_2d
-real, allocatable, dimension(:,:) :: zeuphot
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
 real, allocatable, dimension(:) :: dummy
