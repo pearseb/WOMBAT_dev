@@ -127,7 +127,7 @@ integer :: index_temp, index_salt
 
       real :: pi    = 3.14159265358979  !yes, this is pi
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
-      real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe, biopchl
+      real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe, biopchl, biophy_min
       real :: limno3, limfe
       real :: u_npz,g_npz
       real :: fx1,fx2,fx3,fx4,fu1,fu2
@@ -148,12 +148,12 @@ integer :: index_temp, index_salt
       real, dimension(isc:iec)           :: keuphot
       real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
       real, dimension(isc:iec,grid%nk)   :: par_tot, par_phy, par_phymld, par_eup
-      real, dimension(isc:iec,grid%nk)   :: phy_lday, chl_lday, phy_lpar, chl_lpar
-      real, dimension(isc:iec,grid%nk)   :: phy_chl_lpar, phy_chl_prod
+      real, dimension(isc:iec,grid%nk)   :: phy_pisl, phy_lday, chl_lday, phy_lpar, chl_lpar
+      real, dimension(isc:iec,grid%nk)   :: phy_chlc, phy_chl_lpar, phy_chl_prod, mu_chl
       real, dimension(isc:iec) :: par_phy_mldsum, par_tot_mldsum, par_z_mldsum
       real :: z1_dep, zval
-      real :: phy_chlc, phy_pisl, phy_pisl2
-      real :: phy_chl_pisl
+      real :: phy_pisl2
+      real :: phy_chl_pisl, max_chl, mumin_chl
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -331,7 +331,8 @@ do n = 1, instances  !{
   pprod_gross_int100(:,:) = 0.0
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
-  zeuphot(:,:) = 20.0
+  zeuphot(:,:) = 20.0       ! minimum euphotic zone depth is 20 metres
+  phy_parlimit(:,:,:) = 0.0
 
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -428,7 +429,7 @@ do n = 1, instances  !{
            daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
 
 ! pjb - Get the attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
-           zchl = MAX(0.01, MIN(10.0, biotr(i,k,id_pchl) ))
+           zchl = MAX(0.05, MIN(10.0, biotr(i,k,id_pchl) ))
            ichl = NINT( 41 + 20.0*LOG10(zchl) + epsi )
            ek_rgb(i,k,1) = zrgb(2,ichl) * thickness%dzt(i,j,k)
            ek_rgb(i,k,2) = zrgb(3,ichl) * thickness%dzt(i,j,k)
@@ -481,14 +482,10 @@ do n = 1, instances  !{
              par_z_mldsum(i) = par_z_mldsum(i) + thickness%dzt(i,j,k)
            endif
 
-           if (i.eq.112) then
-             if (j.eq.10) then
-               print*, grid%xt(i,j), grid%yt(i,j), grid%zt(k), days_in_this_year, daylight_hours, par_eup(i,k), zeuphot(i,j)
-             endif
-           endif
-
          enddo  ! i
        enddo  ! k
+
+       mumax_phy(:,:) = 0.0     ! phytoplankton maximum growth rate (temperature-dependent)
 
        do k=1,grid%nk
          do i=isc,iec
@@ -502,77 +499,31 @@ do n = 1, instances  !{
            endif
 
 ! pjb - Calculate impact of daylength on phytoplankton and chlorophyll production
-           if (grid%zw(k) .le. zeuphot(i,j)) then
-             zval = MAX(1.0, daylight_hours) * MIN(1.0, (zeuphot(i,j)+epsi)/(mld(i,j)+epsi))
-             chl_lday(i,k) = zval / 24.0
-             phy_lday(i,k) = 1.5 * zval / (12.0 + zval)
+           zval = MAX(1.0, daylight_hours)
+           if (grid%zw(k) .le. mld(i,j)) then
+             zval = zval * MIN(1.0, (zeuphot(i,j)+epsi)/(mld(i,j)+epsi))
            endif
+           chl_lday(i,k) = zval / 24.0
+           phy_lday(i,k) = 1.5 * zval / (12.0 + zval)
 
            !if (i.eq.112) then
            !  if (j.eq.222) then
-           !    print*, grid%zt(k), grid%zw(k), par_tot(i,k), chl_lday(i,k), phy_lday(i,k) 
+           !    print*, grid%zt(k), par_tot(i,k), zval, chl_lday(i,k), phy_lday(i,k)
            !  endif
            !endif
+
+           ! Save total PAR to radbio array for diagnostic output
+           radbio3d(i,j,k) = par_tot(i,k)
+
+           ! Temperature-dependent maximum growth rate (Eppley curve)
+           zval = t_prog(index_temp)%field(i,j,k,time%tau)
+           !mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
+           mumax_phy(i,k) = 1.0/86400.0 * bbio(i,j)**(cbio(i,j) * zval)
 
          enddo  ! i
        enddo  ! k
 
       
-
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! Phytoplankton growth and chlorophyll production !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-       ! Initialise some arrays
-       mumax_phy(:,:) = 0.0     ! phytoplankton maximum growth rate (temperature-dependent)
-       mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
-       phy_lpar(:,:) = 0.0      ! light limitation of phytoplankton growth
-       phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
-       phy_chl_prod(:,:) = 0.0  ! phytoplankton chlorophyll realised growth rate
-
-       do k=1,grid%nk  
-        do i=isc,iec
-         
-          ! Save total PAR to radbio array for diagnostic output
-          radbio3d(i,j,k) = par_tot(i,k)
-
-          ! Iterate over the euphotic zone (function of chlorophyll concentration and 1% light level)
-          if (k.le.keuphot(i)) then
-  
-            ! Temperature-dependent maximum growth rate (Eppley curve)
-            mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
-  
-            ! Determine light limitation, taking chlorophyll:C ratio into account (increases PI slope)
-            phy_chlc = MAX(0.004, MIN(0.033, (biotr(i,k,id_pchl) + epsi) /                           &
-                                             (biotr(i,k,id_phy) * 106/16.0 * 12 + epsi) ))
-            phy_chlc = 0.03
-            !phy_pisl = MAX(alphabio(i,j) * phy_chlc, alphabio(i,j) * phy_chlc_min(i,j)) 
-            phy_pisl = MAX(alphabio(i,j)*86400.0*10.0 * phy_chlc, alphabio(i,j)*86400.0*10.0 * 0.004) 
-            phy_pisl2= phy_pisl / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
-            phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
-            mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
-  
-            phy_chl_pisl = phy_pisl / (mumax_phy(i,k) * 86400.0 * chl_lday(i,k) + epsi) 
-            phy_chl_lpar(i,k) = 1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))
-            phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
-  
-            !if (i.eq.112) then
-            !  if (j.eq.222) then
-            !    print*, grid%zt(k), zeuphot(i,j), mumax_phy(i,k), phy_lpar(i,k), phy_chl_lpar(i,k)
-            !  endif
-            !endif
-          
-            if (Grid%zw(k) .le. mld(i,j)) then
-              light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
-            endif
-
-          endif  ! k.le.keuphot(i)
-
-        enddo  ! i
-       enddo  ! k
-
-
-
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        ! Begin nested time-stepping for ecosystem model !
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -591,6 +542,15 @@ do n = 1, instances  !{
 
 
        do tn = 1,ts_npzd
+
+        ! Initialise some arrays to zero
+        phy_chlc(:,:) = 0.0      ! chlorophyll to carbon ratio of phytoplankton
+        phy_lpar(:,:) = 0.0      ! light limitation of phytoplankton growth
+        mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
+        phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
+        phy_chl_prod(:,:) = 0.0  ! phytoplankton chlorophyll realised growth rate
+        mu_chl(:,:) = 0.0
+
         do k=1,grid%nk
          do i=isc,iec
 
@@ -598,7 +558,7 @@ do n = 1, instances  !{
           ! Get the tracers and save to a scalar variable !
           !   - Remember, tracer values are updated at    !
           !     each of the nested timesteps of the       !
-          !     ecosystem model.
+          !     ecosystem model.                          !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
           biono3 = max(0.0,biotr(i,k,id_no3))
@@ -623,6 +583,23 @@ do n = 1, instances  !{
           endif
 
 
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Limitation term for light availability !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          !   1. Get chlorophyll:C ratio
+          if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 106/16.0 * 12)
+          !   2. Get initial slope of Photosynthesis-Irradiance curve
+          phy_pisl(i,k) = MAX(alphabio(i,j)*86400.0*10.0 * phy_chlc(i,k),                        &
+                              alphabio(i,j)*86400.0*10.0 * 0.004)
+          !   3. Alter the slope to account for respiration and daylength limitation
+          phy_pisl2= phy_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
+          !   4. Calculate light limitation
+          phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
+          !   5. Apply to maximum growth rate
+          mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
+
+
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Realised growth rate given resource availability !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -630,12 +607,26 @@ do n = 1, instances  !{
           u_npz = min(limno3, limfe) * mu_phy(i,k)
 
 
-          !!!!!!!!!!!!!!!!!!!!
-          ! Grazing function !
-          !!!!!!!!!!!!!!!!!!!!
-
-          g_npz = gbio(i,j) * epsbio(i,j) * biophy*biophy /                                        &
-                  ( gbio(i,j) + epsbio(i,j)*  biophy*biophy )
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Calculate growth in chlorophyll (mg Chl / m3) !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          
+          !     1. Light-limitation of chlorophyll production
+          phy_chl_pisl = phy_pisl(i,k) / (mumax_phy(i,k) * 86400.0 * chl_lday(i,k)) 
+          phy_chl_lpar(i,k) = 1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))
+          phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
+          !     2. Minimum rate of chlorophyll growth
+          mumin_chl = 0.004 * u_npz * biophy * 106./16. * 12. 
+          !     3. Maximum chlorophyll:C ratio based on temperature
+          zval = t_prog(index_temp)%field(i,j,k,time%tau)
+          max_chl = MIN(0.033, (0.033 / (1.0 - 1.14 / 43.4 * zval)) * (1.0 - 1.14 / 43.4 * 20.0))
+          !     4. Calculate mg Chl produced per mg C Phy 
+          mu_chl(i,k) = u_npz * biophy * 106./16.0 * 12. * 86400.0                           &
+                        * (phy_chl_prod(i,k) * min(limno3, limfe)) 
+          if (mu_chl(i,k).gt.0.0) then
+            mu_chl(i,k) = mumin_chl + ( (max_chl - 0.004)*mu_chl(i,k) )                      &
+                          / ( phy_pisl(i,k) * par_phymld(i,k)/chl_lday(i,k) )
+          endif
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -645,17 +636,27 @@ do n = 1, instances  !{
           fbc = bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
 
 
+          !!!!!!!!!!!!!!!!!!!!
+          ! Grazing function !
+          !!!!!!!!!!!!!!!!!!!!
+
+          biophy_min = MAX(0.0, biophy - 0.001)
+          !g_npz = gbio(i,j) * epsbio(i,j) * biophy*biophy /                                        &
+          !        ( gbio(i,j) + epsbio(i,j)*  biophy*biophy )
+          g_npz = 2.0*fbc * 1.0 * biophy*biophy_min / ( 2.0*fbc + 1.0 *  biophy*biophy ) / 86400.0
+
+
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Collect biomass gain and loss terms !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          f11 = u_npz*biophy                 * bioma(i,k,id_no3)
-          f21 = g_npz*biozoo                 * bioma(i,k,id_phy)
-          f22 = muepbio(i,j)*fbc*biophy      * bioma(i,k,id_phy)
-          f23 = muepsbio(i,j)*biophy*biophy  * bioma(i,k,id_phy)
-          f31 = gam2bio(i,j)*fbc*biozoo      * bioma(i,k,id_zoo)
-          f32 = muezbio(i,j)*biozoo*biozoo   * bioma(i,k,id_zoo)
-          f41 = muedbio(i,j)*fbc*biodet      * bioma(i,k,id_det)
+          f11 = u_npz*biophy                 * bioma(i,k,id_no3)    ! NO3 --> PHY
+          f21 = g_npz*biozoo                 * bioma(i,k,id_phy)    ! PHY --> ZOO & DET
+          f22 = muepbio(i,j)*fbc*biophy      * bioma(i,k,id_phy)    ! PHY --> NO3
+          f23 = muepsbio(i,j)*biophy*biophy  * bioma(i,k,id_phy)    ! PHY --> DET
+          f31 = gam2bio(i,j)*fbc*biozoo      * bioma(i,k,id_zoo)    ! ZOO --> NO3
+          f32 = muezbio(i,j)*biozoo*biozoo   * bioma(i,k,id_zoo)    ! ZOO --> DET
+          f41 = muedbio(i,j)*fbc*biodet      * bioma(i,k,id_det)    ! DET --> NO3
 
           ! Decrease the remineralisation rate beneath a certain depth
           !     ( This will be irrelevant once explicit bacteria is in )
@@ -675,7 +676,7 @@ do n = 1, instances  !{
           ! nitrate equation
           biotr(i,k,id_no3)  = biotr(i,k,id_no3) + dtsb * (f41 + f31 + f22 - f11) 
 
-          if (id_fe.ne.0) &
+          if (id_fe.ne.0)                                                                          &
           biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * 2.0e-2 * (f41 + f31 + f22 - f11)
 
           ! phytoplankton equation
@@ -688,11 +689,15 @@ do n = 1, instances  !{
           biotr(i,k,id_det)  = biotr(i,k,id_det) + dtsb * ((1.-gam1bio(i,j))*f21 + f23 + f32 - f41)
 
           ! caco3 equation
-          if (id_caco3.ne.0) &
+          if (id_caco3.ne.0)                                                                       &
           biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (   &
                                 (1.-gam1bio(i,j))*f21 + f23 + f32 ) * f_inorg(i,j) * 106./16. - f51)   
 
           ! phytoplankton chlorophyll equation
+          if (id_pchl.ne.0)                                                                        &
+          biotr(i,k,id_pchl) = biotr(i,k,id_pchl) + dtsb * ( mu_chl(i,k) - phy_chlc(i,k) *         &
+                                                             (f21 + f22 + f23)*12.0*106.0/16.0 )
+
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Estimate primary and secondary production !
@@ -707,6 +712,8 @@ do n = 1, instances  !{
           ! Secondary productivity
           zprod_gross(i,j,k) = zprod_gross(i,j,k) + dtsb*f21
 
+          ! Light limitation of phytoplankton
+          phy_parlimit(i,j,k) = phy_lpar(i,k) + phy_lpar(i,k)*dtsb/dtts
 
          enddo  ! i
         enddo  ! k
@@ -749,7 +756,7 @@ do n = 1, instances  !{
          if (id_alk.ne.0) &
          t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +       &  
                                                    ( -2.0 * caco3_bgc_change - no3_bgc_change)
-         if (id_pchl.ne.0) &
+         if (id_pchl.ne.0)                                                                         &
          t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl) 
 
          
@@ -770,6 +777,7 @@ do n = 1, instances  !{
             pprod_gross_intmld(i,j) = pprod_gross_intmld(i,j) + pprod_gross(i,j,k) * thickness%dzt(i,j,k)
             npp_intmld(i,j) = npp_intmld(i,j) + npp3d(i,j,k) * thickness%dzt(i,j,k)
             radbio_intmld(i,j) = radbio_intmld(i,j) + radbio3d(i,j,k) * thickness%dzt(i,j,k)
+            light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
          endif
          if (Grid%zw(k) .le. 100) then
             adic_int100(i,j)= adic_int100(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)

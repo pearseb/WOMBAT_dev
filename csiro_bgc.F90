@@ -279,6 +279,7 @@ integer                                 :: id_radbio1 = -1
 integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_zeuphot = -1
+integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -355,7 +356,7 @@ real, allocatable, dimension(:,:,:) :: radbio3d
 real, allocatable, dimension(:,:) :: wdet100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d
-real, allocatable, dimension(:,:,:) :: pprod_gross
+real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -531,6 +532,7 @@ allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
+allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -2020,7 +2022,11 @@ if (id_wdet100 .gt. 0) then
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
-
+! Light limitation of phytoplankton
+if (id_phy_parlimit .gt. 0) then
+  used = send_data(id_phy_parlimit, phy_parlimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Net primary productivity
 
 ! at each depth
@@ -2605,6 +2611,10 @@ id_pprod_gross_2d = register_diag_field('ocean_model','pprod_gross_2d', &
 id_zprod_gross = register_diag_field('ocean_model','zprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross ZOO production', &
      'mmolN/m^3/s',missing_value = -1.0e+10)
+
+id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton light limitation', &
+     '[0-1]',missing_value = -1.0e+10)
 
 id_caco3_sediment = register_diag_field('ocean_model','caco3_sediment', &
      grid%tracer_axes(1:2),Time%model_time, 'Accumulated CaCO3 in sediment at base of water column', &
