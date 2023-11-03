@@ -280,9 +280,12 @@ integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
+integer                                 :: id_zoo_grazpres = -1
+integer                                 :: id_phy_chl2c = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
+integer                                 :: id_nsp3d = -1
 integer                                 :: id_pprod_gross = -1
 integer                                 :: id_pprod_gross_2d = -1
 integer                                 :: id_zprod_gross = -1
@@ -355,8 +358,8 @@ real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d
 real, allocatable, dimension(:,:) :: wdet100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
-real, allocatable, dimension(:,:,:) :: npp3d
-real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit
+real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
+real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, phy_chl2c, zoo_grazpres
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -528,11 +531,14 @@ allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( npp2d(isc:iec,jsc:jec) )
 allocate( npp3d(isc:iec,jsc:jec,nk) )
+allocate( nsp3d(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
+allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
+allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -743,16 +749,16 @@ logical  :: used
          
 ! remineralisation of sediments to supply nutrient fields.  
 ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
-         T_prog(ind_no3)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)
+         T_prog(ind_dic)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)
          if (id_o2 .ne. 0) &
-           T_prog(ind_o2)%btf(i,j)  = -172./16. * T_prog(ind_no3)%btf(i,j)
+           T_prog(ind_o2)%btf(i,j)  = -172./122. * T_prog(ind_dic)%btf(i,j)
          if (id_dic .ne. 0) &
-           T_prog(ind_dic)%btf(i,j)  = 106./16. * T_prog(ind_no3)%btf(i,j) - &
+           T_prog(ind_no3)%btf(i,j)  = 16./122. * T_prog(ind_dic)%btf(i,j) - &
              rho0 * biotic(n)%caco3_sed_remin(i,j)
          if (id_adic .ne. 0) &
            T_prog(ind_adic)%btf(i,j)  = T_prog(ind_dic)%btf(i,j)
          if (id_fe .ne. 0) &
-           T_prog(ind_fe)%btf(i,j)  = 2.0e-2 * T_prog(ind_no3)%btf(i,j)
+           T_prog(ind_fe)%btf(i,j)  = 2.623e-3 * T_prog(ind_dic)%btf(i,j)
          if (id_alk .ne. 0) &
            T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j) - &
              T_prog(ind_no3)%btf(i,j)
@@ -2027,6 +2033,17 @@ if (id_phy_parlimit .gt. 0) then
   used = send_data(id_phy_parlimit, phy_parlimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+! Chlorophyll:C ratio of phytoplankton
+if (id_phy_chl2c .gt. 0) then
+  used = send_data(id_phy_chl2c, phy_chl2c(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Specific zooplankton grazing pressure (µM Z per µM P per second)
+if (id_zoo_grazpres .gt. 0) then
+  used = send_data(id_zoo_grazpres, zoo_grazpres(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+
 ! Net primary productivity
 
 ! at each depth
@@ -2049,10 +2066,14 @@ if (id_npp1 .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
-! Gross production of zooplankton
+! Gross and secondary production of zooplankton
 
 if (id_zprod_gross .gt. 0) then
   used = send_data(id_zprod_gross, zprod_gross(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_nsp3d .gt. 0) then
+  used = send_data(id_nsp3d, nsp3d(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2513,19 +2534,19 @@ id_fe_intmld = register_diag_field('ocean_model','fe_intmld', &
 id_phy_intmld = register_diag_field('ocean_model','phy_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
      'MLD-integrated phytoplankton', &
-     'mmol/m^2',missing_value = -1.0e+10)     
+     'mmolC/m^2',missing_value = -1.0e+10)     
 id_det_intmld = register_diag_field('ocean_model','det_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
      'MLD-integrated detritus', &
-     'mmol/m^2',missing_value = -1.0e+10)     
+     'mmolC/m^2',missing_value = -1.0e+10)     
 id_pprod_gross_intmld = register_diag_field('ocean_model','pprod_gross_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
      'MLD-integrated gross PHY production', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)     
+     'mmolC/m^2/s',missing_value = -1.0e+10)     
 id_npp_intmld = register_diag_field('ocean_model','npp_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
      'MLD-integrated net primary productivity', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)     
+     'mmolC/m^2/s',missing_value = -1.0e+10)     
 id_radbio_intmld = register_diag_field('ocean_model','radbio_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
      'MLD-integrated photosynthetically active radiation for phytoplankton growth', &
@@ -2562,11 +2583,11 @@ id_det_int100 = register_diag_field('ocean_model','det_int100', &
 id_pprod_gross_int100 = register_diag_field('ocean_model','pprod_gross_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
      '100m-integrated gross PHY production', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)     
+     'mmolC/m^2/s',missing_value = -1.0e+10)     
 id_npp_int100 = register_diag_field('ocean_model','npp_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
      '100m-integrated net primary productivity', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)     
+     'mmolC/m^2/s',missing_value = -1.0e+10)     
 id_radbio_int100 = register_diag_field('ocean_model','radbio_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
      '100m-integrated photosynthetically active radiation for phytoplankton growth', &
@@ -2586,59 +2607,71 @@ id_radbio3d = register_diag_field('ocean_model','radbio3d', &
 
 id_wdet100 = register_diag_field('ocean_model','wdet100', &
      grid%tracer_axes(1:2),Time%model_time, 'detritus export at 100 m (det*sinking rate)', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_npp3d = register_diag_field('ocean_model','npp3d', &
      grid%tracer_axes(1:3),Time%model_time, 'Net primary productivity', &
-     'mmolN/m^3/s',missing_value = -1.0e+10)
+     'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_npp2d = register_diag_field('ocean_model','npp2d', &
      grid%tracer_axes(1:2),Time%model_time, 'Vertically integrated net primary productivity', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_npp1 = register_diag_field('ocean_model','npp1', &
      grid%tracer_axes(1:2),Time%model_time, 'Net primary productivity in the first ocean layer', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_pprod_gross = register_diag_field('ocean_model','pprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross PHY production', &
-     'mmolN/m^3/s',missing_value = -1.0e+10)
+     'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_pprod_gross_2d = register_diag_field('ocean_model','pprod_gross_2d', &
      grid%tracer_axes(1:2),Time%model_time, 'Vertically integrated Gross PHY production', &
-     'mmolN/m^2/s',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
+id_nsp3d = register_diag_field('ocean_model','nsp3d', &
+     grid%tracer_axes(1:3),Time%model_time, 'Net secondary productivity', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_zprod_gross = register_diag_field('ocean_model','zprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross ZOO production', &
-     'mmolN/m^3/s',missing_value = -1.0e+10)
+     'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton light limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
+id_phy_chl2c = register_diag_field('ocean_model','phy_chl2c', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Chlorophyll:C ratio', &
+     'mg Chl / mg C ',missing_value = -1.0e+10)
+
+id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
+     'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
+
 id_caco3_sediment = register_diag_field('ocean_model','caco3_sediment', &
      grid%tracer_axes(1:2),Time%model_time, 'Accumulated CaCO3 in sediment at base of water column', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_det_sediment = register_diag_field('ocean_model','det_sediment', &
      grid%tracer_axes(1:2),Time%model_time, 'Accumulated DET in sediment at base of water column', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_caco3_sed_remin = register_diag_field('ocean_model','caco3_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of CaCO3 in accumulated sediment', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_det_sed_remin = register_diag_field('ocean_model','det_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of DET in accumulated sediment', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_caco3_sed_depst = register_diag_field('ocean_model','caco3_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of CaCO3 to sediment at base of water column', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_det_sed_depst = register_diag_field('ocean_model','det_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of DET to sediment at base of water column', &
-     'mmolN/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2',missing_value = -1.0e+10)
 
 id_total_co2_flux = register_diag_field('ocean_model','total_co2_flux', &
      Time%model_time, 'Total surface flux of inorganic C (natural) into ocean', &

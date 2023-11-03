@@ -128,8 +128,8 @@ integer :: index_temp, index_salt
       real :: pi    = 3.14159265358979  !yes, this is pi
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
       real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe, biopchl, biophy_min
-      real :: limno3, limfe
-      real :: u_npz,g_npz
+      real :: limno3, limfe, mort_s, lmor_s
+      real :: u_npz,gmax,g_npz
       real :: fx1,fx2,fx3,fx4,fu1,fu2
       real :: mumax_phy(isc:iec,grid%nk)
       real :: mu_phy(isc:iec,grid%nk)
@@ -311,6 +311,7 @@ do n = 1, instances  !{
   light_limit(:,:) = 0.0
   radbio3d(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
+  nsp3d(:,:,:) = 0.0
   adic_intmld(:,:) = 0.0
   dic_intmld(:,:) = 0.0
   o2_intmld(:,:) = 0.0
@@ -333,6 +334,8 @@ do n = 1, instances  !{
   radbio_int100(:,:) = 0.0
   zeuphot(:,:) = 20.0       ! minimum euphotic zone depth is 20 metres
   phy_parlimit(:,:,:) = 0.0
+  phy_chl2c(:,:,:) = 0.0
+  zoo_grazpres(:,:,:) = 0.0
 
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -506,19 +509,12 @@ do n = 1, instances  !{
            chl_lday(i,k) = zval / 24.0
            phy_lday(i,k) = 1.5 * zval / (12.0 + zval)
 
-           !if (i.eq.112) then
-           !  if (j.eq.222) then
-           !    print*, grid%zt(k), par_tot(i,k), zval, chl_lday(i,k), phy_lday(i,k)
-           !  endif
-           !endif
-
            ! Save total PAR to radbio array for diagnostic output
            radbio3d(i,j,k) = par_tot(i,k)
 
            ! Temperature-dependent maximum growth rate (Eppley curve)
            zval = t_prog(index_temp)%field(i,j,k,time%tau)
-           !mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
-           mumax_phy(i,k) = 1.0/86400.0 * bbio(i,j)**(cbio(i,j) * zval)
+           mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
 
          enddo  ! i
        enddo  ! k
@@ -536,7 +532,7 @@ do n = 1, instances  !{
        !
        !    dZ/dt = a g(P) P Z - d Z - p_Z Z^2
        !
-       !    dN/dt = r D + d Z - u(N,Temp.,Light) P  [ + r_d DOC ]
+       !    dN/dt = r D + d Z - u(Temp,Light(Chl),N,Fe) P  [ + r_d DOC ]
        !
        !    dD/dt = (1-s)[ (1-a) g(P) P Z + p_P P + p_Z Z^2] -r D + w_D dD/dz
 
@@ -563,12 +559,16 @@ do n = 1, instances  !{
 
           biono3 = max(0.0,biotr(i,k,id_no3))
           biophy = max(0.0,biotr(i,k,id_phy))
+          biophy_min = MAX(0.0, biophy - 0.001)  ! Minimum Phy beneath which grazing doesn't happen
           biozoo = max(0.0,biotr(i,k,id_zoo))
           biodet = max(0.0,biotr(i,k,id_det))
           biooxy = max(0.0,biotr(i,k,id_o2))
           if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
           if (id_fe.ne.0)    biofe = max(0.0,biotr(i,k,id_fe))
           if (id_pchl.ne.0)  biopchl = max(0.0,biotr(i,k,id_pchl))
+
+          ! Get in situ temperature
+          zval = t_prog(index_temp)%field(i,j,k,time%tau)
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -588,16 +588,22 @@ do n = 1, instances  !{
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
           !   1. Get chlorophyll:C ratio
-          if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 106/16.0 * 12)
+          if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 12)
           !   2. Get initial slope of Photosynthesis-Irradiance curve
-          phy_pisl(i,k) = MAX(alphabio(i,j)*86400.0*10.0 * phy_chlc(i,k),                        &
-                              alphabio(i,j)*86400.0*10.0 * 0.004)
+          phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * 0.004)
           !   3. Alter the slope to account for respiration and daylength limitation
           phy_pisl2= phy_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
           !   4. Calculate light limitation
           phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
           !   5. Apply to maximum growth rate
           mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
+
+          !if (i.eq.152) then
+          !  if (j.eq.112) then
+          !    if (k.eq.1) print*, "Grid =", grid%xt(i,j), grid%yt(i,j), grid%zt(k)
+          !    print*, phy_chlc(i,k), mumax_phy(i,k), phy_lpar(i,k), mu_phy(i,k)
+          !  endif
+          !endif
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -616,51 +622,61 @@ do n = 1, instances  !{
           phy_chl_lpar(i,k) = 1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))
           phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
           !     2. Minimum rate of chlorophyll growth
-          mumin_chl = 0.004 * u_npz * biophy * 106./16. * 12. 
+          mumin_chl = 0.004 * u_npz * biophy * 12. 
           !     3. Maximum chlorophyll:C ratio based on temperature
-          zval = t_prog(index_temp)%field(i,j,k,time%tau)
           max_chl = MIN(0.033, (0.033 / (1.0 - 1.14 / 43.4 * zval)) * (1.0 - 1.14 / 43.4 * 20.0))
           !     4. Calculate mg Chl produced per mg C Phy 
-          mu_chl(i,k) = u_npz * biophy * 106./16.0 * 12. * 86400.0                           &
-                        * (phy_chl_prod(i,k) * min(limno3, limfe)) 
+          mu_chl(i,k) = u_npz * biophy * 12. * 86400.0 * (phy_chl_prod(i,k) * min(limno3, limfe)) 
           if (mu_chl(i,k).gt.0.0) then
-            mu_chl(i,k) = mumin_chl + ( (max_chl - 0.004)*mu_chl(i,k) )                      &
-                          / ( phy_pisl(i,k) * par_phymld(i,k)/chl_lday(i,k) )
+            mu_chl(i,k) = mumin_chl + ( (max_chl - 0.004) * mu_chl(i,k) )                          &
+                                      / ( phy_pisl(i,k) * par_phymld(i,k)/chl_lday(i,k) )
           endif
-
-
-          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-          ! Temperature dependence of growth rates !
-          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-          fbc = bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
 
 
           !!!!!!!!!!!!!!!!!!!!
           ! Grazing function !
           !!!!!!!!!!!!!!!!!!!!
 
-          biophy_min = MAX(0.0, biophy - 0.001)
-          !g_npz = gbio(i,j) * epsbio(i,j) * biophy*biophy /                                        &
-          !        ( gbio(i,j) + epsbio(i,j)*  biophy*biophy )
-          g_npz = 2.0*fbc * 1.0 * biophy*biophy_min / ( 2.0*fbc + 1.0 *  biophy*biophy ) / 86400.0
+          gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
+!          g_npz = gmax * epsbio(i,j) * biophy*biophy_min /                                         &
+!                  ( gmax + epsbio(i,j)*  biophy*biophy_min )
+          g_npz = gmax * 0.1/86400.0 * biophy*biophy_min /                                         &
+                  ( gmax + 0.1/86400.0 *  biophy*biophy_min )
 
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Temperature dependency !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          fbc = bbio(i,j)**(cbio(i,j) * zval)
+
+
+          !!!!!!!!!!!!!!!!!!!!!
+          ! Mortality scalers !
+          !!!!!!!!!!!!!!!!!!!!!
+
+          ! Depress mortality in nutrient limited regime. Assumes investment in cell maintenance over growth.
+          mort_s = MIN(1.0, MAX(0.0, limno3/0.3))
+          ! Depress mortality as phytoplankton population dilutes. Assumes density-dependent transfer
+          lmor_s = biophy_min / (muepsbio(i,j)*86400 + biophy)
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Collect biomass gain and loss terms !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          f11 = u_npz*biophy                 * bioma(i,k,id_no3)    ! NO3 --> PHY
-          f21 = g_npz*biozoo                 * bioma(i,k,id_phy)    ! PHY --> ZOO & DET
-          f22 = muepbio(i,j)*fbc*biophy      * bioma(i,k,id_phy)    ! PHY --> NO3
-          f23 = muepsbio(i,j)*biophy*biophy  * bioma(i,k,id_phy)    ! PHY --> DET
-          f31 = gam2bio(i,j)*fbc*biozoo      * bioma(i,k,id_zoo)    ! ZOO --> NO3
-          f32 = muezbio(i,j)*biozoo*biozoo   * bioma(i,k,id_zoo)    ! ZOO --> DET
-          f41 = muedbio(i,j)*fbc*biodet      * bioma(i,k,id_det)    ! DET --> NO3
+          f11 = u_npz * biophy                                 * bioma(i,k,id_no3)    ! DIC --> PHY
+          f21 = g_npz * biozoo                                 * bioma(i,k,id_phy)    ! PHY --> ZOO & DET
+          !f22 = muepbio(i,j) * lmor_s * mort_s * biophy * fbc  * bioma(i,k,id_phy)    ! PHY --> DIC
+          !f23 = 0.05/86400.0 * mort_s * biophy                 * bioma(i,k,id_phy)    ! PHY --> DET
+          f22 = 0.01/86400.0 * lmor_s * mort_s * biophy * fbc  * bioma(i,k,id_phy)    ! PHY --> DIC
+          f23 = 0.01/86400.0 * mort_s * biophy                 * bioma(i,k,id_phy)    ! PHY --> DET
+          f31 = gam2bio(i,j) * biozoo * fbc                    * bioma(i,k,id_zoo)    ! ZOO --> DIC
+          f32 = muezbio(i,j) * biozoo*biozoo                   * bioma(i,k,id_zoo)    ! ZOO --> DET
+          f41 = muedbio(i,j) * biodet * fbc                    * bioma(i,k,id_det)    ! DET --> DIC
 
           ! Decrease the remineralisation rate beneath a certain depth
           !     ( This will be irrelevant once explicit bacteria is in )
-          if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 300m
+          if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 180m
 
           if (id_caco3.ne.0) f51 = muecaco3(i,j)*biocaco3 *bioma(i,k,id_caco3)
 
@@ -670,14 +686,14 @@ do n = 1, instances  !{
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
           ! oxygen equation
-          biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172./16.                     &
+          biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172./122.                    &
                                                  * dtsb * (f41 + f31 + f22 - f11)
 
           ! nitrate equation
-          biotr(i,k,id_no3)  = biotr(i,k,id_no3) + dtsb * (f41 + f31 + f22 - f11) 
+          biotr(i,k,id_no3)  = biotr(i,k,id_no3) + dtsb * (f41 + f31 + f22 - f11) * 16./122. 
 
           if (id_fe.ne.0)                                                                          &
-          biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * 2.0e-2 * (f41 + f31 + f22 - f11)
+          biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * 2.623e-3 * (f41 + f31 + f22 - f11)
 
           ! phytoplankton equation
           biotr(i,k,id_phy)  = biotr(i,k,id_phy) + dtsb * (f11 - f21 - f22 - f23)
@@ -691,12 +707,12 @@ do n = 1, instances  !{
           ! caco3 equation
           if (id_caco3.ne.0)                                                                       &
           biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (   &
-                                (1.-gam1bio(i,j))*f21 + f23 + f32 ) * f_inorg(i,j) * 106./16. - f51)   
+                                (1.-gam1bio(i,j))*f21 + f23 + f32 ) * f_inorg(i,j) - f51)   
 
           ! phytoplankton chlorophyll equation
           if (id_pchl.ne.0)                                                                        &
           biotr(i,k,id_pchl) = biotr(i,k,id_pchl) + dtsb * ( mu_chl(i,k) - phy_chlc(i,k) *         &
-                                                             (f21 + f22 + f23)*12.0*106.0/16.0 )
+                                                             (f21 + f22 + f23) * 12.0 )
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -706,14 +722,23 @@ do n = 1, instances  !{
           ! Gross NPP
           pprod_gross(i,j,k) = pprod_gross(i,j,k) + dtsb*f11
 
-          ! Net NPP (gross minus linear mortality)
-	      npp3d(i,j,k) = npp3d(i,j,k) + dtsb*(f11 - f21)
+          ! Net NPP (gross minus linear mortality (respiration))
+	      npp3d(i,j,k) = npp3d(i,j,k) + dtsb*(f11 - f22)
 
           ! Secondary productivity
           zprod_gross(i,j,k) = zprod_gross(i,j,k) + dtsb*f21
 
+          ! Net Secondary production (gross minus respiration losses)
+          nsp3d(i,j,k) = nsp3d(i,j,k) + dtsb*(f21*gam1bio(i,j) - f31)
+
           ! Light limitation of phytoplankton
-          phy_parlimit(i,j,k) = phy_lpar(i,k) + phy_lpar(i,k)*dtsb/dtts
+          phy_parlimit(i,j,k) = phy_parlimit(i,j,k) + phy_lpar(i,k)*dtsb/dtts
+          
+          ! Chlorophyll : C ratio of phytoplankton
+          phy_chl2c(i,j,k) = phy_chl2c(i,j,k) + phy_chlc(i,k)*dtsb/dtts
+          
+          ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
+          if (biophy.gt.0.0) zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + f21/biophy * dtsb/dtts
 
          enddo  ! i
         enddo  ! k
@@ -749,10 +774,10 @@ do n = 1, instances  !{
                                                   max(0.0, (biotr(i,k,id_fe) - fe_bkgnd(i,j)) ) 
          if (id_dic.ne.0) &
          t_prog(ind_dic)%field(i,j,k,time%taum1) = t_prog(ind_dic)%field(i,j,k,time%taum1) +       &
-                                                   106./16. * no3_bgc_change - caco3_bgc_change
+                                                   122./16. * no3_bgc_change - caco3_bgc_change
          if (id_adic.ne.0) &
          t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +     &
-                                                    106./16. * no3_bgc_change - caco3_bgc_change 
+                                                    122./16. * no3_bgc_change - caco3_bgc_change 
          if (id_alk.ne.0) &
          t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +       &  
                                                    ( -2.0 * caco3_bgc_change - no3_bgc_change)
@@ -814,51 +839,52 @@ do n = 1, instances  !{
        do i = isc,iec 
         k = grid%kmt(i,j)
         if (k.gt.0) then 
-         biotic(n)%det_sed_depst(i,j) = adv_fb(i,k+1)
+         biotic(n)%det_sed_depst(i,j) = adv_fb(i,k+1)*0.1
         endif  ! k.gt.0
        enddo  ! i
 
 
-!!mac remineralise tracer sinking through the base of the column.
-!     do i = isc, iec 
-!       k = grid%kmt(i,j)
-!       if (k .gt. 0) then 
-!
-!        t_prog(ind_no3)%th_tendency(i,j,k) = t_prog(ind_no3)%th_tendency(i,j,k) + &
-!         grid%tmask(i,j,k)  * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!       
-!       t_prog(ind_o2)%th_tendency(i,j,k) = t_prog(ind_o2)%th_tendency(i,j,k) - &
-!         172.0 / 16.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!      
-!       if (id_fe .ne. 0) then
-!        t_prog(ind_fe)%th_tendency(i,j,k) = t_prog(ind_fe)%th_tendency(i,j,k) + &
-!         2.0e-2 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!       endif
-!      
-!       if (id_dic .ne. 0) then
-!        t_prog(ind_dic)%th_tendency(i,j,k) = t_prog(ind_dic)%th_tendency(i,j,k) + &
-!         106.0 / 16.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!       endif
-!      
-!       if (id_adic .ne. 0) then
-!        t_prog(ind_adic)%th_tendency(i,j,k) =t_prog(ind_adic)%th_tendency(i,j,k) + &
-!         106.0 / 16.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!       endif
-!      
-!       if (id_alk .ne. 0) then
-!        t_prog(ind_alk)%th_tendency(i,j,k) = t_prog(ind_alk)%th_tendency(i,j,k) - &
-!         grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!         *adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!       endif
-!
-!       endif ! k .gt. 0
-!
-!     enddo  ! i
+       !!mac remineralise tracer sinking through the base of the column.
+       do i = isc, iec 
+         k = grid%kmt(i,j)
+
+         if (k .gt. 0) then 
+
+          t_prog(ind_no3)%th_tendency(i,j,k) = t_prog(ind_no3)%th_tendency(i,j,k) + &
+           grid%tmask(i,j,k)  * Thickness%rho_dzt(i,j,k,time%tau)  &
+           * 16.0/122.0 * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+         
+         t_prog(ind_o2)%th_tendency(i,j,k) = t_prog(ind_o2)%th_tendency(i,j,k) - &
+           172.0 / 122.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+           * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+        
+         if (id_fe .ne. 0) then
+          t_prog(ind_fe)%th_tendency(i,j,k) = t_prog(ind_fe)%th_tendency(i,j,k) + &
+           2.623e-3 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+           * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+         endif
+        
+         if (id_dic .ne. 0) then
+          t_prog(ind_dic)%th_tendency(i,j,k) = t_prog(ind_dic)%th_tendency(i,j,k) + &
+           grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+           * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+         endif
+        
+         if (id_adic .ne. 0) then
+          t_prog(ind_adic)%th_tendency(i,j,k) =t_prog(ind_adic)%th_tendency(i,j,k) + &
+           grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+           * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+         endif
+        
+         if (id_alk .ne. 0) then
+          t_prog(ind_alk)%th_tendency(i,j,k) = t_prog(ind_alk)%th_tendency(i,j,k) - &
+           16.0/122.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+           *adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+         endif
+
+         endif ! k .gt. 0
+
+       enddo  ! i
 
 
        do k =1,grid%nk  !{
@@ -889,36 +915,39 @@ do n = 1, instances  !{
         do i = isc, iec 
          k = grid%kmt(i,j)
          if (k .gt. 0) then 
-          biotic(n)%caco3_sed_depst(i,j) = adv_fb(i,k+1)
+          biotic(n)%caco3_sed_depst(i,j) = adv_fb(i,k+1)*0.1
          endif ! k .gt. 0
         enddo ! i
 
 
-!!mac remineralise tracer sinking through the base of the column.
-!     do i = isc, iec 
-!       k = grid%kmt(i,j)
-!       if (k .gt. 0) then 
-!       
-!        if (id_dic .ne. 0) then
-!         t_prog(ind_dic)%th_tendency(i,j,k) = t_prog(ind_dic)%th_tendency(i,j,k) + &
-!          grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!          * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!        endif
-!      
-!        if (id_adic .ne. 0) then
-!         t_prog(ind_adic)%th_tendency(i,j,k) =t_prog(ind_adic)%th_tendency(i,j,k) + &
-!          grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!          * adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!        endif
-!      
-!        if (id_alk .ne. 0) then
-!         t_prog(ind_alk)%th_tendency(i,j,k) = t_prog(ind_alk)%th_tendency(i,j,k) + &
-!          2.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
-!          *adv_fb(i,k+1)/Thickness%dzt(i,j,k)
-!        endif
-!       endif ! k .gt. 0
-!     enddo ! i
-!
+        !!mac remineralise tracer sinking through the base of the column.
+        do i = isc, iec 
+          k = grid%kmt(i,j)
+
+          if (k .gt. 0) then 
+          
+           if (id_dic .ne. 0) then
+            t_prog(ind_dic)%th_tendency(i,j,k) = t_prog(ind_dic)%th_tendency(i,j,k) + &
+             grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+             * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+           endif
+         
+           if (id_adic .ne. 0) then
+            t_prog(ind_adic)%th_tendency(i,j,k) =t_prog(ind_adic)%th_tendency(i,j,k) + &
+             grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+             * adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+           endif
+         
+           if (id_alk .ne. 0) then
+            t_prog(ind_alk)%th_tendency(i,j,k) = t_prog(ind_alk)%th_tendency(i,j,k) + &
+             2.0 * grid%tmask(i,j,k) * Thickness%rho_dzt(i,j,k,time%tau)  &
+             *adv_fb(i,k+1)/Thickness%dzt(i,j,k)*0.9
+           endif
+
+          endif ! k .gt. 0
+
+        enddo ! i
+
 
         do k =1,grid%nk  !{
          do i =isc,iec  !{
