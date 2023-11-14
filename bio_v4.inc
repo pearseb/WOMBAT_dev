@@ -127,7 +127,8 @@ integer :: index_temp, index_salt
 
       real :: pi    = 3.14159265358979  !yes, this is pi
       real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
-      real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe, biopchl 
+      real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe 
+      real :: biopchl, biophyfe, biozoofe, biodetfe 
       real :: biophy_min, biodet_min
       real :: limno3, limfe, mort_s, lmor_s
       real :: u_npz, gmax, g_npz, prey
@@ -355,6 +356,9 @@ do n = 1, instances  !{
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)
   ind_det  = biotic(n)%ind_bgc(id_det)
   ind_pchl = biotic(n)%ind_bgc(id_pchl) 
+  ind_phyfe = biotic(n)%ind_bgc(id_phyfe) 
+  ind_zoofe = biotic(n)%ind_bgc(id_zoofe) 
+  ind_detfe = biotic(n)%ind_bgc(id_detfe) 
 
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -378,6 +382,9 @@ do n = 1, instances  !{
             if (id_caco3.ne.0) biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
             if (id_fe.ne.0)    biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
             if (id_pchl.ne.0)  biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1))
+            if (id_phyfe.ne.0) biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
+            if (id_zoofe.ne.0) biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
+            if (id_detfe.ne.0) biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
 
           enddo  ! i
         enddo  ! k
@@ -566,6 +573,9 @@ do n = 1, instances  !{
           if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
           if (id_fe.ne.0)    biofe = max(0.0,biotr(i,k,id_fe))
           if (id_pchl.ne.0)  biopchl = max(0.0,biotr(i,k,id_pchl))
+          if (id_phyfe.ne.0) biophyfe = max(0.0,biotr(i,k,id_phyfe))
+          if (id_zoofe.ne.0) biozoofe = max(0.0,biotr(i,k,id_zoofe))
+          if (id_detfe.ne.0) biodetfe = max(0.0,biotr(i,k,id_detfe))
 
           ! Get in situ temperature
           zval = t_prog(index_temp)%field(i,j,k,time%tau)
@@ -795,11 +805,19 @@ do n = 1, instances  !{
          if (id_pchl.ne.0)                                                                         &
          t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl) 
 
+         if (id_phyfe.ne.0)                                                                         &
+         t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe) 
+         if (id_zoofe.ne.0)                                                                         &
+         t_prog(ind_zoofe)%field(i,j,k,time%taum1) = biotr(i,k,id_zoofe) 
+         if (id_detfe.ne.0)                                                                         &
+         t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe) 
          
          ! Collect primary and secondary production diagnostic terms
          pprod_gross(i,j,k) = rdtts * pprod_gross(i,j,k) * grid%tmask(i,j,k)
          zprod_gross(i,j,k) = rdtts * zprod_gross(i,j,k) * grid%tmask(i,j,k)
          npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
+         nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
+         zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
 
          ! Collect other diagnostic terms
          if (Grid%zw(k) .le. mld(i,j)) then
