@@ -152,6 +152,7 @@ integer :: index_temp, index_salt
       real, dimension(isc:iec,grid%nk)   :: par_tot, par_phy, par_phymld, par_eup
       real, dimension(isc:iec,grid%nk)   :: phy_pisl, phy_lday, chl_lday, phy_lpar, chl_lpar
       real, dimension(isc:iec,grid%nk)   :: phy_chlc, phy_chl_lpar, phy_chl_prod, mu_chl
+      real, dimension(isc:iec,grid%nk)   :: phy_FeC, zoo_FeC, det_FeC
       real, dimension(isc:iec) :: par_phy_mldsum, par_tot_mldsum, par_z_mldsum
       real :: z1_dep, zval
       real :: phy_pisl2
@@ -549,6 +550,9 @@ do n = 1, instances  !{
 
         ! Initialise some arrays to zero
         phy_chlc(:,:) = 0.0      ! chlorophyll to carbon ratio of phytoplankton
+        phy_FeC(:,:) = 0.0       ! iron to carbon ratio of phytoplankton
+        zoo_FeC(:,:) = 0.0       ! iron to carbon ratio of phytoplankton
+        det_FeC(:,:) = 0.0       ! iron to carbon ratio of phytoplankton
         phy_lpar(:,:) = 0.0      ! light limitation of phytoplankton growth
         mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
         phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
@@ -755,6 +759,12 @@ do n = 1, instances  !{
           
           ! Chlorophyll : C ratio of phytoplankton
           phy_chl2c(i,j,k) = phy_chl2c(i,j,k) + phy_chlc(i,k)*dtsb/dtts
+          ! Fe : C ratio of phytoplankton
+          phy_Fe2C(i,j,k) = phy_Fe2C(i,j,k) + phy_FeC(i,k)*dtsb/dtts
+          ! Fe : C ratio of zooplankton
+          zoo_Fe2C(i,j,k) = zoo_Fe2C(i,j,k) + zoo_FeC(i,k)*dtsb/dtts
+          ! Fe : C ratio of detritus 
+          det_Fe2C(i,j,k) = det_Fe2C(i,j,k) + det_FeC(i,k)*dtsb/dtts
           
           ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
           if (biophy*biodet.gt.0.0) then

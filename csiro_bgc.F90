@@ -285,6 +285,9 @@ integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_zoo_grazpres = -1
 integer                                 :: id_phy_chl2c = -1
+integer                                 :: id_phy_Fe2C = -1
+integer                                 :: id_zoo_Fe2C = -1
+integer                                 :: id_det_Fe2C = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -362,7 +365,8 @@ real, allocatable, dimension(:,:,:) :: radbio3d
 real, allocatable, dimension(:,:) :: wdet100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
-real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, phy_chl2c, zoo_grazpres
+real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, phy_chl2c, zoo_grazpres,         &
+                                       phy_Fe2C, zoo_Fe2C, det_Fe2C
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -541,6 +545,9 @@ allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
+allocate( phy_Fe2C(isc:iec,jsc:jec,nk) )
+allocate( zoo_Fe2C(isc:iec,jsc:jec,nk) )
+allocate( det_Fe2C(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
@@ -2062,6 +2069,21 @@ if (id_phy_chl2c .gt. 0) then
   used = send_data(id_phy_chl2c, phy_chl2c(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+! Fe:C ratio of phytoplankton
+if (id_phy_Fe2C .gt. 0) then
+  used = send_data(id_phy_Fe2C, phy_Fe2C(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Fe:C ratio of zooplankton
+if (id_zoo_Fe2C .gt. 0) then
+  used = send_data(id_zoo_Fe2C, zoo_Fe2C(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Fe:C ratio of detritus
+if (id_det_Fe2C .gt. 0) then
+  used = send_data(id_det_Fe2C, det_Fe2C(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Specific zooplankton grazing pressure (µM Z per µM P per second)
 if (id_zoo_grazpres .gt. 0) then
   used = send_data(id_zoo_grazpres, zoo_grazpres(isc:iec,jsc:jec,:),          &
@@ -2668,6 +2690,18 @@ id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
 id_phy_chl2c = register_diag_field('ocean_model','phy_chl2c', &
      grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Chlorophyll:C ratio', &
      'mg Chl / mg C ',missing_value = -1.0e+10)
+
+id_phy_Fe2C = register_diag_field('ocean_model','phy_Fe2C', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Fe:C ratio', &
+     'mol / mol ',missing_value = -1.0e+10)
+
+id_zoo_Fe2C = register_diag_field('ocean_model','zoo_Fe2C', &
+     grid%tracer_axes(1:3),Time%model_time, 'zooplankton Fe:C ratio', &
+     'mol / mol ',missing_value = -1.0e+10)
+
+id_det_Fe2C = register_diag_field('ocean_model','det_Fe2C', &
+     grid%tracer_axes(1:3),Time%model_time, 'detritus Fe:C ratio', &
+     'mol / mol ',missing_value = -1.0e+10)
 
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
