@@ -126,7 +126,7 @@ integer :: index_temp, index_salt
       integer :: ichl
 
       real :: pi    = 3.14159265358979  !yes, this is pi
-      real :: biotr(isc:iec,grid%nk,ntr_bmax), bioma(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
+      real :: biotr(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
       real :: biono3, biophy, biozoo, biodet, biooxy, biocaco3, biofe 
       real :: biopchl, biophyfe, biozoofe, biodetfe 
       real :: biophy_min, biodet_min
@@ -138,7 +138,7 @@ integer :: index_temp, index_salt
 !chd auxiliary variables to prevent unnecessary computation
       real :: fbc
       real :: f11,f21p,f21d,f22,f23,f31,f32,f41,f51 
-      real :: epsi      = 1e-15
+      real :: epsi      = 1e-16
       real :: rdtts      !1/dtts
       real :: dtsb
       real :: adv_fb(isc:iec,1:grid%nk+1)
@@ -149,6 +149,7 @@ integer :: index_temp, index_salt
       real, dimension(4,61) :: zrgb
       real, dimension(isc:iec)           :: keuphot
       real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
+      real, dimension(isc:iec,grid%nk)   :: biomask
       real, dimension(isc:iec,grid%nk)   :: par_tot, par_phy, par_phymld, par_eup
       real, dimension(isc:iec,grid%nk)   :: phy_pisl, phy_lday, chl_lday, phy_lpar, chl_lpar
       real, dimension(isc:iec,grid%nk)   :: phy_chlc, phy_chl_lpar, phy_chl_prod, mu_chl
@@ -156,7 +157,7 @@ integer :: index_temp, index_salt
       real, dimension(isc:iec) :: par_phy_mldsum, par_tot_mldsum, par_z_mldsum
       real :: z1_dep, zval
       real :: phy_pisl2
-      real :: phy_chl_pisl, max_chl, mumin_chl
+      real :: phy_chl_pisl, max_chl, mumin_chl, phy_minFeC, phy_maxQFe, zmax, phy_Feupt
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -391,25 +392,17 @@ do n = 1, instances  !{
         enddo  ! k
 
 
-! pjb - I don't know why you would do this for every tracer... Just use one? One we trust, like DIC?
-!       Because otherwise we could be masking places where tracers go negative, like O2 in the anoxic zones
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! create mask biomask, which is 0 for tracer concentration < epsi and 1 when > epsi !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! create mask bioma, which is 0 for tracer concentration < epsi and 1 when > epsi !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       biomask(:,:) = 0.0
+       do k=1,grid%nk
+         do i=isc,iec
 
-       do trn=1,ntr_bmax   
-        do k=1,grid%nk
-          do i=isc,iec
+          if (biotr(i,k,id_dic).gt.epsi) biomask(i,k) = 1.0
 
-           if (biotr(i,k,trn) .gt. epsi) then
-            bioma(i,k,trn) = 1.
-           else
-            bioma(i,k,trn) = 0.
-           endif 
-
-          enddo
-        enddo
+         enddo
        enddo
 
 
@@ -584,6 +577,14 @@ do n = 1, instances  !{
           ! Get in situ temperature
           zval = t_prog(index_temp)%field(i,j,k,time%tau)
 
+          ! Get important ratios
+          if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 12)
+          if (id_fe.ne.0) then 
+            if (biophy*biophyfe.gt.0.0) phy_FeC(i,k) = biophyfe/biophy
+            if (biozoo*biozoofe.gt.0.0) zoo_FeC(i,k) = biozoofe/biozoo
+            if (biodet*biodetfe.gt.0.0) det_FeC(i,k) = biodetfe/biodet
+          endif
+
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Limitation terms for resource availability !
@@ -591,6 +592,16 @@ do n = 1, instances  !{
 
           limno3 = biono3 / (k1bio(i,j) + biono3)
           if (id_fe.ne.0) then 
+            if (biopchl*biophy.gt.0.0) then
+              phy_minFeC = 0.0016 / 55.85 * biopchl/biophy +                                       &
+                           1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * limno3 +                   &
+                           1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * limno3
+            else
+              phy_minFeC = 0.0016 / 55.85 * 0.004*12 +                                             &
+                           1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * limno3 +                   &
+                           1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * limno3
+            endif
+            limfe = min(1.0, max(0.0, (phy_FeC(i,k) - phy_minFeC)/7e-6 ))
             limfe  = biofe / (0.1 + biofe)
           else
             limfe = 1.0
@@ -601,15 +612,13 @@ do n = 1, instances  !{
           ! Limitation term for light availability !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          !   1. Get chlorophyll:C ratio
-          if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 12)
-          !   2. Get initial slope of Photosynthesis-Irradiance curve
+          !   1. Get initial slope of Photosynthesis-Irradiance curve
           phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * 0.004)
-          !   3. Alter the slope to account for respiration and daylength limitation
+          !   2. Alter the slope to account for respiration and daylength limitation
           phy_pisl2= phy_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
-          !   4. Calculate light limitation
+          !   3. Calculate light limitation
           phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
-          !   5. Apply to maximum growth rate
+          !   4. Apply to maximum growth rate
           mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
 
           !if (i.eq.152) then
@@ -647,6 +656,23 @@ do n = 1, instances  !{
           endif
 
 
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          ! Calculate phytoplankton uptake of Fe (nmol Fe / m3) !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          
+          phy_Feupt = 0.0
+          !     1. Determine maximum Fe quota of phytoplankton biomass (mmol Fe / m3)
+          if (id_fe.ne.0) then 
+            if (biophy*biophyfe.gt.0.0) then 
+              phy_maxQFe = biophy * 40e-6
+              zmax = max(0.0, (1.0 - biophyfe/phy_maxQFe) / abs(1.05 - biophyfe/phy_maxQFe) )
+              phy_Feupt = biophy * mumax_phy(i,k) * 40e-6 *                                        &
+                          biofe / (biofe+0.1) * zmax *                                             &
+                          (4.0 - 4.5 * limfe / (limfe + 0.5))
+            endif
+          endif
+          
+
           !!!!!!!!!!!!!!!!!!!!
           ! Grazing function !
           !!!!!!!!!!!!!!!!!!!!
@@ -677,30 +703,31 @@ do n = 1, instances  !{
           ! Depress mortality as phytoplankton population dilutes. Assumes density-dependent transfer
           lmor_s = biophy_min / (muepsbio(i,j)*86400 + biophy)
 
+
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Collect biomass gain and loss terms !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          f11 = u_npz * biophy                                 * bioma(i,k,id_no3)    ! DIC --> PHY
+          f11 = u_npz * biophy                                 * biomask(i,k)    ! DIC --> PHY
           if (prey.gt.0.0) then
-            f21p = g_npz * biozoo * (biophy_min/prey)          * bioma(i,k,id_phy)            ! PHY --> ZOO & DET
-            f21d = g_npz * biozoo * (biodet_min/prey)          * bioma(i,k,id_det)            ! DET --> ZOO & DET
+            f21p = g_npz * biozoo * (biophy_min/prey)          * biomask(i,k)    ! PHY --> ZOO & DET
+            f21d = g_npz * biozoo * (biodet_min/prey)          * biomask(i,k)    ! DET --> ZOO & DET
           else
             f21p = 0.0 
             f21d = 0.0
           endif
-          !f22 = muepbio(i,j) * lmor_s * mort_s * biophy * fbc * bioma(i,k,id_phy)    ! PHY --> DIC
-          f22 = 0.04/86400.0 * mumax_phy(i,k) * mort_s * biophy* bioma(i,k,id_phy)    ! PHY --> DIC
-          f23 = 0.5/86400.0 * lmor_s * biophy                  * bioma(i,k,id_phy)    ! PHY --> DET
-          f31 = gam2bio(i,j) * biozoo * fbc                    * bioma(i,k,id_zoo)    ! ZOO --> DIC
-          f32 = muezbio(i,j) * biozoo*biozoo                   * bioma(i,k,id_zoo)    ! ZOO --> DET
-          f41 = muedbio(i,j) * biodet * fbc                    * bioma(i,k,id_det)    ! DET --> DIC
+          !f22 = muepbio(i,j) * lmor_s * mort_s * biophy * fbc * biomask(i,k)    ! PHY --> DIC
+          f22 = 0.04/86400.0 * mumax_phy(i,k) * mort_s * biophy* biomask(i,k)    ! PHY --> DIC
+          f23 = 0.5/86400.0 * lmor_s * biophy                  * biomask(i,k)    ! PHY --> DET
+          f31 = gam2bio(i,j) * biozoo * fbc                    * biomask(i,k)    ! ZOO --> DIC
+          f32 = muezbio(i,j) * biozoo*biozoo                   * biomask(i,k)    ! ZOO --> DET
+          f41 = muedbio(i,j) * biodet * fbc                    * biomask(i,k)    ! DET --> DIC
 
           ! Decrease the remineralisation rate beneath a certain depth
           !     ( This will be irrelevant once explicit bacteria is in )
           if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 180m
 
-          if (id_caco3.ne.0) f51 = muecaco3(i,j)*biocaco3 *bioma(i,k,id_caco3)
+          if (id_caco3.ne.0) f51 = muecaco3(i,j)* biocaco3 * biomask(i,k)
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -708,7 +735,7 @@ do n = 1, instances  !{
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
           ! oxygen equation
-          biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172./122.                    &
+          biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - biomask(i,k) * 172./122.                    &
                                                  * dtsb * (f41 + f31 + f22 - f11)
 
           ! nitrate equation
@@ -716,9 +743,13 @@ do n = 1, instances  !{
 
           if (id_fe.ne.0)                                                                          &
           biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * 2.623e-3 * (f41 + f31 + f22 - f11)
+!          biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * (f41*det_FeC(i,k) +                      &
+!                                                           f31*zoo_FeC(i,k) +                      &
+!                                                           f22*phy_FeC(i,k) - phy_Feupt)*1e3
 
           ! phytoplankton equation
           biotr(i,k,id_phy)  = biotr(i,k,id_phy) + dtsb * (f11 - f21p - f22 - f23)
+
 
           ! zooplankton equation
           biotr(i,k,id_zoo)  = biotr(i,k,id_zoo) + dtsb * (gam1bio(i,j)*(f21p+f21d) - f31 - f32)
@@ -882,7 +913,6 @@ do n = 1, instances  !{
         endif  ! k.gt.0
        enddo  ! i
 
-
 !       !!mac remineralise tracer sinking through the base of the column.
 !       do i = isc, iec 
 !         k = grid%kmt(i,j)
@@ -923,7 +953,6 @@ do n = 1, instances  !{
 !         endif ! k .gt. 0
 !       enddo  ! i
 
-
        do k =1,grid%nk  !{
         do i =isc,iec  !{
           t_prog(ind_det)%field(i,j,k,time%taum1) = t_prog(ind_det)%field(i,j,k,time%taum1) + &
@@ -931,6 +960,39 @@ do n = 1, instances  !{
               (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
         enddo  !} i
        enddo  !} k
+
+
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       ! RASF upstream sinking of Fe in detritus !
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+       if (id_detfe.gt.0) then
+       do k=2,grid%nk+1
+        do i=isc,iec
+         adv_fb(i,k) = wdetbio(i,j) * biotr(i,k-1,id_detfe)
+        enddo  ! i
+       enddo  ! k
+
+       ! Set the flux coming through the top face of surface box to zero
+       do i=isc,iec
+        adv_fb(i,1)  = 0.0
+       enddo  ! i 
+
+       ! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
+       do i = isc,iec 
+        k = grid%kmt(i,j)
+        if (k.gt.0) then 
+         biotic(n)%detfe_sed_depst(i,j) = adv_fb(i,k+1)
+        endif  ! k.gt.0
+       enddo  ! i
+
+       do k =1,grid%nk  !{
+        do i =isc,iec  !{
+          t_prog(ind_detfe)%field(i,j,k,time%taum1) = t_prog(ind_detfe)%field(i,j,k,time%taum1) + &
+              grid%tmask(i,j,k) * dtts * &
+              (-adv_fb(i,k+1) + adv_fb(i,k))/Thickness%dzt(i,j,k)
+        enddo  !} i
+       enddo  !} k
+       endif
 
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -955,7 +1017,6 @@ do n = 1, instances  !{
           biotic(n)%caco3_sed_depst(i,j) = adv_fb(i,k+1)
          endif ! k .gt. 0
         enddo ! i
-
 
 !        !!mac remineralise tracer sinking through the base of the column.
 !        do i = isc, iec 
@@ -982,7 +1043,6 @@ do n = 1, instances  !{
 !
 !          endif ! k .gt. 0
 !        enddo ! i
-
 
         do k =1,grid%nk  !{
          do i =isc,iec  !{
