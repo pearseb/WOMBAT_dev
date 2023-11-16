@@ -345,21 +345,21 @@ do n = 1, instances  !{
   ! possible tracers in model !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  ind_po4  = biotic(n)%ind_bgc(id_po4)
-  ind_no3  = biotic(n)%ind_bgc(id_no3)
-  ind_fe   = biotic(n)%ind_bgc(id_fe)
-  ind_o2   = biotic(n)%ind_bgc(id_o2)
-  ind_dic  = biotic(n)%ind_bgc(id_dic)
-  ind_alk  = biotic(n)%ind_bgc(id_alk)
-  ind_caco3= biotic(n)%ind_bgc(id_caco3)
-  ind_adic = biotic(n)%ind_bgc(id_adic)
-  ind_phy  = biotic(n)%ind_bgc(id_phy)
-  ind_zoo  = biotic(n)%ind_bgc(id_zoo)
-  ind_det  = biotic(n)%ind_bgc(id_det)
-  ind_pchl = biotic(n)%ind_bgc(id_pchl) 
-  ind_phyfe = biotic(n)%ind_bgc(id_phyfe) 
-  ind_zoofe = biotic(n)%ind_bgc(id_zoofe) 
-  ind_detfe = biotic(n)%ind_bgc(id_detfe) 
+  ind_po4  = biotic(n)%ind_bgc(id_po4)      ! mmol P / m3
+  ind_no3  = biotic(n)%ind_bgc(id_no3)      ! mmol N / m3
+  ind_fe   = biotic(n)%ind_bgc(id_fe)       ! µmol Fe / m3
+  ind_o2   = biotic(n)%ind_bgc(id_o2)       ! mmol O2 / m3
+  ind_dic  = biotic(n)%ind_bgc(id_dic)      ! mmol DIC / m3
+  ind_alk  = biotic(n)%ind_bgc(id_alk)      ! mmol Eq / m3
+  ind_caco3= biotic(n)%ind_bgc(id_caco3)    ! mmol C / m3
+  ind_adic = biotic(n)%ind_bgc(id_adic)     ! mmol DIC / m3
+  ind_phy  = biotic(n)%ind_bgc(id_phy)      ! mmol C / m3
+  ind_zoo  = biotic(n)%ind_bgc(id_zoo)      ! mmol C / m3
+  ind_det  = biotic(n)%ind_bgc(id_det)      ! mmol C / m3
+  ind_pchl = biotic(n)%ind_bgc(id_pchl)     ! mg / m3
+  ind_phyfe = biotic(n)%ind_bgc(id_phyfe)   ! mmol Fe / m3
+  ind_zoofe = biotic(n)%ind_bgc(id_zoofe)   ! mmol Fe / m3
+  ind_detfe = biotic(n)%ind_bgc(id_detfe)   ! mmol Fe / m3
 
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
