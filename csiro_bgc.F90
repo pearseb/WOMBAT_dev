@@ -286,6 +286,7 @@ integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
+integer                                 :: id_phy_Felimit = -1
 integer                                 :: id_zoo_grazpres = -1
 integer                                 :: id_phy_chl2c = -1
 integer                                 :: id_phy_Fe2C = -1
@@ -369,7 +370,7 @@ real, allocatable, dimension(:,:) :: wdet100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, phy_chl2c, zoo_grazpres,         &
-                                       phy_Fe2C, zoo_Fe2C, det_Fe2C
+                                       phy_Fe2C, zoo_Fe2C, det_Fe2C, phy_Felimit
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -547,6 +548,7 @@ allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
+allocate( phy_Felimit(isc:iec,jsc:jec,nk) )
 allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
 allocate( phy_Fe2C(isc:iec,jsc:jec,nk) )
 allocate( zoo_Fe2C(isc:iec,jsc:jec,nk) )
@@ -776,7 +778,7 @@ logical  :: used
          if (id_adic .ne. 0) &
            T_prog(ind_adic)%btf(i,j)  = T_prog(ind_dic)%btf(i,j)
          if (id_fe .ne. 0) &
-           T_prog(ind_fe)%btf(i,j)  = 2.623e-3 * T_prog(ind_dic)%btf(i,j)
+           T_prog(ind_fe)%btf(i,j)  = -1.0 * rho0 * biotic(n)%detfe_sed_remin(i,j)
          if (id_alk .ne. 0) &
            T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j) - &
              T_prog(ind_no3)%btf(i,j)
@@ -2077,6 +2079,11 @@ if (id_phy_parlimit .gt. 0) then
   used = send_data(id_phy_parlimit, phy_parlimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+! Iron limitation of phytoplankton
+if (id_phy_Felimit .gt. 0) then
+  used = send_data(id_phy_Felimit, phy_Felimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Chlorophyll:C ratio of phytoplankton
 if (id_phy_chl2c .gt. 0) then
   used = send_data(id_phy_chl2c, phy_chl2c(isc:iec,jsc:jec,:),          &
@@ -2703,6 +2710,10 @@ id_zprod_gross = register_diag_field('ocean_model','zprod_gross', &
 
 id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton light limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_phy_Felimit = register_diag_field('ocean_model','phy_Felimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_phy_chl2c = register_diag_field('ocean_model','phy_chl2c', &
