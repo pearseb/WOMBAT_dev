@@ -699,7 +699,7 @@ do n = 1, instances  !{
 
           biophy_min = MAX(0.0, biophy - 0.001)  ! Minimum Phy beneath which grazing doesn't happen
           biodet_min = MAX(0.0, biodet - 0.001)  ! Minimum Det beneath which grazing doesn't happen
-          prey = biophy_min + 0.0*biodet_min      ! replace 0.2 with preference variable
+          prey = biophy_min + 0.1*biodet_min      ! replace 0.2 with preference variable
 
           gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
 !          g_npz = gmax * epsbio(i,j) * prey*prey / ( gmax + epsbio(i,j) * prey*prey )
@@ -730,7 +730,7 @@ do n = 1, instances  !{
           f11 = u_npz * biophy                                 * biomask(i,k)    ! DIC --> PHY
           if (prey.gt.0.0) then
             f21p = g_npz * biozoo * (biophy_min/prey)          * biomask(i,k)    ! PHY --> ZOO & DET
-            f21d = g_npz * biozoo * (0.0*biodet_min/prey)      * biomask(i,k)    ! DET --> ZOO & DET
+            f21d = g_npz * biozoo * (0.1*biodet_min/prey)      * biomask(i,k)    ! DET --> ZOO & DET
           else
             f21p = 0.0 
             f21d = 0.0
@@ -738,7 +738,7 @@ do n = 1, instances  !{
           !f22 = muepbio(i,j) * lmor_s * mort_s * biophy * fbc * biomask(i,k)    ! PHY --> DIC
           f22 = 0.01 * mumax_phy(i,k) * mort_s * biophy        * biomask(i,k)    ! PHY --> DIC
           f23 = 0.1/86400.0 * biophy * biophy                  * biomask(i,k)    ! PHY --> DET
-          f31 = gam2bio(i,j)*0.2 * biozoo * fbc                    * biomask(i,k)    ! ZOO --> DIC
+          f31 = gam2bio(i,j)*0.2 * biozoo * fbc                * biomask(i,k)    ! ZOO --> DIC
           f32 = muezbio(i,j) * biozoo*biozoo                   * biomask(i,k)    ! ZOO --> DET
           f41 = muedbio(i,j) * biodet * fbc                    * biomask(i,k)    ! DET --> DIC
 
@@ -797,17 +797,17 @@ do n = 1, instances  !{
           !  endif
           !endif
 
-          if (i.eq.160) then
-            if (j.eq.80) then
-              print*, "Grid =", grid%xt(i,j), grid%yt(i,j), grid%zt(k)
-              print*, biono3, limno3 
-              print*, biofe, phy_limfe(i,k)
-              print*, biophy, biozoo, biodet
-              print*, zval, mumax_phy(i,k), mort_s, lmor_s
-              !print*, phy_FeC(i,k), zoo_FeC(i,k), det_FeC(i,k)
-              print*, f11, f21p, f22, f23
-            endif
-          endif
+          !if (i.eq.160) then
+          !  if (j.eq.80) then
+          !    print*, "Grid =", grid%xt(i,j), grid%yt(i,j), grid%zt(k)
+          !    print*, biono3, limno3 
+          !    print*, biofe, phy_limfe(i,k)
+          !    print*, biophy, biozoo, biodet
+          !    print*, zval, mumax_phy(i,k), mort_s, lmor_s
+          !    !print*, phy_FeC(i,k), zoo_FeC(i,k), det_FeC(i,k)
+          !    print*, f11, f21p, f21d, f22, f23
+          !  endif
+          !endif
 
           ! caco3 equation
           if (id_caco3.ne.0)                                                                       &

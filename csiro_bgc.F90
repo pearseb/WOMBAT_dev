@@ -224,10 +224,10 @@ logical, public :: do_csiro_bgc
 integer                                 :: package_index
 
 ! set the tracer index for the various tracers
-integer :: id_po4, id_no3, id_fe,                    & 
-           id_dic, id_alk, id_caco3, id_adic,        & 
-           id_o2,                                    &
-           id_phy, id_det, id_zoo,                   &
+integer :: id_po4, id_no3, id_fe,                                       & 
+           id_dic, id_alk, id_caco3, id_adic,                           & 
+           id_o2,                                                       &
+           id_phy, id_det, id_zoo,                                      &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
            id_pchl, id_phyfe, id_zoofe, id_detfe
 ! internal pointer to make reading the code easier
@@ -3025,6 +3025,8 @@ do n = 1, instances  !{
        do i = isc, iec  !{
         t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1)= & 
         max(0.,t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) )
+        if (nn.eq.id_no3) t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) = &
+          min(100.0,t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1))
        enddo  !} i
      enddo  !} j
    enddo  !} k
