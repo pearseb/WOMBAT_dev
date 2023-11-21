@@ -166,7 +166,7 @@ character(len=48), parameter                    :: mod_name = 'csiro_bgc_mod'
 character(len=fm_string_len), parameter         :: default_file_in = 'INPUT/csiro_bgc.res.nc'
 character(len=fm_string_len), parameter         :: default_file_out = 'RESTART/csiro_bgc.res.nc'
 
-integer, parameter                              :: ntr_bmax = 14
+integer, parameter                              :: ntr_bmax = 16
 
 !-------------------------------------------------------
 ! private types
@@ -227,9 +227,9 @@ integer                                 :: package_index
 integer :: id_po4, id_no3, id_fe,                                       & 
            id_dic, id_alk, id_caco3, id_adic,                           & 
            id_o2,                                                       &
-           id_phy, id_det, id_zoo,                                      &
+           id_phy, id_det, id_zoo, id_poc,                              &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
-           id_pchl, id_phyfe, id_zoofe, id_detfe
+           id_pchl, id_phyfe, id_zoofe, id_detfe, id_pocfe
 ! internal pointer to make reading the code easier
 integer,public :: ind_po4 = -1
 integer,public :: ind_dic = -1 
@@ -238,6 +238,7 @@ integer,public :: ind_o2 = -1
 integer,public :: ind_no3 = -1
 integer,public :: ind_phy = -1
 integer,public :: ind_det = -1
+integer,public :: ind_poc = -1
 integer,public :: ind_zoo = -1
 integer,public :: ind_caco3 = -1
 integer,public :: ind_adic = -1
@@ -246,6 +247,7 @@ integer,public :: ind_pchl = -1  ! pjb
 integer,public :: ind_phyfe = -1  ! pjb
 integer,public :: ind_zoofe = -1  ! pjb
 integer,public :: ind_detfe = -1  ! pjb
+integer,public :: ind_pocfe = -1  ! pjb
 character*6  :: qbio_model
 integer      :: bio_version    ! version of the bgc module to use
 logical      :: zero_floor     ! apply hard floor to bgc tracers 
@@ -292,6 +294,7 @@ integer                                 :: id_phy_chl2c = -1
 integer                                 :: id_phy_Fe2C = -1
 integer                                 :: id_zoo_Fe2C = -1
 integer                                 :: id_det_Fe2C = -1
+integer                                 :: id_poc_Fe2C = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -370,7 +373,7 @@ real, allocatable, dimension(:,:) :: wdet100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, phy_chl2c, zoo_grazpres,         &
-                                       phy_Fe2C, zoo_Fe2C, det_Fe2C, phy_Felimit
+                                       phy_Fe2C, zoo_Fe2C, det_Fe2C, poc_Fe2C, phy_Felimit
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -442,7 +445,7 @@ type(restart_file_type), save    :: sed_restart
 
 ! Tracer names
 
-character(5), dimension(14) :: tracer_name
+character(5), dimension(16) :: tracer_name
 
 !-----------------------------------------------------------------------
 !
@@ -553,6 +556,7 @@ allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
 allocate( phy_Fe2C(isc:iec,jsc:jec,nk) )
 allocate( zoo_Fe2C(isc:iec,jsc:jec,nk) )
 allocate( det_Fe2C(isc:iec,jsc:jec,nk) )
+allocate( poc_Fe2C(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
@@ -1648,12 +1652,14 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_phy',0)      
   call fm_util_set_value('id_zoo',0)      
   call fm_util_set_value('id_det',0)      
+  call fm_util_set_value('id_poc',0)     !pjb    
   call fm_util_set_value('id_caco3',0)      
   call fm_util_set_value('id_fe',0)      
-  call fm_util_set_value('id_pchl',0)   !pjb     
+  call fm_util_set_value('id_pchl',0)    !pjb     
   call fm_util_set_value('id_phyfe',0)   !pjb     
   call fm_util_set_value('id_zoofe',0)   !pjb     
   call fm_util_set_value('id_detfe',0)   !pjb     
+  call fm_util_set_value('id_pocfe',0)   !pjb     
 
   atmpress_file      =  fm_util_get_string ('atmpress_file', scalar = .true.)
   atmpress_name      =  fm_util_get_string ('atmpress_name', scalar = .true.)
@@ -1685,12 +1691,14 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_zoo   =   fm_util_get_integer ('id_zoo', scalar = .true.)
   id_phy   =   fm_util_get_integer ('id_phy', scalar = .true.)
   id_det   =   fm_util_get_integer ('id_det', scalar = .true.)
+  id_poc   =   fm_util_get_integer ('id_poc', scalar = .true.)
   id_caco3 =   fm_util_get_integer ('id_caco3', scalar = .true.)
   id_fe    =   fm_util_get_integer ('id_fe', scalar = .true.)
   id_pchl  =   fm_util_get_integer ('id_pchl', scalar = .true.)  ! pjb
   id_phyfe =   fm_util_get_integer ('id_phyfe', scalar = .true.)  ! pjb
   id_zoofe =   fm_util_get_integer ('id_zoofe', scalar = .true.)  ! pjb
   id_detfe =   fm_util_get_integer ('id_detfe', scalar = .true.)  ! pjb
+  id_pocfe =   fm_util_get_integer ('id_pocfe', scalar = .true.)  ! pjb
 
 
 call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check = .true.)
@@ -1698,8 +1706,9 @@ call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check =
 sum_ntr = min(1,id_po4) + min(1,id_no3) + min(1,id_fe) +                      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
           min(1,id_o2) +                                                      &
-          min(1,id_phy) + min(1,id_zoo) + min(1,id_det) +                     &
-          min(1,id_pchl) + min(1,id_phyfe) + min(1,id_zoofe) + min(1,id_detfe) ! pjb
+          min(1,id_phy) + min(1,id_zoo) + min(1,id_det) + min(1,id_poc) +     &
+          min(1,id_pchl) + min(1,id_phyfe) + min(1,id_zoofe) +                &
+          min(1,id_detfe) + min(1,id_pocfe)
 if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',sum_ntr
 
 
@@ -1718,8 +1727,9 @@ do n = 1, instances  !{
   biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_no3) + min(1,id_fe) +                      &
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
                       min(1,id_o2) +                                                      &
-                      min(1,id_phy) + min(1,id_zoo) + min(1,id_det) +                     &
-                      min(1,id_pchl) + min(1,id_phyfe) + min(1,id_zoofe) + min(1,id_detfe) ! pjb
+                      min(1,id_phy) + min(1,id_zoo) + min(1,id_det) + min(1,id_poc) +     &
+                      min(1,id_pchl) + min(1,id_phyfe) + min(1,id_zoofe) +                &
+                      min(1,id_detfe) + min(1,id_pocfe) ! pjb
   if (mpp_pe() == mpp_root_pe() ) print*,'Number bgc tracers = ',biotic(n)%ntr_bgc
       
 
@@ -1753,6 +1763,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if (nn == id_det ) then
           bgc_trc='det'
+          min_range=0.0
+          max_range=10.0
+    else if (nn == id_poc ) then
+          bgc_trc='poc'
           min_range=0.0
           max_range=10.0
     else if (nn == id_caco3 ) then
@@ -1793,6 +1807,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if (nn == id_detfe ) then  ! pjb
           bgc_trc='detfe'
+          min_range=0.0
+          max_range=10.0
+    else if (nn == id_pocfe ) then  ! pjb
+          bgc_trc='pocfe'
           min_range=0.0
           max_range=10.0
     else 
@@ -1871,10 +1889,12 @@ do n = 1, instances  !{
    ind_zoo  = biotic(n)%ind_bgc(id_zoo)
    ind_det  = biotic(n)%ind_bgc(id_det)
 
-   if(id_pchl .ne. 0 ) ind_pchl= biotic(n)%ind_bgc(id_pchl)  ! pjb
-   if(id_phyfe .ne. 0 ) ind_phyfe= biotic(n)%ind_bgc(id_phyfe)  ! pjb
-   if(id_zoofe .ne. 0 ) ind_zoofe= biotic(n)%ind_bgc(id_zoofe)  ! pjb
-   if(id_detfe .ne. 0 ) ind_detfe= biotic(n)%ind_bgc(id_detfe)  ! pjb
+   if(id_poc.ne.0) ind_poc  = biotic(n)%ind_bgc(id_poc)      ! pjb
+   if(id_pchl.ne.0) ind_pchl= biotic(n)%ind_bgc(id_pchl)     ! pjb
+   if(id_phyfe.ne.0) ind_phyfe= biotic(n)%ind_bgc(id_phyfe)  ! pjb
+   if(id_zoofe.ne.0) ind_zoofe= biotic(n)%ind_bgc(id_zoofe)  ! pjb
+   if(id_detfe.ne.0) ind_detfe= biotic(n)%ind_bgc(id_detfe)  ! pjb
+   if(id_pocfe.ne.0) ind_pocfe= biotic(n)%ind_bgc(id_pocfe)  ! pjb
 
 enddo  !} n
 
@@ -2102,6 +2122,11 @@ endif
 ! Fe:C ratio of detritus
 if (id_det_Fe2C .gt. 0) then
   used = send_data(id_det_Fe2C, det_Fe2C(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Fe:C ratio of pocritus
+if (id_poc_Fe2C .gt. 0) then
+  used = send_data(id_poc_Fe2C, poc_Fe2C(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 ! Specific zooplankton grazing pressure (µM Z per µM P per second)
@@ -2732,6 +2757,10 @@ id_det_Fe2C = register_diag_field('ocean_model','det_Fe2C', &
      grid%tracer_axes(1:3),Time%model_time, 'detritus Fe:C ratio', &
      'mol / mol ',missing_value = -1.0e+10)
 
+id_poc_Fe2C = register_diag_field('ocean_model','poc_Fe2C', &
+     grid%tracer_axes(1:3),Time%model_time, 'particulates Fe:C ratio', &
+     'mol / mol ',missing_value = -1.0e+10)
+
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
      'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
@@ -2838,6 +2867,12 @@ do n = 1, instances  !{
    name3 = 'Source term - detritus'
    name4 = 'Flux into sediment - detritus'
   endif
+  if (nn .eq. id_poc) then 
+   name1 = 'Flux into ocean - particulates'
+   name2 = 'Virtual flux into ocean - particulates'
+   name3 = 'Source term - particulates'
+   name4 = 'Flux into sediment - particulates'
+  endif
   if (nn .eq. id_o2) then 
    name1 = 'Flux into ocean - oxygen'
    name2 = 'Virtual flux into ocean - oxygen'
@@ -2906,6 +2941,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - Detritus Fe'
    name3 = 'Source term - Detritus Fe'
    name4 = 'Flux into sediment - Detritus Fe'
+  endif
+  if (nn .eq. id_pocfe) then ! pjb 
+   name1 = 'Flux into ocean - particulates Fe'
+   name2 = 'Virtual flux into ocean - particulates Fe'
+   name3 = 'Source term - particulates Fe'
+   name4 = 'Flux into sediment - particulates Fe'
   endif
   if (mpp_pe() == mpp_root_pe() )print*,'rjm bio',bgc_stf,'v'//bgc_stf
 
