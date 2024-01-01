@@ -351,11 +351,6 @@ do n = 1, instances  !{
   dia_Felimit(:,:,:) = 0.0
   phy_chl2c(:,:,:) = 0.0
   dia_chl2c(:,:,:) = 0.0
-  phy_Fe2C(:,:,:) = 0.0
-  dia_Fe2C(:,:,:) = 0.0
-  zoo_Fe2C(:,:,:) = 0.0
-  det_Fe2C(:,:,:) = 0.0
-  poc_Fe2C(:,:,:) = 0.0
   zoo_grazpres(:,:,:) = 0.0
 
 
@@ -803,7 +798,7 @@ do n = 1, instances  !{
           biodia_min = MAX(0.0, biodia - 0.001)  ! Minimum dia beneath which grazing doesn't happen
           biodet_min = MAX(0.0, biodet - 0.001)  ! Minimum Det beneath which grazing doesn't happen
           biopoc_min = MAX(0.0, biopoc - 0.001)  ! Minimum poc beneath which grazing doesn't happen
-          prey = biophy_min + 0.7*biodia_min + 0.1*biodet_min + 0.3*biopoc_min   ! replace coefficients with preference variable
+          prey = biophy_min + 0.9*biodia_min + 0.1*biodet_min + 0.1*biopoc_min   ! replace coefficients with preference variable
 
           gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
 !          g_npz = gmax * epsbio(i,j) * prey*prey / ( gmax + epsbio(i,j) * prey*prey )
@@ -837,9 +832,9 @@ do n = 1, instances  !{
           f11dia = u_ndz * biodia                              * biomask(i,k)    ! DIC --> DIA
           if (prey.gt.0.0) then
             f21phy = g_npz * biozoo * (biophy_min/prey)        * biomask(i,k)    ! PHY --> ZOO & DET & POC
-            f21dia = g_npz * biozoo * (0.7*biodia_min/prey)    * biomask(i,k)    ! DIA --> ZOO & DET & POC
+            f21dia = g_npz * biozoo * (0.9*biodia_min/prey)    * biomask(i,k)    ! DIA --> ZOO & DET & POC
             f21det = g_npz * biozoo * (0.1*biodet_min/prey)    * biomask(i,k)    ! DET --> ZOO & DET
-            f21poc = g_npz * biozoo * (0.3*biopoc_min/prey)    * biomask(i,k)    ! POC --> ZOO & POC
+            f21poc = g_npz * biozoo * (0.1*biopoc_min/prey)    * biomask(i,k)    ! POC --> ZOO & POC
           else
             f21phy = 0.0 
             f21dia = 0.0 
@@ -847,13 +842,13 @@ do n = 1, instances  !{
             f21poc = 0.0
           endif
           f22phy = 0.01 * mumax_phy(i,k) * phy_slmor * biophy  * biomask(i,k)    ! PHY --> DIC
-          f22dia = 0.01 * mumax_dia(i,k) * dia_slmor * biodia  * biomask(i,k)    ! dia --> DIC
-          f23phy = 0.1/86400.0 * biophy * biophy               * biomask(i,k)    ! PHY --> DET
-          f23dia = 0.1/86400.0 * biodia * biodia               * biomask(i,k)    ! dia --> DET
+          f22dia = 0.01 * mumax_dia(i,k) * dia_slmor * biodia  * biomask(i,k)    ! DIA --> DIC
+          f23phy = 0.1/86400.0 * biophy * biophy               * biomask(i,k)    ! PHY --> DET & POC
+          f23dia = 0.1/86400.0 * biodia * biodia               * biomask(i,k)    ! DIA --> DET & POC
           f31 = gam2bio(i,j)*0.2 * biozoo * fbc                * biomask(i,k)    ! ZOO --> DIC
-          f32 = muezbio(i,j) * biozoo*biozoo                   * biomask(i,k)    ! ZOO --> DET
+          f32 = muezbio(i,j) * biozoo*biozoo                   * biomask(i,k)    ! ZOO --> DET & POC
           f41det = muedbio(i,j) * biodet * fbc                 * biomask(i,k)    ! DET --> DIC
-          f41poc = muedbio(i,j) * biopoc * fbc                 * biomask(i,k)    ! DET --> DIC
+          f41poc = muedbio(i,j) * biopoc * fbc                 * biomask(i,k)    ! POC --> DIC
 
           ! Decrease the remineralisation rate beneath a certain depth
           !     ( This will be irrelevant once explicit bacteria is in )
@@ -910,9 +905,9 @@ do n = 1, instances  !{
                                                            (f31+f32)*zoo_FeC(i,k) )
           
           if (id_poc.ne.0) then
-            phy_det2poc = min(1.0, 1.0/(phy_xsize + epsi))
-            dia_det2poc = min(1.0, 1.0/(dia_xsize + epsi))
-            zoo_det2poc = (phy_det2poc*biophy + dia_det2poc*biodia + epsi) / (biophy + biodia + epsi)
+            phy_det2poc = min(0.95, 1.0/(phy_xsize + epsi))
+            dia_det2poc = min(0.95, 1.0/(dia_xsize + epsi))
+            zoo_det2poc = (phy_det2poc*biophy + dia_det2poc*biodia) / (biophy + biodia + epsi)
           else
             phy_det2poc = 1.0
             dia_det2poc = 1.0
@@ -1017,15 +1012,6 @@ do n = 1, instances  !{
           ! Chlorophyll : C ratio of phytoplankton
           phy_chl2c(i,j,k) = phy_chl2c(i,j,k) + phy_chlc(i,k)*dtsb/dtts
           dia_chl2c(i,j,k) = dia_chl2c(i,j,k) + dia_chlc(i,k)*dtsb/dtts
-          ! Fe : C ratio of phytoplankton
-          phy_Fe2C(i,j,k) = phy_Fe2C(i,j,k) + phy_FeC(i,k)*dtsb/dtts
-          dia_Fe2C(i,j,k) = dia_Fe2C(i,j,k) + dia_FeC(i,k)*dtsb/dtts
-          ! Fe : C ratio of zooplankton
-          zoo_Fe2C(i,j,k) = zoo_Fe2C(i,j,k) + zoo_FeC(i,k)*dtsb/dtts
-          ! Fe : C ratio of detritus 
-          det_Fe2C(i,j,k) = det_Fe2C(i,j,k) + det_FeC(i,k)*dtsb/dtts
-          ! Fe : C ratio of particulates 
-          poc_Fe2C(i,j,k) = poc_Fe2C(i,j,k) + poc_FeC(i,k)*dtsb/dtts
           
           ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
           if (biophy*biodet.gt.0.0) then
