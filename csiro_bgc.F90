@@ -166,7 +166,7 @@ character(len=48), parameter                    :: mod_name = 'csiro_bgc_mod'
 character(len=fm_string_len), parameter         :: default_file_in = 'INPUT/csiro_bgc.res.nc'
 character(len=fm_string_len), parameter         :: default_file_out = 'RESTART/csiro_bgc.res.nc'
 
-integer, parameter                              :: ntr_bmax = 19
+integer, parameter                              :: ntr_bmax = 20
 
 !-------------------------------------------------------
 ! private types
@@ -224,7 +224,7 @@ logical, public :: do_csiro_bgc
 integer                                 :: package_index
 
 ! set the tracer index for the various tracers
-integer :: id_po4, id_no3, id_fe,                                       & 
+integer :: id_po4, id_nh4, id_no3, id_fe,                               & 
            id_dic, id_alk, id_caco3, id_adic,                           & 
            id_o2,                                                       &
            id_phy, id_dia, id_det, id_zoo, id_poc,                      &
@@ -236,6 +236,7 @@ integer,public :: ind_po4 = -1
 integer,public :: ind_dic = -1 
 integer,public :: ind_alk = -1
 integer,public :: ind_o2 = -1
+integer,public :: ind_nh4 = -1
 integer,public :: ind_no3 = -1
 integer,public :: ind_phy = -1
 integer,public :: ind_dia = -1
@@ -295,7 +296,10 @@ integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
 integer                                 :: id_phy_Felimit = -1
 integer                                 :: id_dia_Felimit = -1
+integer                                 :: id_phy_Nlimit = -1
+integer                                 :: id_dia_Nlimit = -1
 integer                                 :: id_zoo_grazpres = -1
+integer                                 :: id_nitrif1 = -1
 integer                                 :: id_phy_chl2c = -1
 integer                                 :: id_dia_chl2c = -1
 integer                                 :: id_npp1 = -1
@@ -377,7 +381,8 @@ real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit,                    &
                                        phy_chl2c, dia_chl2c, zoo_grazpres,                         &
-                                       phy_Felimit, dia_Felimit
+                                       phy_Felimit, dia_Felimit, phy_Nlimit, dia_Nlimit,           &
+                                       nitrif1
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
 real, allocatable, dimension(:) :: ray
@@ -449,7 +454,7 @@ type(restart_file_type), save    :: sed_restart
 
 ! Tracer names
 
-character(5), dimension(19) :: tracer_name
+character(5), dimension(20) :: tracer_name
 
 !-----------------------------------------------------------------------
 !
@@ -558,9 +563,12 @@ allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_parlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_Felimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Felimit(isc:iec,jsc:jec,nk) )
+allocate( phy_Nlimit(isc:iec,jsc:jec,nk) )
+allocate( dia_Nlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
 allocate( dia_chl2c(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
+allocate( nitrif1(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -1651,6 +1659,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_adic',0)      
   call fm_util_set_value('id_alk',0)      
   call fm_util_set_value('id_o2',0)      
+  call fm_util_set_value('id_nh4',0)     !pjb
   call fm_util_set_value('id_no3',0)      
   call fm_util_set_value('id_phy',0)      
   call fm_util_set_value('id_dia',0)     !pjb    
@@ -1693,6 +1702,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_alk   =   fm_util_get_integer ('id_alk', scalar = .true.)
   id_po4   =   fm_util_get_integer ('id_po4', scalar = .true.)
   id_o2    =   fm_util_get_integer ('id_o2', scalar = .true.)
+  id_nh4   =   fm_util_get_integer ('id_nh4', scalar = .true.)
   id_no3   =   fm_util_get_integer ('id_no3', scalar = .true.)
   id_zoo   =   fm_util_get_integer ('id_zoo', scalar = .true.)
   id_phy   =   fm_util_get_integer ('id_phy', scalar = .true.)
@@ -1712,7 +1722,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
 
 call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check = .true.)
 
-sum_ntr = min(1,id_po4) + min(1,id_no3) + min(1,id_fe) +                      &
+sum_ntr = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
           min(1,id_o2) +                                                      &
           min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) +                     &
@@ -1735,7 +1745,7 @@ if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',s
 
 do n = 1, instances  !{
 
-  biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_no3) + min(1,id_fe) +                      &
+  biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
                       min(1,id_o2) +                                                      &
                       min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) +                     &
@@ -1762,6 +1772,10 @@ do n = 1, instances  !{
           bgc_trc='no3'
           min_range=-1e-5
           max_range=100.0
+    else if ( nn ==  id_nh4 ) then
+          bgc_trc='nh4'
+          min_range=-1e-7
+          max_range=10.0
     else if ( nn ==  id_phy ) then
           bgc_trc='phy'
           min_range=-1e-7
@@ -1900,6 +1914,7 @@ endif  !}
 do n = 1, instances  !{
 
    if(id_po4 .ne. 0 ) ind_po4 = biotic(n)%ind_bgc(id_po4)
+   if(id_nh4 .ne. 0 ) ind_nh4 = biotic(n)%ind_bgc(id_nh4)
    ind_no3  = biotic(n)%ind_bgc(id_no3)
    if(id_fe .ne. 0 ) ind_fe= biotic(n)%ind_bgc(id_fe)
    
@@ -2140,6 +2155,15 @@ if (id_dia_Felimit .gt. 0) then
   used = send_data(id_dia_Felimit, dia_Felimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+! Nitrogen limitation of phytoplankton
+if (id_phy_Nlimit .gt. 0) then
+  used = send_data(id_phy_Nlimit, phy_Nlimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_dia_Nlimit .gt. 0) then
+  used = send_data(id_dia_Nlimit, dia_Nlimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Chlorophyll:C ratio of phytoplankton
 if (id_phy_chl2c .gt. 0) then
   used = send_data(id_phy_chl2c, phy_chl2c(isc:iec,jsc:jec,:),          &
@@ -2152,6 +2176,11 @@ endif
 ! Specific zooplankton grazing pressure (µM Z per µM P per second)
 if (id_zoo_grazpres .gt. 0) then
   used = send_data(id_zoo_grazpres, zoo_grazpres(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Nitrification
+if (id_nitrif1 .gt. 0) then
+  used = send_data(id_nitrif1, nitrif1(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2769,6 +2798,14 @@ id_dia_Felimit = register_diag_field('ocean_model','dia_Felimit', &
      grid%tracer_axes(1:3),Time%model_time, 'diatom Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
+id_phy_Nlimit = register_diag_field('ocean_model','phy_Nlimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton N limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_dia_Nlimit = register_diag_field('ocean_model','dia_Nlimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'diatom N limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
 id_phy_chl2c = register_diag_field('ocean_model','phy_chl2c', &
      grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Chlorophyll:C ratio', &
      'mg Chl / mg C ',missing_value = -1.0e+10)
@@ -2780,6 +2817,10 @@ id_dia_chl2c = register_diag_field('ocean_model','dia_chl2c', &
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
      'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
+
+id_nitrif1 = register_diag_field('ocean_model','nitrif1', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nitrification rate (NH4-->NO3)', &
+     'mmolN/m^3/s',missing_value = -1.0e+10)
 
 id_caco3_sediment = register_diag_field('ocean_model','caco3_sediment', &
      grid%tracer_axes(1:2),Time%model_time, 'Accumulated CaCO3 in sediment at base of water column', &
@@ -2864,6 +2905,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - nitrate'
    name3 = 'Source term - nitrate'
    name4 = 'Flux into sediment - nitrate'
+  endif
+  if (nn .eq. id_nh4) then 
+   name1 = 'Flux into ocean - ammonium'
+   name2 = 'Virtual flux into ocean - ammonium'
+   name3 = 'Source term - ammonium'
+   name4 = 'Flux into sediment - ammonium'
   endif
   if (nn .eq. id_phy) then 
    name1 = 'Flux into ocean - phytoplankton'
