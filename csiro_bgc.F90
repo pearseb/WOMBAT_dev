@@ -207,6 +207,10 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: det_sed_depst      ! mmol(C) m-2 s-1, rate of deposition of DET in sediment.  
   real, allocatable, dimension(:,:)         :: detfe_sed_depst    ! mmol(Fe) m-2 s-1, rate of deposition of DETFe in sediment.  
   real, allocatable, dimension(:,:)         :: caco3_sed_depst    ! mmol m-2 s-1, rate of deposition of CaCO3 in sediment.  
+  real, allocatable, dimension(:,:)         :: det_sed_bury       ! mmol(C) m-2 s-1, rate of burial of DET in sediment.  
+  real, allocatable, dimension(:,:)         :: detfe_sed_bury     ! mmol(Fe) m-2 s-1, rate of burial of DETFe in sediment.  
+  real, allocatable, dimension(:,:)         :: caco3_sed_bury     ! mmol m-2 s-1, rate of burial of CaCO3 in sediment.  
+  real, allocatable, dimension(:,:)         :: det_sed_denit      ! mmol(N) m-2 s-1, rate of N loss in sediment.  
   real, allocatable, dimension(:,:)         :: sio2
   real, allocatable, dimension(:,:)         :: po4
   real, allocatable, dimension(:,:,:)       :: vstf
@@ -316,6 +320,8 @@ integer                                 :: id_pco2 = -1, id_paco2 = -1
 integer                                 :: id_co2_sat = -1, id_aco2_sat = -1
 integer                                 :: id_caco3_sed_remin, id_det_sed_remin, id_detfe_sed_remin
 integer                                 :: id_caco3_sed_depst, id_det_sed_depst, id_detfe_sed_depst
+integer                                 :: id_caco3_sed_bury, id_det_sed_bury, id_detfe_sed_bury
+integer                                 :: id_det_sed_denit
 integer                                 :: id_total_aco2_flux, id_total_co2_flux
 real, allocatable, dimension(:,:)       :: kw_co2 
 real, allocatable, dimension(:,:)       :: kw_o2
@@ -626,6 +632,10 @@ do n = 1, instances  !{
   allocate( biotic(n)%caco3_sed_depst(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sed_depst(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sed_depst(isd:ied,jsd:jed) )
+  allocate( biotic(n)%caco3_sed_bury(isd:ied,jsd:jed) )
+  allocate( biotic(n)%det_sed_bury(isd:ied,jsd:jed) )
+  allocate( biotic(n)%detfe_sed_bury(isd:ied,jsd:jed) )
+  allocate( biotic(n)%det_sed_denit(isd:ied,jsd:jed) )
   allocate( biotic(n)%sio2(isd:ied,jsd:jed) )
   allocate( biotic(n)%po4(isd:ied,jsd:jed) )
 
@@ -714,7 +724,7 @@ character(len=256), parameter   :: note_header =                                
 
 integer  :: i, j, n, k, nn
 integer  :: ind_temp
-real     :: fbc 
+real     :: fbc, orgflx, zno3, zoxy, zdep, burfac, denfac
 logical  :: used
 
 ! =====================================================================
@@ -777,26 +787,48 @@ logical  :: used
      do i = isc, iec  !{
        k = grid%kmt(i,j)
        if (k .gt. 0) then
+
+         ! Remineralisation of accumulated tracers in the sediment
          fbc= bbio(i,j)**(cbio(i,j)*T_prog(ind_temp)%field(i,j,k,time%taum1))
          biotic(n)%det_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%det_sediment(i,j)
          biotic(n)%detfe_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%detfe_sediment(i,j)
          biotic(n)%caco3_sed_remin(i,j) = muecaco3_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j)
+
+         ! Burial of incoming flux (permanent loss of tracer)
+         !  Metamodel of Dunne et al. 2007
+         orgflx = biotic(n)%det_sed_depst(i,j) * 86400.0            ! mmol C m-2 d-1
+         burfac = 0.013 + 0.53 * orgflx**2 / (7.0 + orgflx)**2
+         biotic(n)%det_sed_bury(i,j) = biotic(n)%det_sed_depst(i,j) * burfac
+         biotic(n)%detfe_sed_bury(i,j) = biotic(n)%detfe_sed_depst(i,j) * burfac
+         biotic(n)%caco3_sed_bury(i,j) = biotic(n)%caco3_sed_depst(i,j) * burfac
+
+         ! Denitrification (proportion of organic carbon that is consumed by denitrifiers)
+         !  Metamodel of Middelburg et al. 2006 
+         !  ( based on organic carbon flux, but affects organic carbon pool )
+         orgflx = biotic(n)%det_sed_depst(i,j) * 86400.0*1e3/1e4    ! umol C cm-2 d-1
+         orgflx = log10( max(1e-3, orgflx) )
+         zoxy   = log10( max(10., t_prog(ind_o2)%field(i,j,k,time%taum1)) )
+         zno3   = log10( max(1.0, t_prog(ind_no3)%field(i,j,k,time%taum1)) )
+         zdep   = log10( grid%zw(k) ) 
+         denfac = -2.2567 - 1.185 * orgflx - 0.221 * orgflx**2 - 0.3995 * zno3 * zoxy              &    
+                  + 1.25 * zno3 + 0.04721 * zoxy - 0.0996 * zdep + 0.4256 * orgflx * zoxy 
+         denfac = 10**(denfac) * 10**(zno3) / ( 10**(zno3) + 5.0 ) 
+         biotic(n)%det_sed_denit(i,j) = biotic(n)%det_sed_remin(i,j) * denfac * 94.4/122.0
          
-! remineralisation of sediments to supply nutrient fields.  
-! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
-         T_prog(ind_dic)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)
-         if (id_o2 .ne. 0) &
-           T_prog(ind_o2)%btf(i,j)  = -172./122. * T_prog(ind_dic)%btf(i,j)
-         if (id_dic .ne. 0) &
-           T_prog(ind_no3)%btf(i,j)  = 16./122. * T_prog(ind_dic)%btf(i,j) - &
-             rho0 * biotic(n)%caco3_sed_remin(i,j)
-         if (id_adic .ne. 0) &
-           T_prog(ind_adic)%btf(i,j)  = T_prog(ind_dic)%btf(i,j)
-         if (id_fe .ne. 0) &
-           T_prog(ind_fe)%btf(i,j)  = -1.0 * rho0 * biotic(n)%detfe_sed_remin(i,j)
-         if (id_alk .ne. 0) &
-           T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j) - &
-             T_prog(ind_no3)%btf(i,j)
+         ! Remineralisation of sediments to supply nutrient fields.  
+         ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
+         T_prog(ind_dic)%btf(i,j) = -rho0 * biotic(n)%det_sed_remin(i,j)                             &
+                                    -rho0 * biotic(n)%caco3_sed_remin(i,j)
+         if (id_adic.ne.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
+         if (id_nh4.ne.0)  T_prog(ind_nh4)%btf(i,j)  = -rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
+         if (id_o2.ne.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
+                                                       (1.-denfac) * 172./122.
+         if (id_fe.ne.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
+         if (id_no3.ne.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
+         if (id_alk.ne.0)  T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)  &
+                                                       + T_prog(ind_nh4)%btf(i,j)                    &
+                                                       - T_prog(ind_no3)%btf(i,j)
+
 
        endif !} k > 0
      enddo  !} i
@@ -817,6 +849,10 @@ logical  :: used
   endif
   if (id_detfe_sed_remin .gt. 0) then
      used = send_data(id_detfe_sed_remin, biotic(n)%detfe_sed_remin(isc:iec,jsc:jec),          &
+        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+  endif
+  if (id_det_sed_denit .gt. 0) then
+     used = send_data(id_det_sed_denit, biotic(n)%det_sed_denit(isc:iec,jsc:jec),          &
         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
   endif
  enddo
@@ -2362,6 +2398,20 @@ do n = 1, instances  !{
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
  endif
  
+ ! rate of permanent burial (loss) of tracers within sediment
+ if (id_caco3_sed_bury .gt. 0) then
+    used = send_data(id_caco3_sed_bury, biotic(n)%caco3_sed_bury(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ if (id_det_sed_bury .gt. 0) then
+    used = send_data(id_det_sed_bury, biotic(n)%det_sed_bury(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ if (id_detfe_sed_bury .gt. 0) then
+    used = send_data(id_detfe_sed_bury, biotic(n)%detfe_sed_bury(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ 
  
 enddo  !} n
 
@@ -2836,27 +2886,43 @@ id_detfe_sediment = register_diag_field('ocean_model','detfe_sediment', &
 
 id_caco3_sed_remin = register_diag_field('ocean_model','caco3_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of CaCO3 in accumulated sediment', &
-     'mmolC/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_det_sed_remin = register_diag_field('ocean_model','det_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of DET in accumulated sediment', &
-     'mmolC/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_detfe_sed_remin = register_diag_field('ocean_model','detfe_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of detfe in accumulated sediment', &
-     'mmolFe/m^2',missing_value = -1.0e+10)
+     'mmolFe/m^2/s',missing_value = -1.0e+10)
+
+id_det_sed_denit = register_diag_field('ocean_model','det_sed_denit', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of denitrification (NO3-->N2) in accumulated sediment', &
+     'mmolN/m^2/s',missing_value = -1.0e+10)
 
 id_caco3_sed_depst = register_diag_field('ocean_model','caco3_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of CaCO3 to sediment at base of water column', &
-     'mmolC/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_det_sed_depst = register_diag_field('ocean_model','det_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of DET to sediment at base of water column', &
-     'mmolC/m^2',missing_value = -1.0e+10)
+     'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_detfe_sed_depst = register_diag_field('ocean_model','detfe_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of detfe to sediment at base of water column', &
-     'mmolFe/m^2',missing_value = -1.0e+10)
+     'mmolFe/m^2/s',missing_value = -1.0e+10)
+
+id_caco3_sed_bury = register_diag_field('ocean_model','caco3_sed_bury', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of CaCO3 within sediment', &
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
+id_det_sed_bury = register_diag_field('ocean_model','det_sed_bury', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of DET within sediment', &
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
+id_detfe_sed_bury = register_diag_field('ocean_model','detfe_sed_bury', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of detfe within sediment', &
+     'mmolFe/m^2/s',missing_value = -1.0e+10)
 
 id_total_co2_flux = register_diag_field('ocean_model','total_co2_flux', &
      Time%model_time, 'Total surface flux of inorganic C (natural) into ocean', &
@@ -3188,15 +3254,12 @@ do n = 1, instances  !{
  do j = jsc, jec  !{
    do i = isc, iec  !{
      if (grid%kmt(i,j) .gt. 0) then
-       biotic(n)%det_sediment(i,j) = biotic(n)%det_sediment(i,j) + dtts* &
-         ( biotic(n)%det_sed_depst(i,j) -   &
-         biotic(n)%det_sed_remin(i,j) )
-       biotic(n)%detfe_sediment(i,j) = biotic(n)%detfe_sediment(i,j) + dtts* &
-         ( biotic(n)%detfe_sed_depst(i,j) -   &
-         biotic(n)%detfe_sed_remin(i,j) )
-       biotic(n)%caco3_sediment(i,j) = biotic(n)%caco3_sediment(i,j) + dtts* &
-         ( biotic(n)%caco3_sed_depst(i,j) -   &
-         biotic(n)%caco3_sed_remin(i,j) )
+       biotic(n)%det_sediment(i,j) = biotic(n)%det_sediment(i,j) + dtts*                           &
+        ( biotic(n)%det_sed_depst(i,j) - biotic(n)%det_sed_remin(i,j) - biotic(n)%det_sed_bury(i,j) )
+       biotic(n)%detfe_sediment(i,j) = biotic(n)%detfe_sediment(i,j) + dtts*                       &
+        ( biotic(n)%detfe_sed_depst(i,j) - biotic(n)%detfe_sed_remin(i,j) - biotic(n)%detfe_sed_bury(i,j) )
+       biotic(n)%caco3_sediment(i,j) = biotic(n)%caco3_sediment(i,j) + dtts*                       &
+        ( biotic(n)%caco3_sed_depst(i,j) - biotic(n)%caco3_sed_remin(i,j) - biotic(n)%caco3_sed_bury(i,j) )
      endif
    enddo  !} i
  enddo  !} j
