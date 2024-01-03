@@ -165,12 +165,15 @@ integer :: index_temp, index_salt
                                             phy_Feupt, dia_Feupt, phy_limfe, dia_limfe,            &
                                             phy_limnit, dia_limnit, nitrif
       real, dimension(isc:iec) :: par_phy_mldsum, par_dia_mldsum, par_tot_mldsum, par_z_mldsum
-      real :: z1_dep, zval
+      real :: z1_dep, zval, ztem, zsal, ztemk
       real :: phy_pisl2, dia_pisl2
-      real :: phy_chl_pisl, max_pchl, mumin_pchl, phy_minFeC, phy_maxQFe, phy_KFemin, phy_KFe,   &
+      real :: phy_chl_pisl, max_pchl, mumin_pchl, phy_minFeC, phy_maxQFe, phy_KFemin, phy_KFe,     &
               phy_Feupt_upreg, phy_Feupt_downreg, phy_xsize, phy_det2poc,                          &
-              dia_chl_pisl, max_dchl, mumin_dchl, dia_minFeC, dia_maxQFe, dia_KFemin, dia_KFe,   &
+              dia_chl_pisl, max_dchl, mumin_dchl, dia_minFeC, dia_maxQFe, dia_KFemin, dia_KFe,     &
               dia_Feupt_upreg, dia_Feupt_downreg, dia_xsize, dia_det2poc, zoo_det2poc
+      real :: ligand, fe_keq, fe_III, fe_lig, fe_col,                                              &
+              fesol1, fesol2, fesol3, fesol4, fesol5, hp, fe3sol, precip,                          &
+              partic, scaven, scadet, scapoc, feloss, fe2det, fe2poc
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -566,32 +569,17 @@ do n = 1, instances  !{
            radbio3d(i,j,k) = par_tot(i,k)
 
            ! Temperature-dependent maximum growth rate (Eppley curve)
-           zval = t_prog(index_temp)%field(i,j,k,time%tau)
-           mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
-           mumax_dia(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
+           ztem = t_prog(index_temp)%field(i,j,k,time%tau)
+           mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+           mumax_dia(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
 
          enddo  ! i
        enddo  ! k
-
-
 
       
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        ! Begin nested time-stepping for ecosystem model !
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-       ! Time stepping over dtts with ecosystem model
-       !  
-       !    (P: phytoplankton, Z: Zooplankton, N: Nitrate and D: Detritus)
-       !
-       !    dP/dt = u(Temp,Light(Chl),N,Fe) P - p_P P - g(P) P Z
-       !
-       !    dZ/dt = a g(P) P Z - d Z - p_Z Z^2
-       !
-       !    dN/dt = r D + d Z - u(Temp,Light(Chl),N,Fe) P  [ + r_d DOC ]
-       !
-       !    dD/dt = (1-s)[ (1-a) g(P) P Z + p_P P + p_Z Z^2] -r D + w_D dD/dz
-
 
        do tn = 1,ts_npzd
 
@@ -615,8 +603,9 @@ do n = 1, instances  !{
         dia_chl_lpar(:,:) = 0.0  ! light limitation of chlorodiall production by diatom
         phy_chl_prod(:,:) = 0.0  ! phytoplankton chlorophyll realised growth rate
         dia_chl_prod(:,:) = 0.0  ! diatom chlorodiall realised growth rate
-        mu_pchl(:,:) = 0.0
-        mu_dchl(:,:) = 0.0
+        mu_pchl(:,:) = 0.0       ! Growth of chlorophyll in phytoplankton
+        mu_dchl(:,:) = 0.0       ! Growth of chlorophyll in diatoms
+        nitrif(:,:) = 0.0        ! nitrification rate (NH4 --> NO3)
 
         do k=1,grid%nk
          do i=isc,iec
@@ -646,9 +635,6 @@ do n = 1, instances  !{
           if (id_detfe.ne.0) biodetfe = max(0.0,biotr(i,k,id_detfe))
           if (id_pocfe.ne.0) biopocfe = max(0.0,biotr(i,k,id_pocfe))
 
-          ! Get in situ temperature
-          zval = t_prog(index_temp)%field(i,j,k,time%tau)
-
           ! Get important ratios
           if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 12)
           if (biodia*biodchl.gt.0.0) dia_chlc(i,k) = biodchl / (biodia * 12)
@@ -659,6 +645,65 @@ do n = 1, instances  !{
             if (biodet*biodetfe.gt.0.0) det_FeC(i,k) = biodetfe/biodet
             if (biopoc*biopocfe.gt.0.0) poc_FeC(i,k) = biopocfe/biopoc
           endif
+
+          ! Temperature and salinity
+          ztem = t_prog(index_temp)%field(i,j,k,time%tau)
+          ztemk = ztem + 273.15
+          zsal = t_prog(index_salt)%field(i,j,k,time%tau)
+
+
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!
+          !! Dissolved Fe chemistry !
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!
+          !!! 
+          !!! THINGS NEEDING TO BE DONE:
+          !!!   - Variable ligand concentration rather than constant?
+          !!!   - Variable pH value (currently set to constant 7.9)
+          !!!
+
+          ! 1. Determine equilibrium fractionation of total dFe into Fe` and L-Fe
+          ligand = 0.7  ! nM ligand concentration
+          fe_keq = 10**( 17.27 - 1565.7 / ztemk )
+          fe_III = ( -( 1. + fe_keq * ligand*1e-9 - fe_keq * biofe*1e-9 )                          &
+                     + SQRT( ( 1. + fe_keq * ligand*1e-9 - fe_keq * biofe*1e-9 )**2                &
+                             + 4. * biofe*1e-9 * fe_keq) ) / ( 2. * fe_keq ) * 1e9
+          fe_lig = max(0.0, biofe - fe_III)
+
+          ! 2. Precipitation of Fe` (creation of nanoparticles)
+          zval = 19.924 * zsal / ( 1000. - 1.005 * zsal)
+          fesol1 = 10**(-13.486 - 0.1856*zval**0.5 + 0.3073*zval + 5254.0/max(ztemk, 278.15) )
+          fesol2 = 10**(2.517 - 0.8885*zval**0.5 + 0.2139*zval - 1320.0/max(ztemk, 278.15) )
+          fesol3 = 10**(0.4511 - 0.3305*zval**0.5 - 1996.0/max(ztemk, 278.15) )
+          fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
+          fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
+          hp = 10**(-7.9)
+          fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) * 1e9
+          precip = max(0.0, ( fe_III - fe3sol ) ) * 0.01/86400.0
+
+          ! 3. Scavenging of Fe` (Fe` --> DET & POC)
+          partic = (biodet + biopoc + biocaco3)
+          scaven = fe_III * (3e-5 + 0.005 * partic) / 86400.0 * 1e-3
+          scadet = scaven * (biodet+epsi) / (partic+epsi)
+          scapoc = scaven * (biopoc+epsi) / (partic+epsi)
+
+          ! 4. Increased loss of Fe in near-coastal environments
+          zval = min(1.0, 1000.0 / (grid%zt(grid%kmt(i,j))+1) )
+          feloss = 1e-4 / 86400.0 * zval * biofe
+
+          ! 5. Coagulation of colloidal Fe (nM) into small and large particles (uM)
+          fe_col = fe_lig * 0.5
+          if (grid%zw(k) .le. mld(i,j)) then
+            zval =        ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+          else
+            zval = 0.01 * ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+          endif
+          fe2det = fe_col * zval / 86400.0
+          if (grid%zw(k) .le. mld(i,j)) then
+            zval =        ( 3.53e3 * biopoc*1e-6 )
+          else
+            zval = 0.01 * ( 3.53e3 * biopoc*1e-6 )
+          endif
+          fe2poc = fe_col * zval / 86400
 
           
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -776,8 +821,8 @@ do n = 1, instances  !{
           mumin_pchl = 0.004 * u_npz * biophy * 12. 
           mumin_dchl = 0.004 * u_ndz * biodia * 12. 
           !     3. Maximum chlorophyll:C ratio based on temperature
-          max_pchl = MIN(0.033, (0.033 / (1.0 - 1.14 / 43.4 * zval)) * (1.0 - 1.14 / 43.4 * 20.0))
-          max_dchl = MIN(0.050, (0.050 / (1.0 - 1.14 / 43.4 * zval)) * (1.0 - 1.14 / 43.4 * 20.0))
+          max_pchl = MIN(0.033, (0.033 / (1.0 - 1.14 / 43.4 * ztem)) * (1.0 - 1.14 / 43.4 * 20.0))
+          max_dchl = MIN(0.050, (0.050 / (1.0 - 1.14 / 43.4 * ztem)) * (1.0 - 1.14 / 43.4 * 20.0))
           !     4. Calculate mg Chl produced per mg C Phy 
           mu_pchl(i,k) = u_npz * biophy * 12. * 86400.0 *                                          &
                          (phy_chl_prod(i,k) * min(phy_limnit(i,k), phy_limfe(i,k))) 
@@ -851,9 +896,9 @@ do n = 1, instances  !{
           biodia_min = MAX(0.0, biodia - 0.001)  ! Minimum dia beneath which grazing doesn't happen
           biodet_min = MAX(0.0, biodet - 0.001)  ! Minimum Det beneath which grazing doesn't happen
           biopoc_min = MAX(0.0, biopoc - 0.001)  ! Minimum poc beneath which grazing doesn't happen
-          prey = biophy_min + 0.9*biodia_min + 0.1*biodet_min + 0.1*biopoc_min   ! replace coefficients with preference variable
+          prey = biophy_min + biodia_min + 0.1*biodet_min + 0.1*biopoc_min   ! replace coefficients with preference variable
 
-          gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * zval)
+          gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
 !          g_npz = gmax * epsbio(i,j) * prey*prey / ( gmax + epsbio(i,j) * prey*prey )
           g_npz = gmax * 1.0/86400.0 * prey*prey / ( gmax + 1.0/86400.0 * prey*prey )
 
@@ -862,7 +907,7 @@ do n = 1, instances  !{
           ! Temperature dependency !
           !!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          fbc = bbio(i,j)**(cbio(i,j) * zval)
+          fbc = bbio(i,j)**(cbio(i,j) * ztem)
 
 
           !!!!!!!!!!!!!!!!!!!!!
@@ -885,7 +930,7 @@ do n = 1, instances  !{
           f11dia = u_ndz * biodia                              * biomask(i,k)    ! DIC --> DIA
           if (prey.gt.0.0) then
             f21phy = g_npz * biozoo * (biophy_min/prey)        * biomask(i,k)    ! PHY --> ZOO & DET & POC
-            f21dia = g_npz * biozoo * (0.9*biodia_min/prey)    * biomask(i,k)    ! DIA --> ZOO & DET & POC
+            f21dia = g_npz * biozoo * (biodia_min/prey)        * biomask(i,k)    ! DIA --> ZOO & DET & POC
             f21det = g_npz * biozoo * (0.1*biodet_min/prey)    * biomask(i,k)    ! DET --> ZOO & DET
             f21poc = g_npz * biozoo * (0.1*biopoc_min/prey)    * biomask(i,k)    ! POC --> ZOO & POC
           else
@@ -915,8 +960,8 @@ do n = 1, instances  !{
           ! Chemoautotrophic metabolisms !
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          ! Nitrification
-          nitrif(i,k) = 0.025 * bionh4
+          ! Nitrification (set at maximum of 5% of NH4 per day)
+          nitrif(i,k) = 0.05/86400.0 * bionh4
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -946,7 +991,8 @@ do n = 1, instances  !{
                                                            f31*zoo_FeC(i,k) +                      &
                                                            f22phy*phy_FeC(i,k) +                   &
                                                            f22dia*dia_FeC(i,k) -                   &
-                                                           phy_Feupt(i,k) - dia_Feupt(i,k))*1e3
+                                                           phy_Feupt(i,k) - dia_Feupt(i,k))*1e3    &
+                                             - dtsb * (precip + scaven + feloss + fe2det + fe2poc)
 
           ! phytoplankton equation
           biotr(i,k,id_phy)  = biotr(i,k,id_phy) + dtsb * (f11phy - f21phy - f22phy - f23phy)
@@ -997,7 +1043,8 @@ do n = 1, instances  !{
                                               + f23phy * phy_FeC(i,k) * phy_det2poc +              & 
                                                 f23dia * dia_FeC(i,k) * dia_det2poc +              &
                                                 f32 * zoo_FeC(i,k) * zoo_det2poc                   &
-                                                  - (f21det + f41det)*det_FeC(i,k))
+                                                  - (f21det + f41det)*det_FeC(i,k)                 &
+                                                  + (scadet + fe2det)*1e-3 )
 
           ! particulates equation
           if (id_poc.ne.0)                                                                         &
@@ -1014,7 +1061,8 @@ do n = 1, instances  !{
                                          + f23phy * phy_FeC(i,k) * (1.-phy_det2poc)                &
                                          + f23dia * dia_FeC(i,k) * (1.-dia_det2poc)                &
                                          + f32 * zoo_FeC(i,k) * (1.-zoo_det2poc)                   &
-                                             - (f21poc + f41poc)*poc_FeC(i,k))
+                                             - (f21poc + f41poc)*poc_FeC(i,k)                      &
+                                             + (scapoc + fe2poc)*1e-3 )
                      
 
           !if (i.eq.330) then
@@ -1034,7 +1082,7 @@ do n = 1, instances  !{
           !    print*, biono3, limno3 
           !    print*, biofe, phy_limfe(i,k)
           !    print*, biophy, biozoo, biodet
-          !    print*, zval, mumax_phy(i,k), mort_s, lmor_s
+          !    print*, ztem, mumax_phy(i,k), mort_s, lmor_s
           !    !print*, phy_FeC(i,k), zoo_FeC(i,k), det_FeC(i,k)
           !    print*, f11phy, f21phy, f21det, f22phy, f23phy
           !  endif
@@ -1129,9 +1177,9 @@ do n = 1, instances  !{
          t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
          if ( id_poc.ne.0)   t_prog(ind_poc)%field(i,j,k,time%taum1) = biotr(i,k,id_poc)
          if ( id_caco3.ne.0) t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
-         if ( id_fe.ne.0)                                                                          &
-         t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe) - dtts * tscav_fe(i,j) *        &
-                                                  max(0.0, (biotr(i,k,id_fe) - fe_bkgnd(i,j)) ) 
+         if ( id_fe.ne.0) t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
+!         t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe) - dtts * tscav_fe(i,j) *        &
+!                                                  max(0.0, (biotr(i,k,id_fe) - fe_bkgnd(i,j)) ) 
          if (id_dic.ne.0) &
          t_prog(ind_dic)%field(i,j,k,time%taum1) = t_prog(ind_dic)%field(i,j,k,time%taum1) +       &
                                                    122./16. * (nh4_bgc_change + no3_bgc_change)    &
@@ -1209,7 +1257,8 @@ do n = 1, instances  !{
         enddo  ! i
        enddo  ! k
 
-       ! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
+       ! Deposit tracer to sediment as tracer sinks through base of column, 
+       !    accounting for burial and denitrification
        do i = isc,iec 
         k = grid%kmt(i,j)
         if (k.gt.0) then 
