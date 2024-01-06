@@ -166,7 +166,7 @@ character(len=48), parameter                    :: mod_name = 'csiro_bgc_mod'
 character(len=fm_string_len), parameter         :: default_file_in = 'INPUT/csiro_bgc.res.nc'
 character(len=fm_string_len), parameter         :: default_file_out = 'RESTART/csiro_bgc.res.nc'
 
-integer, parameter                              :: ntr_bmax = 20
+integer, parameter                              :: ntr_bmax = 22
 
 !-------------------------------------------------------
 ! private types
@@ -231,9 +231,9 @@ integer                                 :: package_index
 integer :: id_po4, id_nh4, id_no3, id_fe,                               & 
            id_dic, id_alk, id_caco3, id_adic,                           & 
            id_o2,                                                       &
-           id_phy, id_dia, id_det, id_zoo, id_poc,                      &
+           id_phy, id_dia, id_det, id_zoo, id_poc, id_mes,              &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
-           id_pchl, id_dchl, id_phyfe, id_diafe, id_zoofe,              &
+           id_pchl, id_dchl, id_phyfe, id_diafe, id_zoofe, id_mesfe,    &
            id_detfe, id_pocfe
 ! internal pointer to make reading the code easier
 integer,public :: ind_po4 = -1
@@ -247,6 +247,7 @@ integer,public :: ind_dia = -1
 integer,public :: ind_det = -1
 integer,public :: ind_poc = -1
 integer,public :: ind_zoo = -1
+integer,public :: ind_mes = -1
 integer,public :: ind_caco3 = -1
 integer,public :: ind_adic = -1
 integer,public :: ind_fe = -1
@@ -255,6 +256,7 @@ integer,public :: ind_dchl = -1  ! pjb
 integer,public :: ind_phyfe = -1  ! pjb
 integer,public :: ind_diafe = -1  ! pjb
 integer,public :: ind_zoofe = -1  ! pjb
+integer,public :: ind_mesfe = -1  ! pjb
 integer,public :: ind_detfe = -1  ! pjb
 integer,public :: ind_pocfe = -1  ! pjb
 character*6  :: qbio_model
@@ -295,6 +297,7 @@ integer                                 :: id_radbio_int100 = -1
 integer                                 :: id_radbio1 = -1
 integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
+integer                                 :: id_wpoc100 = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
@@ -303,6 +306,7 @@ integer                                 :: id_dia_Felimit = -1
 integer                                 :: id_phy_Nlimit = -1
 integer                                 :: id_dia_Nlimit = -1
 integer                                 :: id_zoo_grazpres = -1
+integer                                 :: id_mes_grazpres = -1
 integer                                 :: id_nitrif1 = -1
 integer                                 :: id_phy_chl2c = -1
 integer                                 :: id_dia_chl2c = -1
@@ -313,6 +317,7 @@ integer                                 :: id_nsp3d = -1
 integer                                 :: id_pprod_gross = -1
 integer                                 :: id_pprod_gross_2d = -1
 integer                                 :: id_zprod_gross = -1
+integer                                 :: id_mprod_gross = -1
 integer                                 :: id_kw_o2  = -1
 integer                                 :: id_o2_sat = -1
 integer                                 :: id_sc_o2  = -1
@@ -342,6 +347,14 @@ character*128                           :: dust_file
 character*32                            :: dust_name
 integer                                 :: dust_id
 real, allocatable, dimension(:,:)       :: dust_t
+!character*128                           :: rivdin_file
+!character*32                            :: rivdin_name
+!integer                                 :: rivdin_id
+!real, allocatable, dimension(:,:)       :: rivdin_t
+!character*128                           :: hydrofe_file
+!character*32                            :: hydrofe_name
+!integer                                 :: hydrofe_id
+!real, allocatable, dimension(:,:,:)     :: hydrofe_t
 
 real, allocatable, dimension(:,:)       :: xkw_t
 real, allocatable, dimension(:,:)       :: aco2
@@ -382,15 +395,15 @@ real, allocatable, dimension(:,:) :: adic_int100,dic_int100,o2_int100,no3_int100
 real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d
-real, allocatable, dimension(:,:) :: wdet100
+real, allocatable, dimension(:,:) :: wdet100, wpoc100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit,                    &
-                                       phy_chl2c, dia_chl2c, zoo_grazpres,                         &
+                                       phy_chl2c, dia_chl2c, zoo_grazpres, mes_grazpres,           &
                                        phy_Felimit, dia_Felimit, phy_Nlimit, dia_Nlimit,           &
                                        nitrif1
 real, allocatable, dimension(:,:) :: pprod_gross_2d
-real, allocatable, dimension(:,:,:) :: zprod_gross
+real, allocatable, dimension(:,:,:) :: zprod_gross, mprod_gross
 real, allocatable, dimension(:) :: ray
 real, allocatable, dimension(:) :: dummy
 real :: dummy1
@@ -460,7 +473,7 @@ type(restart_file_type), save    :: sed_restart
 
 ! Tracer names
 
-character(5), dimension(20) :: tracer_name
+character(5), dimension(22) :: tracer_name
 
 !-----------------------------------------------------------------------
 !
@@ -505,6 +518,10 @@ allocate( patm_t(isd:ied,jsd:jed) )
 allocate( fice_t(isd:ied,jsd:jed) )
 allocate( aco2(isd:ied,jsd:jed) )
 allocate( dust_t(isd:ied,jsd:jed) )
+!allocate( rivdin_t(isd:ied,jsd:jed) )
+!allocate( rivdip_t(isd:ied,jsd:jed) )
+!allocate( rivdic_t(isd:ied,jsd:jed) )
+!allocate( hydrofe_t(isd:ied,jsd:jed,nk) )
 
 allocate( sc_o2(isc:iec,jsc:jec) )
 allocate( sc_co2(isc:iec,jsc:jec) )
@@ -558,12 +575,14 @@ allocate( npp_int100(isc:iec,jsc:jec) )
 allocate( radbio_int100(isc:iec,jsc:jec) )
 allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
+allocate( wpoc100(isc:iec,jsc:jec) )
 allocate( npp2d(isc:iec,jsc:jec) )
 allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( nsp3d(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
+allocate( mprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_parlimit(isc:iec,jsc:jec,nk) )
@@ -574,6 +593,7 @@ allocate( dia_Nlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
 allocate( dia_chl2c(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
+allocate( mes_grazpres(isc:iec,jsc:jec,nk) )
 allocate( nitrif1(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
@@ -587,6 +607,10 @@ xkw_t(:,:)         = 0.0
 patm_t(:,:)        = 0.0
 fice_t(:,:)        = 0.0
 dust_t(:,:)        = 0.0
+!rivdin_t(:,:)      = 0.0
+!rivdip_t(:,:)      = 0.0
+!rivdic_t(:,:)      = 0.0
+!hydrofe_t(:,:,:)   = 0.0
 aco2(:,:)          = 0.0 
 sc_co2(:,:)        = 0.0
 kw_co2(:,:)        = 0.0
@@ -1115,7 +1139,12 @@ else !use the sea level pressure from the forcing (convert Pa to atm)
         !THIS HAS NOT BEEN IMPLEMENTED YET. SET TO 1 ATM FOR NOW...
         patm_t(isc:iec,jsc:jec) = 1.0
 endif
+
 call time_interp_external(dust_id, time%model_time, dust_t)
+!call time_interp_external(rivdin_id, time%model_time, rivdin_t)
+!call time_interp_external(rivdip_id, time%model_time, rivdip_t)
+!call time_interp_external(rivdic_id, time%model_time, rivdic_t)
+
 if (id_adic .ne. 0) then
 ! The atmospheric co2 value for the anthropogenic+natural carbon tracer
 ! is either read from a file or a value from the access atmospheric model, 
@@ -1438,6 +1467,22 @@ if (id_fe.ne.0) then
   enddo  !} n
 endif
 
+!!pjb: Do river inputs
+!  do n = 1, instances  !{
+!    do j = jsc, jec  !{
+!      do i = isc, iec  !{
+!        if (id_nh4.ne.0) then
+!          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdin_t(i,j)* 0.5
+!          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)* 0.5
+!        else
+!          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
+!        endif
+!        t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
+!        t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
+!      enddo  !} i
+!    enddo  !} j
+!  enddo  !} n
+
 !ice-to-ocean flux of algae
 if (id_phy.ne.0) then
   do n = 1, instances  !{
@@ -1675,6 +1720,14 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('seaicefract_name', 'f_ice')
   call fm_util_set_value('dust_file', 'INPUT/dust.nc')
   call fm_util_set_value('dust_name', 'DUST')
+!  call fm_util_set_value('rivdin_file', 'INPUT/rivdin.nc')
+!  call fm_util_set_value('rivdin_name', 'rivdin')
+!  call fm_util_set_value('rivdip_file', 'INPUT/rivdip.nc')
+!  call fm_util_set_value('rivdip_name', 'rivdip')
+!  call fm_util_set_value('rivdic_file', 'INPUT/rivdic.nc')
+!  call fm_util_set_value('rivdic_name', 'rivdic')
+!  call fm_util_set_value('hydrofe_file', 'INPUT/hydrofe.nc')
+!  call fm_util_set_value('hydrofe_name', 'hydrofe')
 
 ! additional information
   call fm_util_set_value('s_npp', -.1)           ! scale factor for NP
@@ -1700,6 +1753,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_phy',0)      
   call fm_util_set_value('id_dia',0)     !pjb    
   call fm_util_set_value('id_zoo',0)      
+  call fm_util_set_value('id_mes',0)      
   call fm_util_set_value('id_det',0)      
   call fm_util_set_value('id_poc',0)     !pjb    
   call fm_util_set_value('id_caco3',0)      
@@ -1709,6 +1763,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_phyfe',0)   !pjb     
   call fm_util_set_value('id_diafe',0)   !pjb     
   call fm_util_set_value('id_zoofe',0)   !pjb     
+  call fm_util_set_value('id_mesfe',0)   !pjb     
   call fm_util_set_value('id_detfe',0)   !pjb     
   call fm_util_set_value('id_pocfe',0)   !pjb     
 
@@ -1722,6 +1777,14 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   seaicefract_name   =  fm_util_get_string ('seaicefract_name', scalar = .true.)
   dust_file   =  fm_util_get_string ('dust_file', scalar = .true.)
   dust_name   =  fm_util_get_string ('dust_name', scalar = .true.)
+!  rivdin_file   =  fm_util_get_string ('rivdin_file', scalar = .true.)
+!  rivdin_name   =  fm_util_get_string ('rivdin_name', scalar = .true.)
+ ! rivdip_file   =  fm_util_get_string ('rivdip_file', scalar = .true.)
+ ! rivdip_name   =  fm_util_get_string ('rivdip_name', scalar = .true.)
+ ! rivdic_file   =  fm_util_get_string ('rivdic_file', scalar = .true.)
+ ! rivdic_name   =  fm_util_get_string ('rivdic_name', scalar = .true.)
+!  hydrofe_file   =  fm_util_get_string ('hydrofe_file', scalar = .true.)
+!  hydrofe_name   =  fm_util_get_string ('hydrofe_name', scalar = .true.)
 
   qbio_model   =  fm_util_get_string ('qbio_model', scalar = .true.)
   s_npp   =  fm_util_get_real ('s_npp', scalar = .true.)
@@ -1741,6 +1804,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_nh4   =   fm_util_get_integer ('id_nh4', scalar = .true.)
   id_no3   =   fm_util_get_integer ('id_no3', scalar = .true.)
   id_zoo   =   fm_util_get_integer ('id_zoo', scalar = .true.)
+  id_mes   =   fm_util_get_integer ('id_mes', scalar = .true.)
   id_phy   =   fm_util_get_integer ('id_phy', scalar = .true.)
   id_dia   =   fm_util_get_integer ('id_dia', scalar = .true.)
   id_det   =   fm_util_get_integer ('id_det', scalar = .true.)
@@ -1752,6 +1816,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_phyfe =   fm_util_get_integer ('id_phyfe', scalar = .true.)  ! pjb
   id_diafe =   fm_util_get_integer ('id_diafe', scalar = .true.)  ! pjb
   id_zoofe =   fm_util_get_integer ('id_zoofe', scalar = .true.)  ! pjb
+  id_mesfe =   fm_util_get_integer ('id_mesfe', scalar = .true.)  ! pjb
   id_detfe =   fm_util_get_integer ('id_detfe', scalar = .true.)  ! pjb
   id_pocfe =   fm_util_get_integer ('id_pocfe', scalar = .true.)  ! pjb
 
@@ -1761,11 +1826,11 @@ call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check =
 sum_ntr = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
           min(1,id_o2) +                                                      &
-          min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) +                     &
+          min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
           min(1,id_det) + min(1,id_poc) +                                     &
           min(1,id_pchl) + min(1,id_dchl) +                                   &
           min(1,id_phyfe) + min(1,id_diafe) + min(1,id_zoofe) +               &
-          min(1,id_detfe) + min(1,id_pocfe)
+          min(1,id_detfe) + min(1,id_pocfe) + min(1,id_mesfe)
 if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',sum_ntr
 
 
@@ -1784,11 +1849,11 @@ do n = 1, instances  !{
   biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
                       min(1,id_o2) +                                                      &
-                      min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) +                     &
+                      min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
                       min(1,id_det) + min(1,id_poc) +                                     &
                       min(1,id_pchl) + min(1,id_dchl) +                                   &
                       min(1,id_phyfe) + min(1,id_diafe) + min(1,id_zoofe) +               &
-                      min(1,id_detfe) + min(1,id_pocfe) ! pjb
+                      min(1,id_detfe) + min(1,id_pocfe) + min(1,id_mesfe) ! pjb
   if (mpp_pe() == mpp_root_pe() ) print*,'Number bgc tracers = ',biotic(n)%ntr_bgc
       
 
@@ -1826,6 +1891,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if (nn == id_zoo ) then
           bgc_trc='zoo'
+          min_range=-1e-7
+          max_range=10.0
+    else if (nn == id_mes ) then
+          bgc_trc='mes'
           min_range=-1e-7
           max_range=10.0
     else if (nn == id_det ) then
@@ -1878,6 +1947,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if (nn == id_zoofe ) then  ! pjb
           bgc_trc='zoofe'
+          min_range=0.0
+          max_range=10.0
+    else if (nn == id_mesfe ) then  ! pjb
+          bgc_trc='mesfe'
           min_range=0.0
           max_range=10.0
     else if (nn == id_detfe ) then  ! pjb
@@ -1966,6 +2039,7 @@ do n = 1, instances  !{
    ind_det  = biotic(n)%ind_bgc(id_det)
 
    if(id_dia.ne.0) ind_dia  = biotic(n)%ind_bgc(id_dia)      ! pjb
+   if(id_mes.ne.0) ind_mes  = biotic(n)%ind_bgc(id_mes)      ! pjb
    if(id_poc.ne.0) ind_poc  = biotic(n)%ind_bgc(id_poc)      ! pjb
    if(id_pchl.ne.0) ind_pchl= biotic(n)%ind_bgc(id_pchl)     ! pjb
    if(id_dchl.ne.0) ind_dchl= biotic(n)%ind_bgc(id_dchl)     ! pjb
@@ -1974,6 +2048,7 @@ do n = 1, instances  !{
    if(id_zoofe.ne.0) ind_zoofe= biotic(n)%ind_bgc(id_zoofe)  ! pjb
    if(id_detfe.ne.0) ind_detfe= biotic(n)%ind_bgc(id_detfe)  ! pjb
    if(id_pocfe.ne.0) ind_pocfe= biotic(n)%ind_bgc(id_pocfe)  ! pjb
+   if(id_mesfe.ne.0) ind_mesfe= biotic(n)%ind_bgc(id_mesfe)  ! pjb
 
 enddo  !} n
 
@@ -2029,7 +2104,7 @@ real, intent(in)                                                :: dtts
 type(ocean_thickness_type), intent(in)                          :: Thickness
 type(ocean_density_type), intent(in)                            :: Dens
 real, intent(in), dimension(isd:ied,jsd:jed)                    :: swflx        ! short wave radiation flux (W/m^2)
-real, intent(in), dimension(isd:,jsd:,:)                        :: sw_frac_zt        ! fraction of short wave radiation flux (none)
+real, intent(in), dimension(isd:,jsd:,:)                        :: sw_frac_zt   ! fraction of short wave radiation flux (none)
 
 
 !-----------------------------------------------------------------------
@@ -2167,10 +2242,21 @@ if (id_pprod_gross_2d .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
+! dust
+if (dust_id .gt. 0) then
+  used = send_data(dust_id, dust_t(isc:iec,jsc:jec),             &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
 !det export at 100 m
 if (id_wdet100 .gt. 0) then
   wdet100(:,:) = wdetbio(isc:iec,jsc:jec)*0.1*t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+!poc export at 100 m
+if (id_wpoc100 .gt. 0) then
+  wpoc100(:,:) = wdetbio(isc:iec,jsc:jec)*t_prog(ind_poc)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  used = send_data(id_wpoc100, wpoc100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 ! Light limitation of phytoplankton
@@ -2214,6 +2300,10 @@ if (id_zoo_grazpres .gt. 0) then
   used = send_data(id_zoo_grazpres, zoo_grazpres(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_mes_grazpres .gt. 0) then
+  used = send_data(id_mes_grazpres, mes_grazpres(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Nitrification
 if (id_nitrif1 .gt. 0) then
   used = send_data(id_nitrif1, nitrif1(isc:iec,jsc:jec,:),          &
@@ -2243,9 +2333,12 @@ if (id_npp1 .gt. 0) then
 endif
 
 ! Gross and secondary production of zooplankton
-
 if (id_zprod_gross .gt. 0) then
   used = send_data(id_zprod_gross, zprod_gross(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_mprod_gross .gt. 0) then
+  used = send_data(id_mprod_gross, mprod_gross(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 if (id_nsp3d .gt. 0) then
@@ -2564,6 +2657,38 @@ if (dust_id .eq. 0) then  !{
        trim(dust_file))
 endif  !}
 
+!rivdin_id = init_external_field(rivdin_file, rivdin_name, domain = Domain%domain2d)
+!if (rivdin_id .eq. 0) then  !{
+!  call mpp_error(FATAL, trim(error_header) //                   &
+!       'Could not open rivdin file: ' // trim(rivdin_file))
+!endif  !}
+
+!rivdip_id = init_external_field(rivdip_file,          &
+!                                     rivdip_name,          &
+!                                     domain = Domain%domain2d)
+!if (rivdip_id .eq. 0) then  !{
+!  call mpp_error(FATAL, trim(error_header) //                   &
+!       'Could not open rivdip file: ' //                   &
+!       trim(rivdip_file))
+!endif  !}
+!
+!rivdic_id = init_external_field(rivdic_file,          &
+!                                     rivdic_name,          &
+!                                     domain = Domain%domain2d)
+!if (rivdic_id .eq. 0) then  !{
+!  call mpp_error(FATAL, trim(error_header) //                   &
+!       'Could not open rivdic file: ' //                   &
+!       trim(rivdic_file))
+!endif  !}
+
+!hydrofe_id = init_external_field(hydrofe_file,                   &
+!                                     hydrofe_name,               &
+!                                     domain = Domain%domain2d)
+!if (hydrofe_id .eq. 0) then  !{
+!  call mpp_error(FATAL, trim(error_header) //                   &
+!       'Could not open hydrofe file: ' //                   &
+!       trim(hydrofe_file))
+!endif  !}
 
 alphabio_id = init_external_field("INPUT/bgc_param.nc",          &
         "alphabio", domain = Domain%domain2d)
@@ -2804,6 +2929,10 @@ id_wdet100 = register_diag_field('ocean_model','wdet100', &
      grid%tracer_axes(1:2),Time%model_time, 'detritus export at 100 m (det*sinking rate)', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
 
+id_wpoc100 = register_diag_field('ocean_model','wpoc100', &
+     grid%tracer_axes(1:2),Time%model_time, 'POC export at 100 m (poc*sinking rate)', &
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
 id_npp3d = register_diag_field('ocean_model','npp3d', &
      grid%tracer_axes(1:3),Time%model_time, 'Net primary productivity', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
@@ -2830,6 +2959,10 @@ id_nsp3d = register_diag_field('ocean_model','nsp3d', &
 
 id_zprod_gross = register_diag_field('ocean_model','zprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross ZOO production', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_mprod_gross = register_diag_field('ocean_model','mprod_gross', &
+     grid%tracer_axes(1:3),Time%model_time, 'Gross MES production', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
@@ -2866,6 +2999,10 @@ id_dia_chl2c = register_diag_field('ocean_model','dia_chl2c', &
 
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
+     'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
+
+id_mes_grazpres = register_diag_field('ocean_model','mes_grazpres', &
+     grid%tracer_axes(1:3),Time%model_time, 'mesozooplankton specific grazing pressure', &
      'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
 
 id_nitrif1 = register_diag_field('ocean_model','nitrif1', &
@@ -2996,6 +3133,12 @@ do n = 1, instances  !{
    name3 = 'Source term - zooplankton'
    name4 = 'Flux into sediment - zooplankton'
   endif
+  if (nn .eq. id_mes) then 
+   name1 = 'Flux into ocean - mesozooplankton'
+   name2 = 'Virtual flux into ocean - mesozooplankton'
+   name3 = 'Source term - mesozooplankton'
+   name4 = 'Flux into sediment - mesozooplankton'
+  endif
   if (nn .eq. id_det) then 
    name1 = 'Flux into ocean - detritus'
    name2 = 'Virtual flux into ocean - detritus'
@@ -3082,6 +3225,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - Zooplankton Fe'
    name3 = 'Source term - Zooplankton Fe'
    name4 = 'Flux into sediment - Zooplankton Fe'
+  endif
+  if (nn .eq. id_mesfe) then ! pjb 
+   name1 = 'Flux into ocean - mesozooplankton Fe'
+   name2 = 'Virtual flux into ocean - mesozooplankton Fe'
+   name3 = 'Source term - mesozooplankton Fe'
+   name4 = 'Flux into sediment - mesozooplankton Fe'
   endif
   if (nn .eq. id_detfe) then ! pjb 
    name1 = 'Flux into ocean - Detritus Fe'
@@ -3236,12 +3385,18 @@ do n = 1, instances  !{
 
 ! comment out this sediment source of fe while testing equivalent code in csiro_bgc_bbc.  mac, nov12.  
 
+! call time_interp_external(hydrofe_id, time%model_time, hydrofe_t)
+
 ! rjm bottom Fe fix
 ! mac aug10, only apply this fix when the water is <= 200 m deep.  
  if (id_fe.ne.0) then
     do j = jsc, jec  !{
       do i = isc, iec  !{
          if (grid%kmt(i,j) .gt. 0) then
+            !do k = 1, grid%nk
+            !   t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= &
+            !     t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1) + hydrofe_t(i,j,k)
+            !enddo
             k = grid%kmt(i,j)
             if (grid%zw(k) .le. 200) &
                t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= 0.999
