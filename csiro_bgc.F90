@@ -347,10 +347,14 @@ character*128                           :: dust_file
 character*32                            :: dust_name
 integer                                 :: dust_id
 real, allocatable, dimension(:,:)       :: dust_t
-!character*128                           :: rivdin_file
-!character*32                            :: rivdin_name
-!integer                                 :: rivdin_id
-!real, allocatable, dimension(:,:)       :: rivdin_t
+character*128                           :: rivdin_file, rivdip_file, rivdic_file, rivdsi_file
+character*128                           :: rivdon_file, rivdop_file, rivdoc_file
+character*32                            :: rivdin_name, rivdip_name, rivdic_name, rivdsi_name
+character*32                            :: rivdon_name, rivdop_name, rivdoc_name
+integer                                 :: rivdin_id, rivdip_id, rivdic_id, rivdsi_id
+integer                                 :: rivdon_id, rivdop_id, rivdoc_id
+real, allocatable, dimension(:,:)       :: rivdin_t, rivdip_t, rivdic_t, rivdsi_t
+real, allocatable, dimension(:,:)       :: rivdon_t, rivdop_t, rivdoc_t
 !character*128                           :: hydrofe_file
 !character*32                            :: hydrofe_name
 !integer                                 :: hydrofe_id
@@ -518,9 +522,13 @@ allocate( patm_t(isd:ied,jsd:jed) )
 allocate( fice_t(isd:ied,jsd:jed) )
 allocate( aco2(isd:ied,jsd:jed) )
 allocate( dust_t(isd:ied,jsd:jed) )
-!allocate( rivdin_t(isd:ied,jsd:jed) )
-!allocate( rivdip_t(isd:ied,jsd:jed) )
-!allocate( rivdic_t(isd:ied,jsd:jed) )
+allocate( rivdin_t(isd:ied,jsd:jed) )
+allocate( rivdip_t(isd:ied,jsd:jed) )
+allocate( rivdic_t(isd:ied,jsd:jed) )
+allocate( rivdon_t(isd:ied,jsd:jed) )
+allocate( rivdop_t(isd:ied,jsd:jed) )
+allocate( rivdoc_t(isd:ied,jsd:jed) )
+allocate( rivdsi_t(isd:ied,jsd:jed) )
 !allocate( hydrofe_t(isd:ied,jsd:jed,nk) )
 
 allocate( sc_o2(isc:iec,jsc:jec) )
@@ -607,9 +615,13 @@ xkw_t(:,:)         = 0.0
 patm_t(:,:)        = 0.0
 fice_t(:,:)        = 0.0
 dust_t(:,:)        = 0.0
-!rivdin_t(:,:)      = 0.0
-!rivdip_t(:,:)      = 0.0
-!rivdic_t(:,:)      = 0.0
+rivdin_t(:,:)      = 0.0
+rivdip_t(:,:)      = 0.0
+rivdic_t(:,:)      = 0.0
+rivdon_t(:,:)      = 0.0
+rivdop_t(:,:)      = 0.0
+rivdoc_t(:,:)      = 0.0
+rivdsi_t(:,:)      = 0.0
 !hydrofe_t(:,:,:)   = 0.0
 aco2(:,:)          = 0.0 
 sc_co2(:,:)        = 0.0
@@ -1141,9 +1153,13 @@ else !use the sea level pressure from the forcing (convert Pa to atm)
 endif
 
 call time_interp_external(dust_id, time%model_time, dust_t)
-!call time_interp_external(rivdin_id, time%model_time, rivdin_t)
-!call time_interp_external(rivdip_id, time%model_time, rivdip_t)
-!call time_interp_external(rivdic_id, time%model_time, rivdic_t)
+call time_interp_external(rivdin_id, time%model_time, rivdin_t)
+call time_interp_external(rivdip_id, time%model_time, rivdip_t)
+call time_interp_external(rivdic_id, time%model_time, rivdic_t)
+call time_interp_external(rivdon_id, time%model_time, rivdon_t)
+call time_interp_external(rivdop_id, time%model_time, rivdop_t)
+call time_interp_external(rivdoc_id, time%model_time, rivdoc_t)
+call time_interp_external(rivdsi_id, time%model_time, rivdsi_t)
 
 if (id_adic .ne. 0) then
 ! The atmospheric co2 value for the anthropogenic+natural carbon tracer
@@ -1467,21 +1483,26 @@ if (id_fe.ne.0) then
   enddo  !} n
 endif
 
-!!pjb: Do river inputs
-!  do n = 1, instances  !{
-!    do j = jsc, jec  !{
-!      do i = isc, iec  !{
-!        if (id_nh4.ne.0) then
-!          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdin_t(i,j)* 0.5
-!          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)* 0.5
-!        else
-!          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
-!        endif
-!        t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
-!        t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
-!      enddo  !} i
-!    enddo  !} j
-!  enddo  !} n
+!pjb: Do river inputs
+  do n = 1, instances  !{
+    do j = jsc, jec  !{
+      do i = isc, iec  !{
+        ! River input should be in mmol/m2/s
+        !  rho0 = 1035.0  (must be needed for the flux calculation)
+        if (id_nh4.ne.0) then
+          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdon_t(i,j)
+          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
+        else
+          t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
+        endif
+        if (id_po4.ne.0) then
+          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdip_t(i,j)
+        endif
+        t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
+        t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
+      enddo  !} i
+    enddo  !} j
+  enddo  !} n
 
 !ice-to-ocean flux of algae
 if (id_phy.ne.0) then
@@ -1720,12 +1741,20 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('seaicefract_name', 'f_ice')
   call fm_util_set_value('dust_file', 'INPUT/dust.nc')
   call fm_util_set_value('dust_name', 'DUST')
-!  call fm_util_set_value('rivdin_file', 'INPUT/rivdin.nc')
-!  call fm_util_set_value('rivdin_name', 'rivdin')
-!  call fm_util_set_value('rivdip_file', 'INPUT/rivdip.nc')
-!  call fm_util_set_value('rivdip_name', 'rivdip')
-!  call fm_util_set_value('rivdic_file', 'INPUT/rivdic.nc')
-!  call fm_util_set_value('rivdic_name', 'rivdic')
+  call fm_util_set_value('rivdin_file', 'INPUT/rivdin.nc')
+  call fm_util_set_value('rivdin_name', 'rivdin')
+  call fm_util_set_value('rivdip_file', 'INPUT/rivdip.nc')
+  call fm_util_set_value('rivdip_name', 'rivdip')
+  call fm_util_set_value('rivdic_file', 'INPUT/rivdic.nc')
+  call fm_util_set_value('rivdic_name', 'rivdic')
+  call fm_util_set_value('rivdon_file', 'INPUT/rivdon.nc')
+  call fm_util_set_value('rivdon_name', 'rivdon')
+  call fm_util_set_value('rivdop_file', 'INPUT/rivdop.nc')
+  call fm_util_set_value('rivdop_name', 'rivdop')
+  call fm_util_set_value('rivdoc_file', 'INPUT/rivdoc.nc')
+  call fm_util_set_value('rivdoc_name', 'rivdoc')
+  call fm_util_set_value('rivdsi_file', 'INPUT/rivdsi.nc')
+  call fm_util_set_value('rivdsi_name', 'rivdsi')
 !  call fm_util_set_value('hydrofe_file', 'INPUT/hydrofe.nc')
 !  call fm_util_set_value('hydrofe_name', 'hydrofe')
 
@@ -1777,12 +1806,20 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   seaicefract_name   =  fm_util_get_string ('seaicefract_name', scalar = .true.)
   dust_file   =  fm_util_get_string ('dust_file', scalar = .true.)
   dust_name   =  fm_util_get_string ('dust_name', scalar = .true.)
-!  rivdin_file   =  fm_util_get_string ('rivdin_file', scalar = .true.)
-!  rivdin_name   =  fm_util_get_string ('rivdin_name', scalar = .true.)
- ! rivdip_file   =  fm_util_get_string ('rivdip_file', scalar = .true.)
- ! rivdip_name   =  fm_util_get_string ('rivdip_name', scalar = .true.)
- ! rivdic_file   =  fm_util_get_string ('rivdic_file', scalar = .true.)
- ! rivdic_name   =  fm_util_get_string ('rivdic_name', scalar = .true.)
+  rivdin_file   =  fm_util_get_string ('rivdin_file', scalar = .true.)
+  rivdin_name   =  fm_util_get_string ('rivdin_name', scalar = .true.)
+  rivdip_file   =  fm_util_get_string ('rivdip_file', scalar = .true.)
+  rivdip_name   =  fm_util_get_string ('rivdip_name', scalar = .true.)
+  rivdic_file   =  fm_util_get_string ('rivdic_file', scalar = .true.)
+  rivdic_name   =  fm_util_get_string ('rivdic_name', scalar = .true.)
+  rivdon_file   =  fm_util_get_string ('rivdon_file', scalar = .true.)
+  rivdon_name   =  fm_util_get_string ('rivdon_name', scalar = .true.)
+  rivdop_file   =  fm_util_get_string ('rivdop_file', scalar = .true.)
+  rivdop_name   =  fm_util_get_string ('rivdop_name', scalar = .true.)
+  rivdoc_file   =  fm_util_get_string ('rivdoc_file', scalar = .true.)
+  rivdoc_name   =  fm_util_get_string ('rivdoc_name', scalar = .true.)
+  rivdsi_file   =  fm_util_get_string ('rivdsi_file', scalar = .true.)
+  rivdsi_name   =  fm_util_get_string ('rivdsi_name', scalar = .true.)
 !  hydrofe_file   =  fm_util_get_string ('hydrofe_file', scalar = .true.)
 !  hydrofe_name   =  fm_util_get_string ('hydrofe_name', scalar = .true.)
 
@@ -2657,29 +2694,43 @@ if (dust_id .eq. 0) then  !{
        trim(dust_file))
 endif  !}
 
-!rivdin_id = init_external_field(rivdin_file, rivdin_name, domain = Domain%domain2d)
-!if (rivdin_id .eq. 0) then  !{
-!  call mpp_error(FATAL, trim(error_header) //                   &
-!       'Could not open rivdin file: ' // trim(rivdin_file))
-!endif  !}
 
-!rivdip_id = init_external_field(rivdip_file,          &
-!                                     rivdip_name,          &
-!                                     domain = Domain%domain2d)
-!if (rivdip_id .eq. 0) then  !{
-!  call mpp_error(FATAL, trim(error_header) //                   &
-!       'Could not open rivdip file: ' //                   &
-!       trim(rivdip_file))
-!endif  !}
-!
-!rivdic_id = init_external_field(rivdic_file,          &
-!                                     rivdic_name,          &
-!                                     domain = Domain%domain2d)
-!if (rivdic_id .eq. 0) then  !{
-!  call mpp_error(FATAL, trim(error_header) //                   &
-!       'Could not open rivdic file: ' //                   &
-!       trim(rivdic_file))
-!endif  !}
+rivdin_id = init_external_field(rivdin_file, rivdin_name, domain = Domain%domain2d)
+if (rivdin_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdin file: ' // trim(rivdin_file))
+endif  !}
+rivdip_id = init_external_field(rivdip_file, rivdip_name, domain = Domain%domain2d)
+if (rivdip_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdip file: ' // trim(rivdip_file))
+endif  !}
+rivdic_id = init_external_field(rivdic_file, rivdic_name, domain = Domain%domain2d)
+if (rivdic_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdic file: ' // trim(rivdic_file))
+endif  !}
+rivdon_id = init_external_field(rivdon_file, rivdon_name, domain = Domain%domain2d)
+if (rivdon_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdon file: ' // trim(rivdon_file))
+endif  !}
+rivdop_id = init_external_field(rivdop_file, rivdop_name, domain = Domain%domain2d)
+if (rivdop_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdop file: ' // trim(rivdop_file))
+endif  !}
+rivdoc_id = init_external_field(rivdoc_file, rivdoc_name, domain = Domain%domain2d)
+if (rivdoc_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdoc file: ' // trim(rivdoc_file))
+endif  !}
+rivdsi_id = init_external_field(rivdsi_file, rivdsi_name, domain = Domain%domain2d)
+if (rivdsi_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open rivdsi file: ' // trim(rivdsi_file))
+endif  !}
+
 
 !hydrofe_id = init_external_field(hydrofe_file,                   &
 !                                     hydrofe_name,               &

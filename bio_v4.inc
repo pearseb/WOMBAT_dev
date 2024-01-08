@@ -129,7 +129,9 @@ integer :: index_temp, index_salt
       real :: biotr(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
       real :: bionh4, biono3, biophy, biodia, biozoo, biodet, biopoc, biooxy, biocaco3, biomes
       real :: biofe, biopchl, biodchl, biophyfe, biodiafe, biozoofe, biomesfe, biodetfe, biopocfe 
-      real :: biophy_min, biodia_min, biodet_min, biopoc_min, biozoo_min
+      real :: biophy_min, biodia_min, biodet_min, biopoc_min, biozoo_min,                          &
+              zprefphy, zprefdia, zprefdet, zprefpoc,                                              &
+              mprefphy, mprefdia, mprefdet, mprefpoc, mprefzoo
       real :: phy_limnh4, phy_limno3, dia_limnh4, dia_limno3,                                      &
               phy_zlimnit, phy_zlimnh4, phy_zlimno3, dia_zlimnit, dia_zlimnh4, dia_zlimno3,        &
               phy_conc1, phy_conc2, dia_conc1, dia_conc2,                                          &
@@ -579,8 +581,10 @@ do n = 1, instances  !{
 
            ! Temperature-dependent maximum growth rate (Eppley curve)
            ztem = t_prog(index_temp)%field(i,j,k,time%tau)
-           mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
-           mumax_dia(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+           !mumax_phy(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+           !mumax_dia(i,k) = abio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+           mumax_phy(i,k) = 1.0/86400.0 * bbio(i,j)**(cbio(i,j) * ztem)
+           mumax_dia(i,k) = 1.0/86400.0 * bbio(i,j)**(cbio(i,j) * ztem)
 
          enddo  ! i
        enddo  ! k
@@ -800,8 +804,10 @@ do n = 1, instances  !{
           phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * 0.004)
           dia_pisl(i,k) = MAX(alphabio(i,j) * dia_chlc(i,k), alphabio(i,j) * 0.004)
           !   2. Alter the slope to account for respiration and daylength limitation
-          phy_pisl2= phy_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
-          dia_pisl2= dia_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * dia_lday(i,k) )
+          !phy_pisl2= phy_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * phy_lday(i,k) )
+          !dia_pisl2= dia_pisl(i,k) / ( (1.0 + muepbio(i,j)*86400.0) * dia_lday(i,k) )
+          phy_pisl2= phy_pisl(i,k) / ( (1.0 + 0.025) * phy_lday(i,k) )
+          dia_pisl2= dia_pisl(i,k) / ( (1.0 + 0.025) * dia_lday(i,k) )
           !   3. Calculate light limitation
           phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
           dia_lpar(i,k) = 1.0 - EXP(-dia_pisl2 * par_dia(i,k))
@@ -912,20 +918,33 @@ do n = 1, instances  !{
           biozoo_min = MAX(0.0, biozoo - 0.001)  ! Minimum mes beneath which grazing doesn't happen
 
           ! preferences and prey availability
-          zooprey = biophy_min + 0.5*biodia_min + 0.2*biodet_min + 0.1*biopoc_min   ! replace coefficients with preference variable
-          mesprey = 0.5*biophy_min + biodia_min + 0.1*biodet_min + 0.2*biopoc_min + biozoo_min   ! replace coefficients with preference variable
+          zprefphy = 1.00
+          zprefdia = 0.50
+          zprefdet = 0.25
+          zprefpoc = 0.10
+          mprefphy = 0.25
+          mprefdia = 1.00
+          mprefdet = 0.35
+          mprefpoc = 0.35
+          mprefzoo = 1.00
+          zooprey = zprefphy*biophy_min + zprefdia*biodia_min + zprefdia*biodet_min                &
+                    + zprefpoc*biopoc_min
+          mesprey = mprefphy*biophy_min + mprefdia*biodia_min + mprefdet*biodet_min                &
+                    + mprefpoc*biopoc_min + mprefzoo*biozoo_min
 
-          gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+!          gmax = gbio(i,j) * bbio(i,j)**(cbio(i,j) * ztem)
+          gmax = gbio(i,j) * 1.075**(cbio(i,j) * ztem)
 !          g_npz = gmax * epsbio(i,j) * zooprey*zooprey / ( gmax + epsbio(i,j) * zooprey*zooprey )
-          g_npz = gmax * 1.0/86400.0 * zooprey*zooprey / ( gmax + 1.0/86400.0 * zooprey*zooprey )
-          g_npm = gmax*0.1 * 0.1/86400.0 * mesprey*mesprey / ( gmax*0.1 + 0.1/86400.0 * mesprey*mesprey )
+          g_npz = gmax*0.50 * 1.0/86400.0 * zooprey*zooprey / ( gmax*0.50 + 1.0/86400.0 * zooprey*zooprey )
+          g_npm = gmax*0.25 * 0.5/86400.0 * mesprey*mesprey / ( gmax*0.25 + 0.5/86400.0 * mesprey*mesprey )
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!
           ! Temperature dependency !
           !!!!!!!!!!!!!!!!!!!!!!!!!!
 
-          fbc = bbio(i,j)**(cbio(i,j) * ztem)
+!          fbc = bbio(i,j)**(cbio(i,j) * ztem)
+          fbc = 1.075**(cbio(i,j) * ztem)
 
 
           !!!!!!!!!!!!!!!!!!!!!
@@ -936,8 +955,8 @@ do n = 1, instances  !{
           phy_slmor = MIN(1.0, MAX(0.0, min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
           dia_slmor = MIN(1.0, MAX(0.0, min(dia_limnit(i,k), dia_limfe(i,k))/0.3))
           ! Depress mortality as phytoplankton population dilutes. Assumes density-dependent transfer
-          phy_sqmor = biophy_min / (muepsbio(i,j)*86400 + biophy)
-          dia_sqmor = biodia_min / (muepsbio(i,j)*86400 + biodia)
+!          phy_sqmor = biophy_min / (muepsbio(i,j)*86400 + biophy)
+!          dia_sqmor = biodia_min / (muepsbio(i,j)*86400 + biodia)
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -950,15 +969,15 @@ do n = 1, instances  !{
 
           ! GRAZING
           if (zooprey.gt.0.0) then
-            z21phy = g_npz * biozoo * (biophy_min/zooprey)     * biomask(i,k)    ! PHY --> ZOO & DET & POC
-            z21dia = g_npz * biozoo * (0.5*biodia_min/zooprey) * biomask(i,k)    ! DIA --> ZOO & DET & POC
-            z21det = g_npz * biozoo * (0.2*biodet_min/zooprey) * biomask(i,k)    ! DET --> ZOO & DET
-            z21poc = g_npz * biozoo * (0.1*biopoc_min/zooprey) * biomask(i,k)    ! POC --> ZOO & POC
-            m21phy = g_npm * biomes * (0.5*biophy_min/mesprey) * biomask(i,k)    ! PHY --> MES & DET & POC
-            m21dia = g_npm * biomes * (biodia_min/mesprey)     * biomask(i,k)    ! DIA --> MES & DET & POC
-            m21det = g_npm * biomes * (0.1*biodet_min/mesprey) * biomask(i,k)    ! DET --> MES & DET
-            m21poc = g_npm * biomes * (0.2*biopoc_min/mesprey) * biomask(i,k)    ! POC --> MES & POC
-            m21zoo = g_npm * biomes * (biozoo_min/mesprey)     * biomask(i,k)    ! ZOO --> MES & POC
+            z21phy = g_npz * biozoo * (zprefphy*biophy_min/zooprey)* biomask(i,k)    ! PHY --> ZOO & DET & POC
+            z21dia = g_npz * biozoo * (zprefdia*biodia_min/zooprey)* biomask(i,k)    ! DIA --> ZOO & DET & POC
+            z21det = g_npz * biozoo * (zprefdet*biodet_min/zooprey)* biomask(i,k)    ! DET --> ZOO & DET
+            z21poc = g_npz * biozoo * (zprefpoc*biopoc_min/zooprey)* biomask(i,k)    ! POC --> ZOO & POC
+            m21phy = g_npm * biomes * (mprefphy*biophy_min/mesprey)* biomask(i,k)    ! PHY --> MES & DET & POC
+            m21dia = g_npm * biomes * (mprefdia*biodia_min/mesprey)* biomask(i,k)    ! DIA --> MES & DET & POC
+            m21det = g_npm * biomes * (mprefdet*biodet_min/mesprey)* biomask(i,k)    ! DET --> MES & DET
+            m21poc = g_npm * biomes * (mprefpoc*biopoc_min/mesprey)* biomask(i,k)    ! POC --> MES & POC
+            m21zoo = g_npm * biomes * (mprefzoo*biozoo_min/mesprey)* biomask(i,k)    ! ZOO --> MES & POC
           else
             z21phy = 0.0 
             z21dia = 0.0 
@@ -972,13 +991,13 @@ do n = 1, instances  !{
           endif
 
           ! MORTALITY
-          f22phy = 0.01 * mumax_phy(i,k) * phy_slmor * biophy  * biomask(i,k)    ! PHY --> DIC
-          f22dia = 0.01 * mumax_dia(i,k) * dia_slmor * biodia  * biomask(i,k)    ! DIA --> DIC
+          f22phy = 0.025/86400.0 * fbc * phy_slmor * biophy    * biomask(i,k)    ! PHY --> DIC
+          f22dia = 0.025/86400.0 * fbc * dia_slmor * biodia    * biomask(i,k)    ! DIA --> DIC
           f23phy = 0.1/86400.0 * biophy * biophy               * biomask(i,k)    ! PHY --> DET & POC
           f23dia = 0.1/86400.0 * biodia * biodia               * biomask(i,k)    ! DIA --> DET & POC
-          z31 = gam2bio(i,j)*0.2 * biozoo * fbc                * biomask(i,k)    ! ZOO --> DIC
-          z32 = muezbio(i,j) * biozoo*biozoo                   * biomask(i,k)    ! ZOO --> DET & POC
-          m31 = gam2bio(i,j)*0.2 * biomes * fbc                * biomask(i,k)    ! MES --> DIC
+          z31 = gam2bio(i,j)*0.5 * biozoo * fbc                    * biomask(i,k)    ! ZOO --> DIC
+          z32 = muezbio(i,j)*0.1 * biozoo*biozoo               * biomask(i,k)    ! ZOO --> DET & POC
+          m31 = gam2bio(i,j)*0.5 * biomes * fbc                    * biomask(i,k)    ! MES --> DIC
           m32 = muezbio(i,j) * biomes*biomes                   * biomask(i,k)    ! MES --> DET & POC
           f41det = muedbio(i,j) * biodet * fbc                 * biomask(i,k)    ! DET --> DIC
           f41poc = muedbio(i,j) * biopoc * fbc                 * biomask(i,k)    ! POC --> DIC
@@ -1067,11 +1086,11 @@ do n = 1, instances  !{
                                                            (m31+m32)*mes_FeC(i,k) )
           
           if (id_poc.ne.0) then
-            phy_det2poc = min(0.90, 1.0/(phy_xsize + epsi))
+            phy_det2poc = min(0.80, 1.0/(phy_xsize + epsi))
             dia_det2poc = min(0.66, 1.0/(dia_xsize + epsi))
-            zoo_det2poc = max(0.0, min( 0.8, (phy_det2poc*biophy + dia_det2poc*biodia)             &
+            zoo_det2poc = max(0.0, min( 0.7, (phy_det2poc*biophy + dia_det2poc*biodia)             &
                                              / (biophy + biodia + epsi) ))
-            mes_det2poc = max(0.0, min( 0.66,                                                      &
+            mes_det2poc = max(0.0, min( 0.5,                                                      &
                           (phy_det2poc*biophy + dia_det2poc*biodia + zoo_det2poc*biozoo)           &
                                              / (biophy + biodia + biozoo + epsi) ))
           else
@@ -1211,14 +1230,14 @@ do n = 1, instances  !{
           
           ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
           if (zooprey.gt.0.0) then
-            zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb/dtts *                                &
+            zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb *                                     &
                                  (z21phy+z21dia+z21det+z21poc) /                                   & 
-                                 (biophy+biodia*0.5+biodet*0.2+biopoc*0.1) 
+                                 (biophy+biodia+biodet+biopoc) 
           endif
           if (mesprey.gt.0.0) then
-            mes_grazpres(i,j,k) = mes_grazpres(i,j,k) + dtsb/dtts *                                &
+            mes_grazpres(i,j,k) = mes_grazpres(i,j,k) + dtsb *                                     &
                                  (m21phy+m21dia+m21det+m21poc+m21zoo) /                            & 
-                                 (biophy*0.5+biodia+biodet*0.1+biopoc*0.2+biozoo) 
+                                 (biophy+biodia+biodet+biopoc+biozoo) 
           endif
           
           ! Nitrification
