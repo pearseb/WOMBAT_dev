@@ -166,7 +166,7 @@ character(len=48), parameter                    :: mod_name = 'csiro_bgc_mod'
 character(len=fm_string_len), parameter         :: default_file_in = 'INPUT/csiro_bgc.res.nc'
 character(len=fm_string_len), parameter         :: default_file_out = 'RESTART/csiro_bgc.res.nc'
 
-integer, parameter                              :: ntr_bmax = 22
+integer, parameter                              :: ntr_bmax = 30
 
 !-------------------------------------------------------
 ! private types
@@ -200,15 +200,19 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: paco2atm
   real, allocatable, dimension(:,:)         :: det_sediment       ! mmol(C) m-2 in DET sitting at base of column as sediment. 
   real, allocatable, dimension(:,:)         :: detfe_sediment     ! mmol(Fe) m-2 in DETFe sitting at base of column as sediment. 
+  real, allocatable, dimension(:,:)         :: detsi_sediment     ! mmol(Si) m-2 in DETSi sitting at base of column as sediment. 
   real, allocatable, dimension(:,:)         :: caco3_sediment     ! mmol(CaCO3) m-2 sitting at base of column as sediment. 
   real, allocatable, dimension(:,:)         :: det_sed_remin      ! mmol(C) m-2 s-1, rate of remineralisation of DET in sediment.  
   real, allocatable, dimension(:,:)         :: detfe_sed_remin    ! mmol(Fe) m-2 s-1, rate of remineralisation of DETFe in sediment.  
+  real, allocatable, dimension(:,:)         :: detsi_sed_remin    ! mmol(si) m-2 s-1, rate of remineralisation of DETsi in sediment.  
   real, allocatable, dimension(:,:)         :: caco3_sed_remin    ! mmol m-2 s-1, rate of remineralisation of CaCO3 in sediment.  
   real, allocatable, dimension(:,:)         :: det_sed_depst      ! mmol(C) m-2 s-1, rate of deposition of DET in sediment.  
   real, allocatable, dimension(:,:)         :: detfe_sed_depst    ! mmol(Fe) m-2 s-1, rate of deposition of DETFe in sediment.  
+  real, allocatable, dimension(:,:)         :: detsi_sed_depst    ! mmol(si) m-2 s-1, rate of deposition of DETsi in sediment.  
   real, allocatable, dimension(:,:)         :: caco3_sed_depst    ! mmol m-2 s-1, rate of deposition of CaCO3 in sediment.  
   real, allocatable, dimension(:,:)         :: det_sed_bury       ! mmol(C) m-2 s-1, rate of burial of DET in sediment.  
   real, allocatable, dimension(:,:)         :: detfe_sed_bury     ! mmol(Fe) m-2 s-1, rate of burial of DETFe in sediment.  
+  real, allocatable, dimension(:,:)         :: detsi_sed_bury     ! mmol(si) m-2 s-1, rate of burial of DETsi in sediment.  
   real, allocatable, dimension(:,:)         :: caco3_sed_bury     ! mmol m-2 s-1, rate of burial of CaCO3 in sediment.  
   real, allocatable, dimension(:,:)         :: det_sed_denit      ! mmol(N) m-2 s-1, rate of N loss in sediment.  
   real, allocatable, dimension(:,:)         :: sio2
@@ -228,13 +232,13 @@ logical, public :: do_csiro_bgc
 integer                                 :: package_index
 
 ! set the tracer index for the various tracers
-integer :: id_po4, id_nh4, id_no3, id_fe,                               & 
+integer :: id_po4, id_nh4, id_no3, id_fe, id_sil,                       & 
            id_dic, id_alk, id_caco3, id_adic,                           & 
            id_o2,                                                       &
            id_phy, id_dia, id_det, id_zoo, id_poc, id_mes,              &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
-           id_pchl, id_dchl, id_phyfe, id_diafe, id_zoofe, id_mesfe,    &
-           id_detfe, id_pocfe
+           id_pchl, id_dchl, id_phyfe, id_diafe, id_diasi, id_zoofe,    &
+           id_mesfe, id_detfe, id_pocfe, id_pocsi, id_detsi_sediment
 ! internal pointer to make reading the code easier
 integer,public :: ind_po4 = -1
 integer,public :: ind_dic = -1 
@@ -242,6 +246,7 @@ integer,public :: ind_alk = -1
 integer,public :: ind_o2 = -1
 integer,public :: ind_nh4 = -1
 integer,public :: ind_no3 = -1
+integer,public :: ind_sil = -1
 integer,public :: ind_phy = -1
 integer,public :: ind_dia = -1
 integer,public :: ind_det = -1
@@ -255,10 +260,12 @@ integer,public :: ind_pchl = -1  ! pjb
 integer,public :: ind_dchl = -1  ! pjb
 integer,public :: ind_phyfe = -1  ! pjb
 integer,public :: ind_diafe = -1  ! pjb
+integer,public :: ind_diasi = -1  ! pjb
 integer,public :: ind_zoofe = -1  ! pjb
 integer,public :: ind_mesfe = -1  ! pjb
 integer,public :: ind_detfe = -1  ! pjb
 integer,public :: ind_pocfe = -1  ! pjb
+integer,public :: ind_pocsi = -1  ! pjb
 character*6  :: qbio_model
 integer      :: bio_version    ! version of the bgc module to use
 logical      :: zero_floor     ! apply hard floor to bgc tracers 
@@ -305,11 +312,13 @@ integer                                 :: id_phy_Felimit = -1
 integer                                 :: id_dia_Felimit = -1
 integer                                 :: id_phy_Nlimit = -1
 integer                                 :: id_dia_Nlimit = -1
+integer                                 :: id_phy_Plimit = -1
+integer                                 :: id_dia_Plimit = -1
+integer                                 :: id_dia_Silimit = -1
+integer                                 :: id_dia_SiCupta = -1
 integer                                 :: id_zoo_grazpres = -1
 integer                                 :: id_mes_grazpres = -1
 integer                                 :: id_nitrif1 = -1
-integer                                 :: id_phy_chl2c = -1
-integer                                 :: id_dia_chl2c = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -327,6 +336,7 @@ integer                                 :: id_caco3_sed_remin, id_det_sed_remin,
 integer                                 :: id_caco3_sed_depst, id_det_sed_depst, id_detfe_sed_depst
 integer                                 :: id_caco3_sed_bury, id_det_sed_bury, id_detfe_sed_bury
 integer                                 :: id_det_sed_denit
+integer                                 :: id_detsi_sed_depst, id_detsi_sed_bury, id_detsi_sed_remin
 integer                                 :: id_total_aco2_flux, id_total_co2_flux
 real, allocatable, dimension(:,:)       :: kw_co2 
 real, allocatable, dimension(:,:)       :: kw_o2
@@ -355,10 +365,10 @@ integer                                 :: rivdin_id, rivdip_id, rivdic_id, rivd
 integer                                 :: rivdon_id, rivdop_id, rivdoc_id
 real, allocatable, dimension(:,:)       :: rivdin_t, rivdip_t, rivdic_t, rivdsi_t
 real, allocatable, dimension(:,:)       :: rivdon_t, rivdop_t, rivdoc_t
-!character*128                           :: hydrofe_file
-!character*32                            :: hydrofe_name
-!integer                                 :: hydrofe_id
-!real, allocatable, dimension(:,:,:)     :: hydrofe_t
+character*128                           :: hydrofe_file
+character*32                            :: hydrofe_name
+integer                                 :: hydrofe_id
+real, allocatable, dimension(:,:,:)     :: hydrofe_t
 
 real, allocatable, dimension(:,:)       :: xkw_t
 real, allocatable, dimension(:,:)       :: aco2
@@ -403,9 +413,9 @@ real, allocatable, dimension(:,:) :: wdet100, wpoc100
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit,                    &
-                                       phy_chl2c, dia_chl2c, zoo_grazpres, mes_grazpres,           &
+                                       zoo_grazpres, mes_grazpres,                                 &
                                        phy_Felimit, dia_Felimit, phy_Nlimit, dia_Nlimit,           &
-                                       nitrif1
+                                       phy_Plimit, dia_Plimit, dia_Silimit, dia_SiCupta,nitrif1
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross, mprod_gross
 real, allocatable, dimension(:) :: ray
@@ -471,13 +481,13 @@ real, allocatable, dimension(:,:)       :: f_inorg
 
 
 ! for extra restart file(s)
-integer                          :: id_restart(3)=0
+integer                          :: id_restart(4)=0
 type(restart_file_type), save    :: sed_restart
 
 
 ! Tracer names
 
-character(5), dimension(22) :: tracer_name
+character(5), dimension(30) :: tracer_name
 
 !-----------------------------------------------------------------------
 !
@@ -529,7 +539,7 @@ allocate( rivdon_t(isd:ied,jsd:jed) )
 allocate( rivdop_t(isd:ied,jsd:jed) )
 allocate( rivdoc_t(isd:ied,jsd:jed) )
 allocate( rivdsi_t(isd:ied,jsd:jed) )
-!allocate( hydrofe_t(isd:ied,jsd:jed,nk) )
+allocate( hydrofe_t(isd:ied,jsd:jed,nk) )
 
 allocate( sc_o2(isc:iec,jsc:jec) )
 allocate( sc_co2(isc:iec,jsc:jec) )
@@ -598,8 +608,10 @@ allocate( phy_Felimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Felimit(isc:iec,jsc:jec,nk) )
 allocate( phy_Nlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Nlimit(isc:iec,jsc:jec,nk) )
-allocate( phy_chl2c(isc:iec,jsc:jec,nk) )
-allocate( dia_chl2c(isc:iec,jsc:jec,nk) )
+allocate( phy_Plimit(isc:iec,jsc:jec,nk) )
+allocate( dia_Plimit(isc:iec,jsc:jec,nk) )
+allocate( dia_Silimit(isc:iec,jsc:jec,nk) )
+allocate( dia_SiCupta(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
 allocate( mes_grazpres(isc:iec,jsc:jec,nk) )
 allocate( nitrif1(isc:iec,jsc:jec,nk) )
@@ -622,7 +634,7 @@ rivdon_t(:,:)      = 0.0
 rivdop_t(:,:)      = 0.0
 rivdoc_t(:,:)      = 0.0
 rivdsi_t(:,:)      = 0.0
-!hydrofe_t(:,:,:)   = 0.0
+hydrofe_t(:,:,:)   = 0.0
 aco2(:,:)          = 0.0 
 sc_co2(:,:)        = 0.0
 kw_co2(:,:)        = 0.0
@@ -662,15 +674,19 @@ do n = 1, instances  !{
   allocate( biotic(n)%caco3_sediment(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sediment(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sediment(isd:ied,jsd:jed) )
+  allocate( biotic(n)%detsi_sediment(isd:ied,jsd:jed) )
   allocate( biotic(n)%caco3_sed_remin(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sed_remin(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sed_remin(isd:ied,jsd:jed) )
+  allocate( biotic(n)%detsi_sed_remin(isd:ied,jsd:jed) )
   allocate( biotic(n)%caco3_sed_depst(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sed_depst(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sed_depst(isd:ied,jsd:jed) )
+  allocate( biotic(n)%detsi_sed_depst(isd:ied,jsd:jed) )
   allocate( biotic(n)%caco3_sed_bury(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sed_bury(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sed_bury(isd:ied,jsd:jed) )
+  allocate( biotic(n)%detsi_sed_bury(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sed_denit(isd:ied,jsd:jed) )
   allocate( biotic(n)%sio2(isd:ied,jsd:jed) )
   allocate( biotic(n)%po4(isd:ied,jsd:jed) )
@@ -721,6 +737,7 @@ do n = 1, instances  !{
   biotic(n)%caco3_sediment(:,:) = 0.0
   biotic(n)%det_sediment(:,:) = 0.0
   biotic(n)%detfe_sediment(:,:) = 0.0
+  biotic(n)%detsi_sediment(:,:) = 0.0
 enddo  !} n
 
 return
@@ -828,6 +845,7 @@ logical  :: used
          fbc= bbio(i,j)**(cbio(i,j)*T_prog(ind_temp)%field(i,j,k,time%taum1))
          biotic(n)%det_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%det_sediment(i,j)
          biotic(n)%detfe_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%detfe_sediment(i,j)
+         biotic(n)%detsi_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%detsi_sediment(i,j)
          biotic(n)%caco3_sed_remin(i,j) = muecaco3_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j)
 
          ! Burial of incoming flux (permanent loss of tracer)
@@ -836,6 +854,7 @@ logical  :: used
          burfac = 0.013 + 0.53 * orgflx**2 / (7.0 + orgflx)**2
          biotic(n)%det_sed_bury(i,j) = biotic(n)%det_sed_depst(i,j) * burfac
          biotic(n)%detfe_sed_bury(i,j) = biotic(n)%detfe_sed_depst(i,j) * burfac
+         biotic(n)%detsi_sed_bury(i,j) = biotic(n)%detsi_sed_depst(i,j) * burfac
          biotic(n)%caco3_sed_bury(i,j) = biotic(n)%caco3_sed_depst(i,j) * burfac
 
          ! Denitrification (proportion of organic carbon that is consumed by denitrifiers)
@@ -856,10 +875,12 @@ logical  :: used
          T_prog(ind_dic)%btf(i,j) = -rho0 * biotic(n)%det_sed_remin(i,j)                             &
                                     -rho0 * biotic(n)%caco3_sed_remin(i,j)
          if (id_adic.ne.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
+         if (id_po4.ne.0)  T_prog(ind_po4)%btf(i,j)  = -rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
          if (id_nh4.ne.0)  T_prog(ind_nh4)%btf(i,j)  = -rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
          if (id_o2.ne.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
                                                        (1.-denfac) * 172./122.
          if (id_fe.ne.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
+         if (id_sil.ne.0)  T_prog(ind_sil)%btf(i,j)  = -rho0 * biotic(n)%detsi_sed_remin(i,j)
          if (id_no3.ne.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
          if (id_alk.ne.0)  T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)  &
                                                        + T_prog(ind_nh4)%btf(i,j)                    &
@@ -885,6 +906,10 @@ logical  :: used
   endif
   if (id_detfe_sed_remin .gt. 0) then
      used = send_data(id_detfe_sed_remin, biotic(n)%detfe_sed_remin(isc:iec,jsc:jec),          &
+        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+  endif
+  if (id_detsi_sed_remin .gt. 0) then
+     used = send_data(id_detsi_sed_remin, biotic(n)%detsi_sed_remin(isc:iec,jsc:jec),          &
         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
   endif
   if (id_det_sed_denit .gt. 0) then
@@ -1020,6 +1045,7 @@ do n = 1, instances  !{
   call reset_field_pointer(sed_restart, id_restart(1), biotic(n)%caco3_sediment(:,:))
   call reset_field_pointer(sed_restart, id_restart(2), biotic(n)%det_sediment(:,:))
   call reset_field_pointer(sed_restart, id_restart(3), biotic(n)%detfe_sediment(:,:))
+  call reset_field_pointer(sed_restart, id_restart(4), biotic(n)%detsi_sediment(:,:))
 
   call save_restart(sed_restart)
 
@@ -1496,7 +1522,10 @@ endif
           t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
         endif
         if (id_po4.ne.0) then
-          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdip_t(i,j)
+          t_prog(ind_po4)%stf(i,j) =  rho0 * rivdip_t(i,j)
+        endif
+        if (id_sil.ne.0) then
+          t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
         endif
         t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
         t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
@@ -1755,8 +1784,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('rivdoc_name', 'rivdoc')
   call fm_util_set_value('rivdsi_file', 'INPUT/rivdsi.nc')
   call fm_util_set_value('rivdsi_name', 'rivdsi')
-!  call fm_util_set_value('hydrofe_file', 'INPUT/hydrofe.nc')
-!  call fm_util_set_value('hydrofe_name', 'hydrofe')
+  call fm_util_set_value('hydrofe_file', 'INPUT/hydrofe.nc')
+  call fm_util_set_value('hydrofe_name', 'hydrofe')
 
 ! additional information
   call fm_util_set_value('s_npp', -.1)           ! scale factor for NP
@@ -1779,6 +1808,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_o2',0)      
   call fm_util_set_value('id_nh4',0)     !pjb
   call fm_util_set_value('id_no3',0)      
+  call fm_util_set_value('id_sil',0)      
   call fm_util_set_value('id_phy',0)      
   call fm_util_set_value('id_dia',0)     !pjb    
   call fm_util_set_value('id_zoo',0)      
@@ -1791,10 +1821,12 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_dchl',0)    !pjb     
   call fm_util_set_value('id_phyfe',0)   !pjb     
   call fm_util_set_value('id_diafe',0)   !pjb     
+  call fm_util_set_value('id_diasi',0)   !pjb     
   call fm_util_set_value('id_zoofe',0)   !pjb     
   call fm_util_set_value('id_mesfe',0)   !pjb     
   call fm_util_set_value('id_detfe',0)   !pjb     
   call fm_util_set_value('id_pocfe',0)   !pjb     
+  call fm_util_set_value('id_pocsi',0)   !pjb     
 
   atmpress_file      =  fm_util_get_string ('atmpress_file', scalar = .true.)
   atmpress_name      =  fm_util_get_string ('atmpress_name', scalar = .true.)
@@ -1820,8 +1852,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   rivdoc_name   =  fm_util_get_string ('rivdoc_name', scalar = .true.)
   rivdsi_file   =  fm_util_get_string ('rivdsi_file', scalar = .true.)
   rivdsi_name   =  fm_util_get_string ('rivdsi_name', scalar = .true.)
-!  hydrofe_file   =  fm_util_get_string ('hydrofe_file', scalar = .true.)
-!  hydrofe_name   =  fm_util_get_string ('hydrofe_name', scalar = .true.)
+  hydrofe_file  =  fm_util_get_string ('hydrofe_file', scalar = .true.)
+  hydrofe_name  =  fm_util_get_string ('hydrofe_name', scalar = .true.)
 
   qbio_model   =  fm_util_get_string ('qbio_model', scalar = .true.)
   s_npp   =  fm_util_get_real ('s_npp', scalar = .true.)
@@ -1840,6 +1872,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_o2    =   fm_util_get_integer ('id_o2', scalar = .true.)
   id_nh4   =   fm_util_get_integer ('id_nh4', scalar = .true.)
   id_no3   =   fm_util_get_integer ('id_no3', scalar = .true.)
+  id_sil   =   fm_util_get_integer ('id_sil', scalar = .true.)
   id_zoo   =   fm_util_get_integer ('id_zoo', scalar = .true.)
   id_mes   =   fm_util_get_integer ('id_mes', scalar = .true.)
   id_phy   =   fm_util_get_integer ('id_phy', scalar = .true.)
@@ -1852,22 +1885,25 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_dchl  =   fm_util_get_integer ('id_dchl', scalar = .true.)  ! pjb
   id_phyfe =   fm_util_get_integer ('id_phyfe', scalar = .true.)  ! pjb
   id_diafe =   fm_util_get_integer ('id_diafe', scalar = .true.)  ! pjb
+  id_diasi =   fm_util_get_integer ('id_diasi', scalar = .true.)  ! pjb
   id_zoofe =   fm_util_get_integer ('id_zoofe', scalar = .true.)  ! pjb
   id_mesfe =   fm_util_get_integer ('id_mesfe', scalar = .true.)  ! pjb
   id_detfe =   fm_util_get_integer ('id_detfe', scalar = .true.)  ! pjb
   id_pocfe =   fm_util_get_integer ('id_pocfe', scalar = .true.)  ! pjb
+  id_pocsi =   fm_util_get_integer ('id_pocsi', scalar = .true.)  ! pjb
 
 
 call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check = .true.)
 
 sum_ntr = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
-          min(1,id_o2) +                                                      &
+          min(1,id_o2) + min(1,id_sil) +                                      &
           min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
           min(1,id_det) + min(1,id_poc) +                                     &
           min(1,id_pchl) + min(1,id_dchl) +                                   &
-          min(1,id_phyfe) + min(1,id_diafe) + min(1,id_zoofe) +               &
-          min(1,id_detfe) + min(1,id_pocfe) + min(1,id_mesfe)
+          min(1,id_phyfe) + min(1,id_diafe) + min(1,id_diasi) +               &
+          min(1,id_zoofe) + min(1,id_detfe) + min(1,id_pocfe) +               &
+          min(1,id_mesfe) + min(1,id_pocsi)
 if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',sum_ntr
 
 
@@ -1885,12 +1921,13 @@ do n = 1, instances  !{
 
   biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
-                      min(1,id_o2) +                                                      &
+                      min(1,id_o2) + min(1,id_sil) +                                      &
                       min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
                       min(1,id_det) + min(1,id_poc) +                                     &
                       min(1,id_pchl) + min(1,id_dchl) +                                   &
                       min(1,id_phyfe) + min(1,id_diafe) + min(1,id_zoofe) +               &
-                      min(1,id_detfe) + min(1,id_pocfe) + min(1,id_mesfe) ! pjb
+                      min(1,id_diasi) + min(1,id_detfe) + min(1,id_pocfe) +               &
+                      min(1,id_mesfe) + min(1,id_pocsi)
   if (mpp_pe() == mpp_root_pe() ) print*,'Number bgc tracers = ',biotic(n)%ntr_bgc
       
 
@@ -1914,6 +1951,10 @@ do n = 1, instances  !{
           bgc_trc='nh4'
           min_range=-1e-7
           max_range=10.0
+    else if ( nn ==  id_sil ) then
+          bgc_trc='sil'
+          min_range=-1e-7
+          max_range=200.0
     else if ( nn ==  id_phy ) then
           bgc_trc='phy'
           min_range=-1e-7
@@ -1982,6 +2023,10 @@ do n = 1, instances  !{
           bgc_trc='diafe'
           min_range=0.0
           max_range=10.0
+    else if (nn == id_diasi ) then  ! pjb
+          bgc_trc='diasi'
+          min_range=0.0
+          max_range=10.0
     else if (nn == id_zoofe ) then  ! pjb
           bgc_trc='zoofe'
           min_range=0.0
@@ -1996,6 +2041,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if (nn == id_pocfe ) then  ! pjb
           bgc_trc='pocfe'
+          min_range=0.0
+          max_range=10.0
+    else if (nn == id_pocsi ) then  ! pjb
+          bgc_trc='pocsi'
           min_range=0.0
           max_range=10.0
     else 
@@ -2061,6 +2110,7 @@ do n = 1, instances  !{
 
    if(id_po4 .ne. 0 ) ind_po4 = biotic(n)%ind_bgc(id_po4)
    if(id_nh4 .ne. 0 ) ind_nh4 = biotic(n)%ind_bgc(id_nh4)
+   if(id_sil .ne. 0 ) ind_sil = biotic(n)%ind_bgc(id_sil)
    ind_no3  = biotic(n)%ind_bgc(id_no3)
    if(id_fe .ne. 0 ) ind_fe= biotic(n)%ind_bgc(id_fe)
    
@@ -2082,9 +2132,11 @@ do n = 1, instances  !{
    if(id_dchl.ne.0) ind_dchl= biotic(n)%ind_bgc(id_dchl)     ! pjb
    if(id_phyfe.ne.0) ind_phyfe= biotic(n)%ind_bgc(id_phyfe)  ! pjb
    if(id_diafe.ne.0) ind_diafe= biotic(n)%ind_bgc(id_diafe)  ! pjb
+   if(id_diasi.ne.0) ind_diasi= biotic(n)%ind_bgc(id_diasi)  ! pjb
    if(id_zoofe.ne.0) ind_zoofe= biotic(n)%ind_bgc(id_zoofe)  ! pjb
    if(id_detfe.ne.0) ind_detfe= biotic(n)%ind_bgc(id_detfe)  ! pjb
    if(id_pocfe.ne.0) ind_pocfe= biotic(n)%ind_bgc(id_pocfe)  ! pjb
+   if(id_pocsi.ne.0) ind_pocsi= biotic(n)%ind_bgc(id_pocsi)  ! pjb
    if(id_mesfe.ne.0) ind_mesfe= biotic(n)%ind_bgc(id_mesfe)  ! pjb
 
 enddo  !} n
@@ -2323,13 +2375,22 @@ if (id_dia_Nlimit .gt. 0) then
   used = send_data(id_dia_Nlimit, dia_Nlimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-! Chlorophyll:C ratio of phytoplankton
-if (id_phy_chl2c .gt. 0) then
-  used = send_data(id_phy_chl2c, phy_chl2c(isc:iec,jsc:jec,:),          &
+! Phosphorus limitation of phytoplankton
+if (id_phy_Plimit .gt. 0) then
+  used = send_data(id_phy_Plimit, phy_Plimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-if (id_dia_chl2c .gt. 0) then
-  used = send_data(id_dia_chl2c, dia_chl2c(isc:iec,jsc:jec,:),          &
+if (id_dia_Plimit .gt. 0) then
+  used = send_data(id_dia_Plimit, dia_Plimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Silicic acid limitation of diatoms
+if (id_dia_Silimit .gt. 0) then
+  used = send_data(id_dia_Silimit, dia_Silimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_dia_SiCupta .gt. 0) then
+  used = send_data(id_dia_SiCupta, dia_SiCupta(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 ! Specific zooplankton grazing pressure (µM Z per µM P per second)
@@ -2527,6 +2588,10 @@ do n = 1, instances  !{
     used = send_data(id_detfe_sed_depst, biotic(n)%detfe_sed_depst(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
  endif
+ if (id_detsi_sed_depst .gt. 0) then
+    used = send_data(id_detsi_sed_depst, biotic(n)%detsi_sed_depst(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
  
  ! rate of permanent burial (loss) of tracers within sediment
  if (id_caco3_sed_bury .gt. 0) then
@@ -2539,6 +2604,10 @@ do n = 1, instances  !{
  endif
  if (id_detfe_sed_bury .gt. 0) then
     used = send_data(id_detfe_sed_bury, biotic(n)%detfe_sed_bury(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ if (id_detsi_sed_bury .gt. 0) then
+    used = send_data(id_detsi_sed_bury, biotic(n)%detsi_sed_bury(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
  endif
  
@@ -2732,14 +2801,12 @@ if (rivdsi_id .eq. 0) then  !{
 endif  !}
 
 
-!hydrofe_id = init_external_field(hydrofe_file,                   &
-!                                     hydrofe_name,               &
-!                                     domain = Domain%domain2d)
-!if (hydrofe_id .eq. 0) then  !{
-!  call mpp_error(FATAL, trim(error_header) //                   &
-!       'Could not open hydrofe file: ' //                   &
-!       trim(hydrofe_file))
-!endif  !}
+hydrofe_id = init_external_field(hydrofe_file, hydrofe_name, domain = Domain%domain2d, &
+                                 ignore_axis_atts=.TRUE.)
+if (hydrofe_id .eq. 0) then  !{
+  call mpp_error(FATAL, trim(error_header) //                   &
+       'Could not open hydrofe file: ' // trim(hydrofe_file))
+endif  !}
 
 alphabio_id = init_external_field("INPUT/bgc_param.nc",          &
         "alphabio", domain = Domain%domain2d)
@@ -2808,6 +2875,7 @@ do n = 1, instances !{
  id_restart(1) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "caco3_sediment", biotic(n)%caco3_sediment(:,:), domain=Domain%domain2d)
  id_restart(2) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "det_sediment", biotic(n)%det_sediment(:,:), domain=Domain%domain2d)
  id_restart(3) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detfe_sediment", biotic(n)%detfe_sediment(:,:), domain=Domain%domain2d)
+ id_restart(4) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detsi_sediment", biotic(n)%detsi_sediment(:,:), domain=Domain%domain2d)
 enddo !} n
 
 call restore_state(sed_restart)
@@ -3040,13 +3108,21 @@ id_dia_Nlimit = register_diag_field('ocean_model','dia_Nlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'diatom N limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
-id_phy_chl2c = register_diag_field('ocean_model','phy_chl2c', &
-     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Chlorophyll:C ratio', &
-     'mg Chl / mg C ',missing_value = -1.0e+10)
+id_phy_Plimit = register_diag_field('ocean_model','phy_Plimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton P limitation', &
+     '[0-1]',missing_value = -1.0e+10)
 
-id_dia_chl2c = register_diag_field('ocean_model','dia_chl2c', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom Chlorophyll:C ratio', &
-     'mg Chl / mg C ',missing_value = -1.0e+10)
+id_dia_Plimit = register_diag_field('ocean_model','dia_Plimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'diatom P limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_dia_Silimit = register_diag_field('ocean_model','dia_Silimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'diatom Si limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_dia_SiCupta = register_diag_field('ocean_model','dia_SiCupta', &
+     grid%tracer_axes(1:3),Time%model_time, 'diatom Si:C ratio of uptake', &
+     '[0-1]',missing_value = -1.0e+10)
 
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
@@ -3072,6 +3148,10 @@ id_detfe_sediment = register_diag_field('ocean_model','detfe_sediment', &
      grid%tracer_axes(1:2),Time%model_time, 'Accumulated detfe in sediment at base of water column', &
      'mmolFe/m^2',missing_value = -1.0e+10)
 
+id_detsi_sediment = register_diag_field('ocean_model','detsi_sediment', &
+     grid%tracer_axes(1:2),Time%model_time, 'Accumulated detsi in sediment at base of water column', &
+     'mmolSi/m^2',missing_value = -1.0e+10)
+
 id_caco3_sed_remin = register_diag_field('ocean_model','caco3_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of CaCO3 in accumulated sediment', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
@@ -3083,6 +3163,10 @@ id_det_sed_remin = register_diag_field('ocean_model','det_sed_remin', &
 id_detfe_sed_remin = register_diag_field('ocean_model','detfe_sed_remin', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of detfe in accumulated sediment', &
      'mmolFe/m^2/s',missing_value = -1.0e+10)
+
+id_detsi_sed_remin = register_diag_field('ocean_model','detsi_sed_remin', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of remineralisation of detsi in accumulated sediment', &
+     'mmolSi/m^2/s',missing_value = -1.0e+10)
 
 id_det_sed_denit = register_diag_field('ocean_model','det_sed_denit', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of denitrification (NO3-->N2) in accumulated sediment', &
@@ -3100,6 +3184,10 @@ id_detfe_sed_depst = register_diag_field('ocean_model','detfe_sed_depst', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of detfe to sediment at base of water column', &
      'mmolFe/m^2/s',missing_value = -1.0e+10)
 
+id_detsi_sed_depst = register_diag_field('ocean_model','detsi_sed_depst', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of deposition of detsi to sediment at base of water column', &
+     'mmolSi/m^2/s',missing_value = -1.0e+10)
+
 id_caco3_sed_bury = register_diag_field('ocean_model','caco3_sed_bury', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of CaCO3 within sediment', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
@@ -3111,6 +3199,10 @@ id_det_sed_bury = register_diag_field('ocean_model','det_sed_bury', &
 id_detfe_sed_bury = register_diag_field('ocean_model','detfe_sed_bury', &
      grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of detfe within sediment', &
      'mmolFe/m^2/s',missing_value = -1.0e+10)
+
+id_detsi_sed_bury = register_diag_field('ocean_model','detsi_sed_bury', &
+     grid%tracer_axes(1:2),Time%model_time, 'Rate of burial of detsi within sediment', &
+     'mmolSi/m^2/s',missing_value = -1.0e+10)
 
 id_total_co2_flux = register_diag_field('ocean_model','total_co2_flux', &
      Time%model_time, 'Total surface flux of inorganic C (natural) into ocean', &
@@ -3165,6 +3257,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - ammonium'
    name3 = 'Source term - ammonium'
    name4 = 'Flux into sediment - ammonium'
+  endif
+  if (nn .eq. id_sil) then 
+   name1 = 'Flux into ocean - silicic acid'
+   name2 = 'Virtual flux into ocean - silicic acid'
+   name3 = 'Source term - silicic acid'
+   name4 = 'Flux into sediment - silicic acid'
   endif
   if (nn .eq. id_phy) then 
    name1 = 'Flux into ocean - phytoplankton'
@@ -3271,6 +3369,12 @@ do n = 1, instances  !{
    name3 = 'Source term - diatom Fe'
    name4 = 'Flux into sediment - diatom Fe'
   endif
+  if (nn .eq. id_diasi) then ! pjb 
+   name1 = 'Flux into ocean - diatom Si'
+   name2 = 'Virtual flux into ocean - diatom Si'
+   name3 = 'Source term - diatom Si'
+   name4 = 'Flux into sediment - diatom Si'
+  endif
   if (nn .eq. id_zoofe) then ! pjb 
    name1 = 'Flux into ocean - Zooplankton Fe'
    name2 = 'Virtual flux into ocean - Zooplankton Fe'
@@ -3294,6 +3398,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - particulates Fe'
    name3 = 'Source term - particulates Fe'
    name4 = 'Flux into sediment - particulates Fe'
+  endif
+  if (nn .eq. id_pocsi) then ! pjb 
+   name1 = 'Flux into ocean - particulates Si'
+   name2 = 'Virtual flux into ocean - particulates Si'
+   name3 = 'Source term - particulates Si'
+   name4 = 'Flux into sediment - particulates Si'
   endif
   if (mpp_pe() == mpp_root_pe() )print*,'rjm bio',bgc_stf,'v'//bgc_stf
 
@@ -3436,7 +3546,7 @@ do n = 1, instances  !{
 
 ! comment out this sediment source of fe while testing equivalent code in csiro_bgc_bbc.  mac, nov12.  
 
-! call time_interp_external(hydrofe_id, time%model_time, hydrofe_t)
+ call time_interp_external(hydrofe_id, time%model_time, hydrofe_t)
 
 ! rjm bottom Fe fix
 ! mac aug10, only apply this fix when the water is <= 200 m deep.  
@@ -3444,10 +3554,11 @@ do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
          if (grid%kmt(i,j) .gt. 0) then
-            !do k = 1, grid%nk
-            !   t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= &
-            !     t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1) + hydrofe_t(i,j,k)
-            !enddo
+            do k = 1, grid%nk
+               t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1) =                          &
+                 t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1) + dtts*hydrofe_t(i,j,k)  &
+                 * grid%tmask(i,j,k)
+            enddo
             k = grid%kmt(i,j)
             if (grid%zw(k) .le. 200) &
                t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= 0.999
@@ -3464,6 +3575,8 @@ do n = 1, instances  !{
         ( biotic(n)%det_sed_depst(i,j) - biotic(n)%det_sed_remin(i,j) - biotic(n)%det_sed_bury(i,j) )
        biotic(n)%detfe_sediment(i,j) = biotic(n)%detfe_sediment(i,j) + dtts*                       &
         ( biotic(n)%detfe_sed_depst(i,j) - biotic(n)%detfe_sed_remin(i,j) - biotic(n)%detfe_sed_bury(i,j) )
+       biotic(n)%detsi_sediment(i,j) = biotic(n)%detsi_sediment(i,j) + dtts*                       &
+        ( biotic(n)%detsi_sed_depst(i,j) - biotic(n)%detsi_sed_remin(i,j) - biotic(n)%detsi_sed_bury(i,j) )
        biotic(n)%caco3_sediment(i,j) = biotic(n)%caco3_sediment(i,j) + dtts*                       &
         ( biotic(n)%caco3_sed_depst(i,j) - biotic(n)%caco3_sed_remin(i,j) - biotic(n)%caco3_sed_bury(i,j) )
      endif
@@ -3481,6 +3594,10 @@ do n = 1, instances  !{
  endif
  if (id_detfe_sediment .gt. 0) then
     used = send_data(id_detfe_sediment, biotic(n)%detfe_sediment(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ if (id_detsi_sediment .gt. 0) then
+    used = send_data(id_detsi_sediment, biotic(n)%detsi_sediment(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
  endif
 
