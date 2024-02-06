@@ -432,40 +432,96 @@ integer                                 :: alphabio_id
 real, allocatable, dimension(:,:)       :: alphabio
 integer                                 :: parbio_id
 real, allocatable, dimension(:,:)       :: parbio
-integer                                 :: kwbio_id
-real, allocatable, dimension(:,:)       :: kwbio
-integer                                 :: kcbio_id
-real, allocatable, dimension(:,:)       :: kcbio
-integer                                 :: abio_id
-real, allocatable, dimension(:,:)       :: abio
-integer                                 :: bbio_id
-real, allocatable, dimension(:,:)       :: bbio
-integer                                 :: cbio_id
-real, allocatable, dimension(:,:)       :: cbio
-integer                                 :: k1bio_id
-real, allocatable, dimension(:,:)       :: k1bio
-integer                                 :: muepbio_id
-real, allocatable, dimension(:,:)       :: muepbio
-integer                                 :: muepsbio_id
-real, allocatable, dimension(:,:)       :: muepsbio
-integer                                 :: gam1bio_id
-real, allocatable, dimension(:,:)       :: gam1bio
-integer                                 :: gbio_id
-real, allocatable, dimension(:,:)       :: gbio
-integer                                 :: epsbio_id
-real, allocatable, dimension(:,:)       :: epsbio
-integer                                 :: muezbio_id
-real, allocatable, dimension(:,:)       :: muezbio
-integer                                 :: gam2bio_id
-real, allocatable, dimension(:,:)       :: gam2bio
-integer                                 :: muedbio_id
-real, allocatable, dimension(:,:)       :: muedbio
-integer                                 :: muecaco3_id
-real, allocatable, dimension(:,:)       :: muecaco3
-integer                                 :: muedbio_sed_id
-real, allocatable, dimension(:,:)       :: muedbio_sed
-integer                                 :: muecaco3_sed_id
-real, allocatable, dimension(:,:)       :: muecaco3_sed
+integer                                 :: phybiot_id
+real, allocatable, dimension(:,:)       :: phybiot
+integer                                 :: diabiot_id
+real, allocatable, dimension(:,:)       :: diabiot
+integer                                 :: phyminqc_id
+real, allocatable, dimension(:,:)       :: phyminqc
+integer                                 :: diaminqc_id
+real, allocatable, dimension(:,:)       :: diaminqc
+integer                                 :: phymaxqc_id
+real, allocatable, dimension(:,:)       :: phymaxqc
+integer                                 :: diamaxqc_id
+real, allocatable, dimension(:,:)       :: diamaxqc
+integer                                 :: phymaxqf_id
+real, allocatable, dimension(:,:)       :: phymaxqf
+integer                                 :: diamaxqf_id
+real, allocatable, dimension(:,:)       :: diamaxqf
+integer                                 :: phyoptqf_id
+real, allocatable, dimension(:,:)       :: phyoptqf
+integer                                 :: diaoptqf_id
+real, allocatable, dimension(:,:)       :: diaoptqf
+integer                                 :: abioa_id
+real, allocatable, dimension(:,:)       :: abioa
+integer                                 :: bbioa_id
+real, allocatable, dimension(:,:)       :: bbioa
+integer                                 :: cbioa_id
+real, allocatable, dimension(:,:)       :: cbioa
+integer                                 :: abioh_id
+real, allocatable, dimension(:,:)       :: abioh
+integer                                 :: bbioh_id
+real, allocatable, dimension(:,:)       :: bbioh
+integer                                 :: cbioh_id
+real, allocatable, dimension(:,:)       :: cbioh
+integer                                 :: phykn_id
+real, allocatable, dimension(:,:)       :: phykn
+integer                                 :: phykf_id
+real, allocatable, dimension(:,:)       :: phykf
+integer                                 :: phykp_id
+real, allocatable, dimension(:,:)       :: phykp
+integer                                 :: diakn_id
+real, allocatable, dimension(:,:)       :: diakn
+integer                                 :: diakf_id
+real, allocatable, dimension(:,:)       :: diakf
+integer                                 :: diakp_id
+real, allocatable, dimension(:,:)       :: diakp
+integer                                 :: phylmor_id
+real, allocatable, dimension(:,:)       :: phylmor
+integer                                 :: phyqmor_id
+real, allocatable, dimension(:,:)       :: phyqmor
+integer                                 :: zooassi_id
+real, allocatable, dimension(:,:)       :: zooassi
+integer                                 :: zoogmax_id
+real, allocatable, dimension(:,:)       :: zoogmax
+integer                                 :: mesgmax_id
+real, allocatable, dimension(:,:)       :: mesgmax
+integer                                 :: epszoo_id
+real, allocatable, dimension(:,:)       :: epszoo
+integer                                 :: epsmes_id
+real, allocatable, dimension(:,:)       :: epsmes
+integer                                 :: zprefphy_id
+real, allocatable, dimension(:,:)       :: zprefphy
+integer                                 :: zprefdia_id
+real, allocatable, dimension(:,:)       :: zprefdia
+integer                                 :: zprefdet_id
+real, allocatable, dimension(:,:)       :: zprefdet
+integer                                 :: zprefpoc_id
+real, allocatable, dimension(:,:)       :: zprefpoc
+integer                                 :: mprefphy_id
+real, allocatable, dimension(:,:)       :: mprefphy
+integer                                 :: mprefdia_id
+real, allocatable, dimension(:,:)       :: mprefdia
+integer                                 :: mprefdet_id
+real, allocatable, dimension(:,:)       :: mprefdet
+integer                                 :: mprefpoc_id
+real, allocatable, dimension(:,:)       :: mprefpoc
+integer                                 :: mprefzoo_id
+real, allocatable, dimension(:,:)       :: mprefzoo
+integer                                 :: zooqmor_id
+real, allocatable, dimension(:,:)       :: zooqmor
+integer                                 :: mesqmor_id
+real, allocatable, dimension(:,:)       :: mesqmor
+integer                                 :: zooexcr_id
+real, allocatable, dimension(:,:)       :: zooexcr
+integer                                 :: detlrem_id
+real, allocatable, dimension(:,:)       :: detlrem
+integer                                 :: caco3rem_id
+real, allocatable, dimension(:,:)       :: caco3rem
+integer                                 :: detlrem_sed_id
+real, allocatable, dimension(:,:)       :: detlrem_sed
+integer                                 :: caco3rem_sed_id
+real, allocatable, dimension(:,:)       :: caco3rem_sed
 integer                                 :: wdetbio_id
 real, allocatable, dimension(:,:)       :: wdetbio
 integer                                 :: wcaco3_id
@@ -701,23 +757,51 @@ enddo  !}
 
 allocate( alphabio(isd:ied,jsd:jed) )
 allocate( parbio(isd:ied,jsd:jed) )
-allocate( kwbio(isd:ied,jsd:jed) )
-allocate( kcbio(isd:ied,jsd:jed) )
-allocate( abio(isd:ied,jsd:jed) )
-allocate( bbio(isd:ied,jsd:jed) )
-allocate( cbio(isd:ied,jsd:jed) )
-allocate( k1bio(isd:ied,jsd:jed) )
-allocate( muepbio(isd:ied,jsd:jed) )
-allocate( muepsbio(isd:ied,jsd:jed) )
-allocate( gam1bio(isd:ied,jsd:jed) )
-allocate( gbio(isd:ied,jsd:jed) )
-allocate( epsbio(isd:ied,jsd:jed) )
-allocate( muezbio(isd:ied,jsd:jed) )
-allocate( gam2bio(isd:ied,jsd:jed) )
-allocate( muedbio(isd:ied,jsd:jed) )
-allocate( muecaco3(isd:ied,jsd:jed) )
-allocate( muedbio_sed(isd:ied,jsd:jed) )
-allocate( muecaco3_sed(isd:ied,jsd:jed) )
+allocate( phybiot(isd:ied,jsd:jed) )
+allocate( diabiot(isd:ied,jsd:jed) )
+allocate( phyminqc(isd:ied,jsd:jed) )
+allocate( diaminqc(isd:ied,jsd:jed) )
+allocate( phymaxqc(isd:ied,jsd:jed) )
+allocate( diamaxqc(isd:ied,jsd:jed) )
+allocate( phymaxqf(isd:ied,jsd:jed) )
+allocate( diamaxqf(isd:ied,jsd:jed) )
+allocate( phyoptqf(isd:ied,jsd:jed) )
+allocate( diaoptqf(isd:ied,jsd:jed) )
+allocate( abioa(isd:ied,jsd:jed) )
+allocate( bbioa(isd:ied,jsd:jed) )
+allocate( cbioa(isd:ied,jsd:jed) )
+allocate( abioh(isd:ied,jsd:jed) )
+allocate( bbioh(isd:ied,jsd:jed) )
+allocate( cbioh(isd:ied,jsd:jed) )
+allocate( phykn(isd:ied,jsd:jed) )
+allocate( phykf(isd:ied,jsd:jed) )
+allocate( phykp(isd:ied,jsd:jed) )
+allocate( diakn(isd:ied,jsd:jed) )
+allocate( diakf(isd:ied,jsd:jed) )
+allocate( diakp(isd:ied,jsd:jed) )
+allocate( phylmor(isd:ied,jsd:jed) )
+allocate( phyqmor(isd:ied,jsd:jed) )
+allocate( zooassi(isd:ied,jsd:jed) )
+allocate( zoogmax(isd:ied,jsd:jed) )
+allocate( mesgmax(isd:ied,jsd:jed) )
+allocate( epszoo(isd:ied,jsd:jed) )
+allocate( epsmes(isd:ied,jsd:jed) )
+allocate( zprefphy(isd:ied,jsd:jed) )
+allocate( zprefdia(isd:ied,jsd:jed) )
+allocate( zprefdet(isd:ied,jsd:jed) )
+allocate( zprefpoc(isd:ied,jsd:jed) )
+allocate( mprefphy(isd:ied,jsd:jed) )
+allocate( mprefdia(isd:ied,jsd:jed) )
+allocate( mprefdet(isd:ied,jsd:jed) )
+allocate( mprefpoc(isd:ied,jsd:jed) )
+allocate( mprefzoo(isd:ied,jsd:jed) )
+allocate( zooqmor(isd:ied,jsd:jed) )
+allocate( mesqmor(isd:ied,jsd:jed) )
+allocate( zooexcr(isd:ied,jsd:jed) )
+allocate( detlrem(isd:ied,jsd:jed) )
+allocate( caco3rem(isd:ied,jsd:jed) )
+allocate( detlrem_sed(isd:ied,jsd:jed) )
+allocate( caco3rem_sed(isd:ied,jsd:jed) )
 allocate( wdetbio(isd:ied,jsd:jed) )
 allocate( wcaco3(isd:ied,jsd:jed) )
 allocate( nat_co2(isd:ied,jsd:jed) )
@@ -831,8 +915,8 @@ logical  :: used
 
 
  ! find remineralisation rate of sediment tracers.  mac, nov12.  
- call time_interp_external(muedbio_sed_id, time%model_time, muedbio_sed)
- call time_interp_external(muecaco3_sed_id, time%model_time, muecaco3_sed)
+ call time_interp_external(detlrem_sed_id, time%model_time, detlrem_sed)
+ call time_interp_external(caco3rem_sed_id, time%model_time, caco3rem_sed)
  ind_temp = fm_get_index('/ocean_mod/prog_tracers/temp')
 
  do n = 1, instances  !{
@@ -842,11 +926,11 @@ logical  :: used
        if (k .gt. 0) then
 
          ! Remineralisation of accumulated tracers in the sediment
-         fbc= bbio(i,j)**(cbio(i,j)*T_prog(ind_temp)%field(i,j,k,time%taum1))
-         biotic(n)%det_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%det_sediment(i,j)
-         biotic(n)%detfe_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%detfe_sediment(i,j)
-         biotic(n)%detsi_sed_remin(i,j) = muedbio_sed(i,j)*fbc*biotic(n)%detsi_sediment(i,j)
-         biotic(n)%caco3_sed_remin(i,j) = muecaco3_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j)
+         fbc= abioh(i,j) * bbioh(i,j)**(cbioh(i,j)*T_prog(ind_temp)%field(i,j,k,time%taum1))
+         biotic(n)%det_sed_remin(i,j) = detlrem_sed(i,j)*fbc*biotic(n)%det_sediment(i,j)
+         biotic(n)%detfe_sed_remin(i,j) = detlrem_sed(i,j)*fbc*biotic(n)%detfe_sediment(i,j)
+         biotic(n)%detsi_sed_remin(i,j) = detlrem_sed(i,j)*fbc*biotic(n)%detsi_sediment(i,j)
+         biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j)
 
          ! Burial of incoming flux (permanent loss of tracer)
          !  Metamodel of Dunne et al. 2007
@@ -2818,40 +2902,96 @@ endif  !}
 
 parbio_id = init_external_field("INPUT/bgc_param.nc",          &
         "parbio", domain = Domain%domain2d)
-kwbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "kwbio", domain = Domain%domain2d)
-kcbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "kcbio", domain = Domain%domain2d)
-abio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "abio", domain = Domain%domain2d)
-bbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "bbio", domain = Domain%domain2d)
-cbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "cbio", domain = Domain%domain2d)
-k1bio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "k1bio", domain = Domain%domain2d)
-muepbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muepbio", domain = Domain%domain2d)
-muepsbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muepsbio", domain = Domain%domain2d)
-gam1bio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "gam1bio", domain = Domain%domain2d)
-gbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "gbio", domain = Domain%domain2d)
-epsbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "epsbio", domain = Domain%domain2d)
-muezbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muezbio", domain = Domain%domain2d)
-gam2bio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "gam2bio", domain = Domain%domain2d)
-muedbio_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muedbio", domain = Domain%domain2d)
-muecaco3_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muecaco3", domain = Domain%domain2d)
-muedbio_sed_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muedbio_sed", domain = Domain%domain2d)
-muecaco3_sed_id = init_external_field("INPUT/bgc_param.nc",          &
-        "muecaco3_sed", domain = Domain%domain2d)
+phybiot_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phybiot", domain = Domain%domain2d)
+diabiot_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diabiot", domain = Domain%domain2d)
+phyminqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phyminqc", domain = Domain%domain2d)
+diaminqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diaminqc", domain = Domain%domain2d)
+phymaxqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phymaxqc", domain = Domain%domain2d)
+diamaxqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diamaxqc", domain = Domain%domain2d)
+phymaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phymaxqf", domain = Domain%domain2d)
+diamaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diamaxqf", domain = Domain%domain2d)
+phyoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phyoptqf", domain = Domain%domain2d)
+diaoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diaoptqf", domain = Domain%domain2d)
+abioa_id = init_external_field("INPUT/bgc_param.nc",          &
+        "abioa", domain = Domain%domain2d)
+bbioa_id = init_external_field("INPUT/bgc_param.nc",          &
+        "bbioa", domain = Domain%domain2d)
+cbioa_id = init_external_field("INPUT/bgc_param.nc",          &
+        "cbioa", domain = Domain%domain2d)
+abioh_id = init_external_field("INPUT/bgc_param.nc",          &
+        "abioh", domain = Domain%domain2d)
+bbioh_id = init_external_field("INPUT/bgc_param.nc",          &
+        "bbioh", domain = Domain%domain2d)
+cbioh_id = init_external_field("INPUT/bgc_param.nc",          &
+        "cbioh", domain = Domain%domain2d)
+phykn_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phykn", domain = Domain%domain2d)
+phykf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phykf", domain = Domain%domain2d)
+phykp_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phykp", domain = Domain%domain2d)
+diakn_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diakn", domain = Domain%domain2d)
+diakf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diakf", domain = Domain%domain2d)
+diakp_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diakp", domain = Domain%domain2d)
+phylmor_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phylmor", domain = Domain%domain2d)
+phyqmor_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phyqmor", domain = Domain%domain2d)
+zooassi_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zooassi", domain = Domain%domain2d)
+zoogmax_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zoogmax", domain = Domain%domain2d)
+mesgmax_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mesgmax", domain = Domain%domain2d)
+epszoo_id = init_external_field("INPUT/bgc_param.nc",          &
+        "epszoo", domain = Domain%domain2d)
+epsmes_id = init_external_field("INPUT/bgc_param.nc",          &
+        "epsmes", domain = Domain%domain2d)
+zprefphy_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zprefphy", domain = Domain%domain2d)
+zprefdia_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zprefdia", domain = Domain%domain2d)
+zprefdet_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zprefdet", domain = Domain%domain2d)
+zprefpoc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zprefpoc", domain = Domain%domain2d)
+mprefphy_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefphy", domain = Domain%domain2d)
+mprefdia_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefdia", domain = Domain%domain2d)
+mprefdet_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefdet", domain = Domain%domain2d)
+mprefpoc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefpoc", domain = Domain%domain2d)
+mprefzoo_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefzoo", domain = Domain%domain2d)
+zooqmor_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zooqmor", domain = Domain%domain2d)
+mesqmor_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mesqmor", domain = Domain%domain2d)
+zooexcr_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zooexcr", domain = Domain%domain2d)
+detlrem_id = init_external_field("INPUT/bgc_param.nc",          &
+        "detlrem", domain = Domain%domain2d)
+caco3rem_id = init_external_field("INPUT/bgc_param.nc",          &
+        "caco3rem", domain = Domain%domain2d)
+detlrem_sed_id = init_external_field("INPUT/bgc_param.nc",          &
+        "detlrem_sed", domain = Domain%domain2d)
+caco3rem_sed_id = init_external_field("INPUT/bgc_param.nc",          &
+        "caco3rem_sed", domain = Domain%domain2d)
 wdetbio_id = init_external_field("INPUT/bgc_param.nc",          &
         "wdetbio", domain = Domain%domain2d)
 wcaco3_id = init_external_field("INPUT/bgc_param.nc",          &

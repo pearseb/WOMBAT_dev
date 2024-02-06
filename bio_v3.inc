@@ -68,22 +68,20 @@ integer :: index_temp, index_salt
 
   call time_interp_external(alphabio_id, time%model_time, alphabio)
   call time_interp_external(parbio_id, time%model_time, parbio)
-  call time_interp_external(kwbio_id, time%model_time, kwbio)
-  call time_interp_external(kcbio_id, time%model_time, kcbio)
-  call time_interp_external(abio_id, time%model_time, abio)
-  call time_interp_external(bbio_id, time%model_time, bbio)
-  call time_interp_external(cbio_id, time%model_time, cbio)
-  call time_interp_external(k1bio_id, time%model_time, k1bio)
-  call time_interp_external(muepbio_id, time%model_time, muepbio)
-  call time_interp_external(muepsbio_id, time%model_time, muepsbio)
-  call time_interp_external(gam1bio_id, time%model_time, gam1bio)
-  call time_interp_external(gbio_id, time%model_time, gbio)
-  call time_interp_external(epsbio_id, time%model_time, epsbio)
-  call time_interp_external(muezbio_id, time%model_time, muezbio)
-  call time_interp_external(gam2bio_id, time%model_time, gam2bio)
-  call time_interp_external(muedbio_id, time%model_time, muedbio)
+  call time_interp_external(abioa_id, time%model_time, abioa)
+  call time_interp_external(bbioa_id, time%model_time, bbioa)
+  call time_interp_external(cbioa_id, time%model_time, cbioa)
+  call time_interp_external(phykn_id, time%model_time, phykn)
+  call time_interp_external(phylmor_id, time%model_time, phylmor)
+  call time_interp_external(phyqmor_id, time%model_time, phyqmor)
+  call time_interp_external(zooassi_id, time%model_time, zooassi)
+  call time_interp_external(zoogmax_id, time%model_time, zoogmax)
+  call time_interp_external(epszoo_id, time%model_time, epszoo)
+  call time_interp_external(zooqmor_id, time%model_time, zooqmor)
+  call time_interp_external(zooexcr_id, time%model_time, zooexcr)
+  call time_interp_external(detlrem_id, time%model_time, detlrem)
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)
-  call time_interp_external(muecaco3_id, time%model_time, muecaco3)
+  call time_interp_external(caco3rem_id, time%model_time, caco3rem)
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe)
   call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd)
@@ -249,8 +247,8 @@ do n = 1, instances  !{
 
           radbio3d(i,j,k) = radbio
 
-          vpbio(i,k) = abio(i,j)*bbio(i,j)**                                  &
-                  (cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
+          vpbio(i,k) = abioa(i,j)*bbioa(i,j)**                                  &
+                  (cbioa(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))/86400.0
 
 !          vpbio(i,k)= 0.6* (1.006)**T_prog(index_temp)%field(i,j,k,Time%tau) 
 
@@ -305,7 +303,7 @@ do n = 1, instances  !{
 !chdc      saturation growth rate (infinite light, infinite nutrients)
 !chd          vpbio = abio*bbio**(cbio*t_prog(index_temp)%field(i,j,k,tau))
 !chd      growth rate
-          u_npz = min(avej(i,k),vpbio(i,k)*bion/(k1bio(i,j)+bion))
+          u_npz = min(avej(i,k),vpbio(i,k)*bion/(phykn(i,j)+bion))
 ! rjm - iron limitation
          if(id_fe.ne.0) u_npz = min(u_npz,vpbio(i,k)*bioi/(0.1+bioi))
 
@@ -314,17 +312,17 @@ do n = 1, instances  !{
 !chd           write(stdout(),*) avej(i,k)
 !chd          endif
 !chd      grazing function
-          g_npz = gbio(i,j)*epsbio(i,j)*biop*biop/(gbio(i,j)+epsbio(i,j)*biop*biop)
+          g_npz = zoogmax(i,j)*epszoo(i,j)*biop*biop/(zoogmax(i,j)+epszoo(i,j)*biop*biop)
 !chd      temperature dependance of growth rates
-          fbc = bbio(i,j)**(cbio(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
+          fbc = bbioa(i,j)**(cbioa(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))
 
         f11 = u_npz*biop         * bioma(i,k,id_no3)
         f21 = g_npz*bioz         * bioma(i,k,id_phy)
-        f22 = muepbio(i,j)*fbc*biop   * bioma(i,k,id_phy)
-        f23 = muepsbio(i,j)*biop*biop * bioma(i,k,id_phy)
-        f31 = gam2bio(i,j)*fbc*bioz   * bioma(i,k,id_zoo)
-        f32 = muezbio(i,j)*bioz*bioz  * bioma(i,k,id_zoo)
-        f41 = muedbio(i,j)*fbc*biod   * bioma(i,k,id_det)
+        f22 = phylmor(i,j)*fbc*biop   * bioma(i,k,id_phy)
+        f23 = phyqmor(i,j)*biop*biop * bioma(i,k,id_phy)
+        f31 = zooexcr(i,j)*fbc*bioz   * bioma(i,k,id_zoo)
+        f32 = zooqmor(i,j)*bioz*bioz  * bioma(i,k,id_zoo)
+        f41 = detlrem(i,j)*fbc*biod   * bioma(i,k,id_det)
 ! if (grid%zw(k) .ge. 180) f41 = f41*.2   ! reduce decay below 300m
 ! change the ratio of remineralisation of det in upper to lower ocean from 5 to 2,
 !  but keep the remin rate the same at depth, so change the value in rjm_param_2010.... as well
@@ -332,7 +330,7 @@ do n = 1, instances  !{
         if (grid%zw(k) .ge. 180) f41 = f41*.5   ! reduce decay below 300m
 
         if (id_caco3.ne.0) then 
-          f51 = muecaco3(i,j)*biocaco3 *bioma(i,k,id_caco3)
+          f51 = caco3rem(i,j)*biocaco3 *bioma(i,k,id_caco3)
         endif
 
 !chd   -- nutrient equation
@@ -350,14 +348,14 @@ do n = 1, instances  !{
 
 !chd   -- zooplankton equation
           biotr(i,k,id_zoo)  = biotr(i,k,id_zoo)  + dtsb * (                     &
-               gam1bio(i,j)*f21 - f31 - f32)
+               zooassi(i,j)*f21 - f31 - f32)
 
 ! Estimate secondary productivity from zooplankton growth
           zprod_gross(i,j,k) = zprod_gross(i,j,k) + dtsb*f21
 
 !chd   -- detritus equation
           biotr(i,k,id_det)  = biotr(i,k,id_det)  + dtsb * (                     &
-               (1-gam1bio(i,j))*f21 + f23 + f32 - f41)    
+               (1-zooassi(i,j))*f21 + f23 + f32 - f41)    
 
 !chd   -- oxygen equation
           biotr(i,k,id_o2)  = biotr(i,k,id_o2)  - bioma(i,k,id_o2) * 172 / 16 * dtsb * ( &
@@ -366,7 +364,7 @@ do n = 1, instances  !{
 ! rjm -- extra equation for caco3 - alkalinity
         if (id_caco3.ne.0) &
          biotr(i,k,id_caco3) = biotr(i,k,id_caco3)  + dtsb * ( (   &
-               (1-gam1bio(i,j))*f21 + f23 + f32)*f_inorg(i,j)*106/16 - f51)  ! 8% of POC 106/16*.08   
+               (1-zooassi(i,j))*f21 + f23 + f32)*f_inorg(i,j)*106/16 - f51)  ! 8% of POC 106/16*.08   
  
 ! rjm -- extra equation for iron
 !        if (id_fe.ne.0) &
