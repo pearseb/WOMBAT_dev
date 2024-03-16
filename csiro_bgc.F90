@@ -305,6 +305,8 @@ integer                                 :: id_radbio1 = -1
 integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_wpoc100 = -1
+integer                                 :: id_wdet3d = -1
+integer                                 :: id_wpoc3d = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
@@ -410,6 +412,7 @@ real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
+real, allocatable, dimension(:,:,:) :: wdet3d, wpoc3d
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit,                    &
@@ -452,8 +455,10 @@ integer                                 :: phyoptqf_id
 real, allocatable, dimension(:,:)       :: phyoptqf
 integer                                 :: diaoptqf_id
 real, allocatable, dimension(:,:)       :: diaoptqf
-integer                                 :: abioa_id
-real, allocatable, dimension(:,:)       :: abioa
+integer                                 :: abioa_phy_id
+real, allocatable, dimension(:,:)       :: abioa_phy
+integer                                 :: abioa_dia_id
+real, allocatable, dimension(:,:)       :: abioa_dia
 integer                                 :: bbioa_id
 real, allocatable, dimension(:,:)       :: bbioa
 integer                                 :: cbioa_id
@@ -650,6 +655,8 @@ allocate( radbio_int100(isc:iec,jsc:jec) )
 allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
+allocate( wdet3d(isc:iec,jsc:jec,nk) )
+allocate( wpoc3d(isc:iec,jsc:jec,nk) )
 allocate( npp2d(isc:iec,jsc:jec) )
 allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( nsp3d(isc:iec,jsc:jec,nk) )
@@ -767,7 +774,8 @@ allocate( phymaxqf(isd:ied,jsd:jed) )
 allocate( diamaxqf(isd:ied,jsd:jed) )
 allocate( phyoptqf(isd:ied,jsd:jed) )
 allocate( diaoptqf(isd:ied,jsd:jed) )
-allocate( abioa(isd:ied,jsd:jed) )
+allocate( abioa_phy(isd:ied,jsd:jed) )
+allocate( abioa_dia(isd:ied,jsd:jed) )
 allocate( bbioa(isd:ied,jsd:jed) )
 allocate( cbioa(isd:ied,jsd:jed) )
 allocate( abioh(isd:ied,jsd:jed) )
@@ -2351,7 +2359,8 @@ case(2)
 !include "bio_v2.f90"
 
 case(3)
-call bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)
+call bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt, &
+            days_in_this_year)
 
 case(4)
 call bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt, &
@@ -2420,18 +2429,35 @@ if (dust_id .gt. 0) then
   used = send_data(dust_id, dust_t(isc:iec,jsc:jec),             &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
-!det export at 100 m
+!det export at 100 m 
 if (id_wdet100 .gt. 0) then
-  wdet100(:,:) = wdetbio(isc:iec,jsc:jec)*0.1*t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  wdet100(:,:) = wdetbio(isc:iec,jsc:jec)*t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 !poc export at 100 m
 if (id_wpoc100 .gt. 0) then
-  wpoc100(:,:) = wdetbio(isc:iec,jsc:jec)*t_prog(ind_poc)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  wpoc100(:,:) = wdetbio(isc:iec,jsc:jec)*10*t_prog(ind_poc)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wpoc100, wpoc100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
+!det export  
+if (id_wdet3d .gt. 0) then
+  do k = 1,grid%nk !{
+    wdet3d(:,:,k) = wdetbio(isc:iec,jsc:jec) * t_prog(ind_det)%field(isc:iec,jsc:jec,k,time%taum1)
+  enddo
+  used = send_data(id_wdet3d, wdet3d(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+!poc export
+if (id_wpoc3d .gt. 0) then
+  do k = 1,grid%nk !{
+    wpoc3d(:,:,k) = wdetbio(isc:iec,jsc:jec)*10 * t_prog(ind_poc)%field(isc:iec,jsc:jec,k,time%taum1)
+  enddo
+  used = send_data(id_wpoc3d, wpoc3d(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+
 ! Light limitation of phytoplankton
 if (id_phy_parlimit .gt. 0) then
   used = send_data(id_phy_parlimit, phy_parlimit(isc:iec,jsc:jec,:),          &
@@ -2922,8 +2948,10 @@ phyoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "phyoptqf", domain = Domain%domain2d)
 diaoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "diaoptqf", domain = Domain%domain2d)
-abioa_id = init_external_field("INPUT/bgc_param.nc",          &
-        "abioa", domain = Domain%domain2d)
+abioa_phy_id = init_external_field("INPUT/bgc_param.nc",          &
+        "abioa_phy", domain = Domain%domain2d)
+abioa_dia_id = init_external_field("INPUT/bgc_param.nc",          &
+        "abioa_dia", domain = Domain%domain2d)
 bbioa_id = init_external_field("INPUT/bgc_param.nc",          &
         "bbioa", domain = Domain%domain2d)
 cbioa_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3190,6 +3218,14 @@ id_wdet100 = register_diag_field('ocean_model','wdet100', &
 
 id_wpoc100 = register_diag_field('ocean_model','wpoc100', &
      grid%tracer_axes(1:2),Time%model_time, 'POC export at 100 m (poc*sinking rate)', &
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
+id_wdet3d = register_diag_field('ocean_model','wdet3d', &
+     grid%tracer_axes(1:3),Time%model_time, 'detritus export (det*sinking rate)', &
+     'mmolC/m^2/s',missing_value = -1.0e+10)
+
+id_wpoc3d = register_diag_field('ocean_model','wpoc3d', &
+     grid%tracer_axes(1:3),Time%model_time, 'POC export (poc*sinking rate)', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
 
 id_npp3d = register_diag_field('ocean_model','npp3d', &

@@ -1,10 +1,91 @@
 !
 
-subroutine bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dtts, Thickness, Dens, swflx, sw_frac_zt)
+subroutine bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dtts, Thickness, Dens, swflx, sw_frac_zt, &
+                  days_in_this_year)
 
 
 ! Based on the pt_npzd.aos version  - which is the optimized version
-
+!
+!
+!     (\___/)
+!     / o o \
+!    (   "   )
+!     \__ __/
+!     
+!
+! World Ocean Model of Biogeochemistry And Trophic-dynamics (WOMBAT)
+!
+!  Authors:
+!   Richard Matear          (Richard.Matear@csiro.au)
+!   Matthew Chamberlain     (Matt.Chamberlain@csiro.au)
+!   Pearse Buchanan         (Pearse.Buchanan@csiro.au)
+!
+!
+!
+!   Purpose
+!   -------
+!       This code calculates...
+!
+!
+!   Sequence
+!   --------
+!   - Set up
+!       1.  Retrieve key biotic parameters from input file 
+!       2.  Get time information (timestep length and nested timestep for source and sink equations)
+!       3.  Calculate mixed layer depth
+!       4.  Initialise diagnostic arrays
+!       5.  Retrieve indices of the active tracers
+!       6.  Retrieve active tracers
+!       7.  Create tracer mask 
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Light
+!       8.  Calculate short-wave irradiance intensity as a function of depth
+!       9.  Include effect of sea-ice concentration
+!   - Phytoplankton growth
+!       10. Calculate phytoplankton growth rate as a function of light and temperature
+!       11. Collect the average light limitition over the mixed layer depth ["light_limit"]
+!
+!               [ END do loop over k and i indices ]
+!
+!
+!               [ BEGIN do loop over t, k and i indices ]
+!
+!       12. Apply nutrient limitation terms to maximum phytoplankton growth, taking the
+!           minimum of light, no3 and dfe limitations
+!   - Zooplankton grazing
+!       13. Apply typeIII disk formulation for grazing of phytoplankton biomass
+!       14. Calculate a scaling term according to the temperature
+!   - Source and sinks
+!       15. Collect all the source and sink terms for: 
+!           i.   Phytoplankton growth and mortality
+!           ii.  Zooplankton growth and mortality
+!           iii. And how these route to detritus, CaCO3 and inorganic nutrients
+!       16. Reduce decay rates of detrius below 180 metres
+!       17. Apply source and sink terms to the tracers
+!
+!               [ END do loop over t, k and i indices ]
+!
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Tracer tendencies and diagnostics
+!       18. Apply the tracer tendencies to the prognostic tracers in the model
+!       19. Collect the diagnostics
+!
+!               [ END do loop over k and i indices ]
+!
+!
+!               [ BEGIN do loop over k and i indices ]
+!
+!   - Sinking
+!       20. Sink detritus and CaCO3
+!       21. Deposit some tracer into the sediment
+!       22. Apply change to detritus and CaCO3
+!
+!               [ END do loop over k and i indices ]
+!
 !-----------------------------------------------------------------------
 !     arguments
 !-----------------------------------------------------------------------
@@ -21,7 +102,8 @@ real, intent(in)                                                :: dtts
 type(ocean_thickness_type), intent(in)                          :: Thickness
 type(ocean_density_type), intent(in)                            :: Dens
 real, intent(in), dimension(isd:ied,jsd:jed)                    :: swflx        ! short wave radiation flux (W/m^2)
-real, intent(in), dimension(isd:,jsd:,:)                    :: sw_frac_zt        ! short wave fraction on T grid (none)
+real, intent(in), dimension(isd:,jsd:,:)                        :: sw_frac_zt   ! short wave fraction on T grid (none)
+real, intent(in)                                                :: days_in_this_year
 
 !-----------------------------------------------------------------------
 !     local variables
@@ -68,7 +150,7 @@ integer :: index_temp, index_salt
 
   call time_interp_external(alphabio_id, time%model_time, alphabio)
   call time_interp_external(parbio_id, time%model_time, parbio)
-  call time_interp_external(abioa_id, time%model_time, abioa)
+  call time_interp_external(abioa_phy_id, time%model_time, abioa_phy)
   call time_interp_external(bbioa_id, time%model_time, bbioa)
   call time_interp_external(cbioa_id, time%model_time, cbioa)
   call time_interp_external(phykn_id, time%model_time, phykn)
@@ -247,7 +329,7 @@ do n = 1, instances  !{
 
           radbio3d(i,j,k) = radbio
 
-          vpbio(i,k) = abioa(i,j)*bbioa(i,j)**                                  &
+          vpbio(i,k) = abioa_phy(i,j)*bbioa(i,j)**                                  &
                   (cbioa(i,j)*t_prog(index_temp)%field(i,j,k,time%tau))/86400.0
 
 !          vpbio(i,k)= 0.6* (1.006)**T_prog(index_temp)%field(i,j,k,Time%tau) 
