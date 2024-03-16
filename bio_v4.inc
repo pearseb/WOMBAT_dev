@@ -103,7 +103,7 @@ real, intent(in)                                                :: dtts
 type(ocean_thickness_type), intent(in)                          :: Thickness
 type(ocean_density_type), intent(in)                            :: Dens
 real, intent(in), dimension(isd:ied,jsd:jed)                    :: swflx        ! short wave radiation flux (W/m^2)
-real, intent(in), dimension(isd:,jsd:,:)                    :: sw_frac_zt        ! short wave fraction on T grid (none)
+real, intent(in), dimension(isd:,jsd:,:)                        :: sw_frac_zt   ! short wave fraction on T grid (none)
 real, intent(in)                                                :: days_in_this_year
 
 !-----------------------------------------------------------------------
@@ -117,72 +117,298 @@ integer :: n
 
 logical :: used
 integer :: index_temp, index_salt
+integer :: ts_npzd                      ! number of time steps within NPZD model
+integer :: tn, trn
+integer :: ichl                         ! index for chlorophyll-dependent light attenuation coefficient table
 
-! BGC parameters now read from bgc_param.nc at run time. mac, aug11.  
-! include "rjm_param_201005.inc"
+! ---------------------- !
+!!! ------------------ !!!
+!!! Time and constants !!!
+!!! ------------------ !!!
+! ---------------------- !
+real :: pi = 3.14159265358979           ! pi
+real :: epsi = 1e-16                    ! small number for ensuring division by zero doesn't happen
+real :: rdtts                           ! 1/dtts
+real :: dtsb                            ! number of seconds in the time-split of the ecosystem component
+real :: day_angle                       ! Fractional year in radians as a function of days_in_this_year
+real :: declination                     ! Angle between the rays of the Sun and the plane of the Earth's equator
+real :: cos_hour_angle                  ! A measure of time since solar noon (radians)
 
-      integer :: ts_npzd     ! number of time steps within NPZD model
-      integer :: tn, trn
-      integer :: ichl
+! ---------------------------- !
+!!! ------------------------ !!!
+!!! Temperature and salinity !!!
+!!! ------------------------ !!!
+! ---------------------------- !
+real :: zval                            ! Generic value. Used many times in different parts of this code.
+real :: ztem                            ! Temperature (deg C)
+real :: zsal                            ! Salinity (psu)
+real :: ztemk                           ! Temperature (Kelvin)
+real :: mld(isd:ied,jsd:jed)            ! Mixed layer depth
 
-      real :: pi    = 3.14159265358979  !yes, this is pi
-      real :: biotr(isc:iec,grid%nk,ntr_bmax), pprod(isc:iec,jsc:jec,grid%nk)
-      real :: bionh4, biopo4, biono3, biosil, biofe, biooxy,                                       &
-              biophy, biodia, biozoo, biomes, biodet, biopoc, biocaco3,                            &
-              biopchl, biodchl, biophyfe, biodiafe, biozoofe, biomesfe, biodiasi,                  &
-              biodetfe, biopocfe, biopocsi 
-      real :: biophy_min, biodia_min, biodet_min, biopoc_min, biozoo_min
-      real :: phy_limnut, dia_limnut, phy_limnh4, phy_limno3, dia_limnh4, dia_limno3,              &
-              phy_zlimnit, phy_zlimnh4, phy_zlimno3, dia_zlimnit, dia_zlimnh4, dia_zlimno3,        &
-              phy_conc1, phy_conc2, dia_conc1, dia_conc2,                                          &
-              phy_k_nit, phy_k_fer, phy_k_pho, dia_k_nit, dia_k_fer, dia_k_pho, dia_k_sil
-      real :: phy_slmor, dia_slmor, phy_sqmor, dia_sqmor
-      real :: u_phy, u_dia, gmax, g_zoo, g_mes, zooprey, mesprey
-      real :: fx1,fx2,fx3,fx4,fu1,fu2
-      real :: mumax_phy(isc:iec,grid%nk), mumax_dia(isc:iec,grid%nk),                              &
-              mu_phy(isc:iec,grid%nk), mu_dia(isc:iec,grid%nk)
-!chd auxiliary variables to prevent unnecessary computation
-      real :: fbc
-      real :: f11phy,f11dia,                                                                       &
-              z21phy,z21dia,z21det,z21poc,                                                         &
-              m21phy,m21dia,m21det,m21poc,m21zoo,                                                  & 
-              f22phy,f23phy,f22dia,f23dia,                                                         & 
-              z31,z32,m31,m32,f41det,f41poc,f41pocsi,f51 
-      real :: epsi      = 1e-16
-      real :: rdtts      !1/dtts
-      real :: dtsb
-      real :: adv_fb1(isc:iec,1:grid%nk+1), adv_fb2(isc:iec,1:grid%nk+1),                          &
-              adv_fb3(isc:iec,1:grid%nk+1), adv_fb4(isc:iec,1:grid%nk+1),                          &
-              adv_fb5(isc:iec,1:grid%nk+1)
-      real, dimension(isd:ied,jsd:jed) :: mld
-      real :: caco3_bgc_change, no3_bgc_change, nh4_bgc_change
-! PJB additions
-      real :: day_angle, declination, cos_hour_angle, daylight_hours, zchl
-      real, dimension(4,61) :: zrgb
-      real, dimension(isc:iec)           :: keuphot
-      real, dimension(isc:iec,grid%nk,3) :: ek_rgb, par_rgb
-      real, dimension(isc:iec,grid%nk)   :: biomask
-      real, dimension(isc:iec,grid%nk)   :: par_tot, par_phy, par_dia, par_phymld, par_diamld,     &
-                                            par_eup, phy_pisl, dia_pisl, phy_lday, dia_lday,       &
-                                            chl_lday, phy_lpar, dia_lpar, pchl_lpar, dchl_lpar,    &
-                                            phy_chlc, dia_chlc, phy_chl_lpar, dia_chl_lpar,        &
-                                            phy_chl_prod, dia_chl_prod, mu_pchl, mu_dchl,          &
-                                            phy_FeC, dia_FeC, zoo_FeC, det_FeC, poc_FeC, mes_FeC,  &
-                                            phy_Feupt, dia_Feupt, phy_limfe, dia_limfe,            &
-                                            phy_limnit, dia_limnit, phy_limpho, dia_limpho,        &
-                                            dia_limsil, dia_SiC, poc_SiC, si_xlabile, si_lab2non,  &
-                                            nitrif, dia_SiCupt
-      real, dimension(isc:iec) :: par_phy_mldsum, par_dia_mldsum, par_tot_mldsum, par_z_mldsum
-      real :: z1_dep, zval, ztem, zsal, ztemk
-      real :: phy_pisl2, dia_pisl2
-      real :: phy_chl_pisl, max_pchl, mumin_pchl, phy_minFeC, phy_maxQFe, phy_KFe,                 &
-              phy_Feupt_upreg, phy_Feupt_downreg, phy_xsize, phy_det2poc,                          &
-              dia_chl_pisl, max_dchl, mumin_dchl, dia_minFeC, dia_maxQFe, dia_KFe,                 &
-              dia_Feupt_upreg, dia_Feupt_downreg, dia_xsize, dia_det2poc, zoo_det2poc, mes_det2poc
-      real :: ligand, fe_keq, fe_III, fe_lig, fe_col,                                              &
-              fesol1, fesol2, fesol3, fesol4, fesol5, hp, fe3sol, precip,                          &
-              partic, scaven, scadet, scapoc, feloss, fe2det, fe2poc
-      real :: sicfac1, sicfac2, sio3eq, sisat1, sisat2, sidisr, siremin
+!-------------------!
+!!! ------------- !!!
+!!! Tracer values !!!
+!!! ------------- !!!
+!-------------------!
+real :: bionh4                          ! MAX(0.0, ammonium)
+real :: biopo4                          ! MAX(0.0, phosphate) 
+real :: biono3                          ! MAX(0.0, nitrate)
+real :: biosil                          ! MAX(0.0, silicic acid)
+real :: biofe                           ! MAX(0.0, dissolved iron)
+real :: biooxy                          ! MAX(0.0, oxygen)
+real :: biophy                          ! MAX(0.0, nanophytoplankton)
+real :: biodia                          ! MAX(0.0, microphytoplankton)
+real :: biozoo                          ! MAX(0.0, microzooplankton)
+real :: biomes                          ! MAX(0.0, mesozooplankton)
+real :: biodet                          ! MAX(0.0, slow-sinking detritus)
+real :: biopoc                          ! MAX(0.0, fast-sinking detrius)
+real :: biocaco3                        ! MAX(0.0, calcium carbonate)
+real :: biopchl                         ! MAX(0.0, nanophytoplankton chlorophyll) 
+real :: biodchl                         ! MAX(0.0, microphytoplankton chlorophyll) 
+real :: biophyfe                        ! MAX(0.0, nanophytoplankton iron)
+real :: biodiafe                        ! MAX(0.0, microphytoplankton iron)
+real :: biozoofe                        ! MAX(0.0, microzooplankton iron)
+real :: biomesfe                        ! MAX(0.0, mesozooplankton iron)
+real :: biodiasi                        ! MAX(0.0, microphytoplankton silicate)
+real :: biodetfe                        ! MAX(0.0, slow-sinking detrital iron)
+real :: biopocfe                        ! MAX(0.0, fast-sinking detrital iron)
+real :: biopocsi                        ! MAX(0.0, fast-sinking detrital silicate)
+real :: biophy_min                      ! MAX(some_threshold, nanophytoplankton)     || beneath some_threshold no mortality occurs
+real :: biodia_min                      ! MAX(some_threshold, microphytoplankton     || beneath some_threshold no mortality occurs
+real :: biozoo_min                      ! MAX(some_threshold, mesozooplankton)       || beneath some_threshold no mortality occurs
+real :: biodet_min                      ! MAX(some_threshold, slow-sinking detritus) || beneath some_threshold no mortality occurs
+real :: biopoc_min                      ! MAX(some_threshold, fast-sinking detritus) || beneath some_threshold no mortality occurs
+real :: biomask(isc:iec,grid%nk)        ! Land-sea masking
+real :: biotr(isc:iec,grid%nk,ntr_bmax) ! Biogeochemical tracer array
+
+! --------------------------------------------- !
+!!! ----------------------------------------- !!!
+!!! Limitation terms for phytoplankton growth !!!
+!!! ----------------------------------------- !!!
+! --------------------------------------------- !
+real :: phy_limnut                      ! Nanophytoplankton limitation by all nutrients   || 0 == full limitation
+real :: phy_limnh4                      ! Nanophytoplankton limitation by ammonium        || 0 == full limitation
+real :: phy_limno3                      ! Nanophytoplankton limitation by nitrate         || 0 == full limitation
+real :: dia_limnut                      ! Microphytoplankton limitation by all nutrients  || 0 == full limitation
+real :: dia_limnh4                      ! Microphytoplankton limitation by ammonium       || 0 == full limitation
+real :: dia_limno3                      ! Mircophytoplankton limitation by nitrate        || 0 == full limitation
+real :: phy_zlimnit                     ! Nanophytoplankton initial guess at nitrogen limitation 
+real :: phy_zlimnh4                     ! Nanophytoplankton initial guess at ammonium limitation
+real :: phy_zlimno3                     ! Nanophytoplankton initial guess at nitrate limitation
+real :: dia_zlimnit                     ! Microphytoplankton initial guess at nitrogen limitation
+real :: dia_zlimnh4                     ! Microphytoplankton initial guess at ammonium limitation
+real :: dia_zlimno3                     ! Microphytoplankton initial guess at nitrate limitation
+real :: phy_conc1                       ! Nanophytoplankton biomass exceeding bloom threshold
+real :: phy_conc2                       ! Nanophytoplankton biomass (but maximum == bloom threshold)
+real :: dia_conc1                       ! Microphytoplankton biomass exceeding bloom threshold
+real :: dia_conc2                       ! Microphytoplankton biomass (but maximum == bloom threshold) 
+real :: phy_k_nit                       ! Nanophytoplankton half-saturation coefficient for dissolved inorganic nitrogen uptake
+real :: phy_k_fer                       ! Nanophytoplankton half-saturation coefficient for dissolved iron uptake
+real :: phy_k_pho                       ! Nanophytoplankton half-saturation coefficient for phosphate uptake
+real :: dia_k_nit                       ! Microphytoplankton half-saturation coefficient for dissolved inorganic nitrogen uptake
+real :: dia_k_fer                       ! Microphytoplankton half-saturation coefficient for dissolved iron uptake
+real :: dia_k_pho                       ! Microphytoplankton half-saturation coefficient for phosphate uptake
+real :: dia_k_sil                       ! Microphytoplankton half-saturation coefficient for slicic acid uptake 
+real :: phy_limnit(isc:iec,grid%nk)     ! Nanophytoplankton limitation by nitrogen
+real :: dia_limnit(isc:iec,grid%nk)     ! Microphytoplankton limitation by nitrogen
+real :: phy_limpho(isc:iec,grid%nk)     ! Nanophytoplankton limitation by phosphorus
+real :: dia_limpho(isc:iec,grid%nk)     ! Microphytoplankton limitation by phosphorus
+real :: dia_limsil(isc:iec,grid%nk)     ! Microphytoplankton limitation by silicic acid
+real :: phy_limfe(isc:iec,grid%nk)      ! Nanophytoplankton limitation by iron
+real :: dia_limfe(isc:iec,grid%nk)      ! Microphytoplankton limitation by iron
+
+! ------------------------------------- !
+!!! --------------------------------- !!!
+!!! Mortality terms for phytoplankton !!!
+!!! --------------------------------- !!!
+! ------------------------------------- !
+real :: phy_slmor                       ! Scaler [0-1] to depress linear nanophytoplankton mortality in nutrient-limited regimes
+real :: dia_slmor                       ! Scaler [0-1] to depress linear microphytoplankton mortality in nutrient-limited regimes
+
+! ---------------------------- !
+!!! ------------------------ !!!
+!!! Growth and grazing rates !!!
+!!! ------------------------ !!!
+! ---------------------------- !
+real :: u_phy                           ! Realised growth rate of nanophytoplankton (nutrients & light limitations)
+real :: u_dia                           ! Realised growth rate of microphytoplankton (nutrients & light limitations)
+real :: g_zoo                           ! Realised grazing rate of microzooplankton
+real :: g_mes                           ! Realised grazing rate of mesozooplankton
+real :: zooprey                         ! Total prey biomass for microzooplankton
+real :: mesprey                         ! Total prey biomass for mesozooplankton
+real :: fbc                             ! Heterotrophic temperature-dependence function
+real :: mumax_phy(isc:iec,grid%nk)      ! Maximum potential (T-dependent) growth rate of nanophytoplankton
+real :: mumax_dia(isc:iec,grid%nk)      ! Maximum potential (T-dependent) growth rate of microphytoplankton
+real :: mu_phy(isc:iec,grid%nk)         ! Realised growth rate of nanophytoplankton (light limitation)
+real :: mu_dia(isc:iec,grid%nk)         ! Realised growth rate of microphytoplankton (light limitation)
+
+! --------------------------------------- !
+!!! ----------------------------------- !!!
+!!! Tendency terms for tracer equations !!!
+!!! ----------------------------------- !!!
+! --------------------------------------- !
+real :: f11phy                          ! Nanophytoplankton biomass growth 
+real :: f11dia                          ! Microphytoplankton biomass growth
+real :: z21phy                          ! Microzooplankton grazing of nanophytoplankton
+real :: z21dia                          ! Microzooplankton grazing of microphytoplankton
+real :: z21det                          ! Microzooplankton grazing of slow-sinking detritus 
+real :: z21poc                          ! Microzooplankton grazing of fast-sinking detritus 
+real :: m21phy                          ! Mesozooplankton grazing of nanophytoplankton 
+real :: m21dia                          ! Mesozooplankton grazing of microphytoplankton 
+real :: m21det                          ! Mesozooplankton grazing of slow-sinking detritus 
+real :: m21poc                          ! Mesozooplankton grazing of fast-sinking detritus 
+real :: m21zoo                          ! Mesozooplankton grazing of microzooplankton 
+real :: f22phy                          ! Nanophytoplankton biomass loss via linear mortality (respiration)
+real :: f23phy                          ! Nanophytoplankton biomass loss via quadratic mortality (viral lysis, etc.)
+real :: f22dia                          ! Microphytoplankton biomass loss via linear mortality (respiration)
+real :: f23dia                          ! Microphytoplankton biomass loss via quadratic mortality (viral lysis, etc.)
+real :: z31                             ! Microzooplankton biomass loss via linear mortality (excretion)
+real :: z32                             ! Mesozooplankton biomass loss via quadratic mortality (predation, infection, etc.)
+real :: m31                             ! Mesozooplankton biomass loss via linear mortality (excretion)
+real :: m32                             ! Mesozooplankton biomass loss via quadratic mortality (predation, infection, etc.)
+real :: f41det                          ! Remineralisation of slow-sinking detritus to inorganic constituents   
+real :: f41poc                          ! Remineralisation of fast-sinking detritus to inorganic constituents   
+real :: f41pocsi                        ! Remineralisation of fast-sinking detrital silicate to silicic acid
+real :: f51                             ! Remineralisation of CaCO3 to DIC and Alkalinity
+real :: caco3_bgc_change                ! Total change in CaCO3 following time-splitting of ecosystem component 
+real :: no3_bgc_change                  ! Total change in nitrate following time-splitting of ecosystem component 
+real :: nh4_bgc_change                  ! Total change in ammonium following time-splitting of ecosystem component
+
+! ------------------------- !
+!!! --------------------- !!!
+!!! Light and chlorophyll !!!
+!!! --------------------- !!!
+! ------------------------- !
+real :: zchl                            ! Total chlorophyll in mg/m3  || used to find light attenuation coefficients
+real :: phy_pisl2                       ! Photosynthetic-Irradiance slope of nanophytoplankton (~ Chl:C, respiration, daylength, zeuph/zmld)
+real :: dia_pisl2                       ! Photosynthetic-Irradiance slope of microphytoplankton (~ Chl:C, respiration, daylength, zeuph/zmld)
+real :: phy_chl_pisl                    ! Photosynthetic-Irradiance slope of nanophytoplankton chlorophyll (~ Chl:C, µmax, daylength, zeuph/zmld) 
+real :: max_pchl                        ! Maximum nanophytoplankton Chl:C ratio (~ temperature)
+real :: mumin_pchl                      ! Minimum rate of chlorophyll growth in nanophytoplankton to achieve minimum Chl:C ratio
+real :: dia_chl_pisl                    ! Photosynthetic-Irradiance slope of microphytoplankton chlorophyll (~ Chl:C, µmax, daylength, zeuph/zmld) 
+real :: max_dchl                        ! Maximum nanophytoplankton Chl:C ratio (~ temperature)
+real :: mumin_dchl                      ! Minimum rate of chlorophyll growth in nanophytoplankton to achieve minimum Chl:C ratiol 
+real :: keuphot(isc:iec)                ! Estimated depth of the euphotic zone
+real :: daylight(isc:iec)               ! Number of daylight hours in a day
+real :: par_phy_mldsum(isc:iec)         ! Sum of photosynthetic active radiation seen by nanophytoplankton in the mixed layer
+real :: par_dia_mldsum(isc:iec)         ! Sum of photosynthetic active radiation seen by microphytoplankton in the mixed layer
+real :: par_tot_mldsum(isc:iec)         ! Sum of photosynthetic active radiation in the mixed layer
+real :: par_z_mldsum(isc:iec)           ! Sum of depths in the mixed layer
+real :: par_tot(isc:iec,grid%nk)        ! Total photosynthetic active radiation (red + green + blue)
+real :: par_phy(isc:iec,grid%nk)        ! Photosynthetic active radiation seen by nanophytoplankton (red + green + blue)
+real :: par_dia(isc:iec,grid%nk)        ! Photosynthetic active radiation seen by microphytoplankton (red + green + blue)
+real :: par_phymld(isc:iec,grid%nk)     ! Average photosynthetic active radiation seen by nanophytoplankton (red + green + blue) in mixed layer 
+real :: par_diamld(isc:iec,grid%nk)     ! Average photosynthetic active radiation seen by microphytoplankton (red + green + blue) in mixed layer
+real :: par_eup(isc:iec,grid%nk)        ! Photosynthetic active radiation for calculation of euphotic zone depth
+real :: phy_pisl(isc:iec,grid%nk)       ! Initial guess at photosynthesis-irradiance slope (~ Chl:C) for nanophytoplankton
+real :: dia_pisl(isc:iec,grid%nk)       ! Initial guess at photosynthesis-irradiance slope (~ Chl:C) for microphytoplankton
+real :: phy_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for nanophytoplankton 
+real :: dia_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for microphytoplankton
+real :: chl_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for chlorophyll production
+real :: phy_lpar(isc:iec,grid%nk)       ! Light limitation term for nanophytoplankton
+real :: dia_lpar(isc:iec,grid%nk)       ! Light limitation term for microphytoplankton
+real :: phy_chl_lpar(isc:iec,grid%nk)   ! Light limitation term for nanophytoplankton chlorophyll
+real :: dia_chl_lpar(isc:iec,grid%nk)   ! Light limitation term for microphytoplankton chlorophyll
+real :: phy_chlc(isc:iec,grid%nk)       ! Nanophytoplankton Chl:C ratio
+real :: dia_chlc(isc:iec,grid%nk)       ! Microphytoplankton Chl:C ratio
+real :: phy_chl_prod(isc:iec,grid%nk)   ! Realised growth rate of nanophytoplankton chlorophyll (light limited) 
+real :: dia_chl_prod(isc:iec,grid%nk)   ! Realised growth rate of microphytoplankton chlorophyll (light limited)
+real :: mu_pchl(isc:iec,grid%nk)        ! Growth rate of nanophytoplankton chlorophyll
+real :: mu_dchl(isc:iec,grid%nk)        ! Growth rate of microphytoplankton chlorophyll
+real :: ek_rgb(isc:iec,grid%nk,3)       ! Attenutation coefficients for red, green and blue light
+real :: par_rgb(isc:iec,grid%nk,3)      ! Photosynthetic active radiation split into red, green and blue light wavelength bands
+real :: zrgb(4,61)                      ! Table of attenutation coefficients for red, green and blue light dependent on chlorophyll concentration
+
+! -------------- !
+!!! ---------- !!!
+!!! Iron cycle !!!
+!!! ---------- !!!
+! -------------- !
+real :: phy_minFeC                      ! Minimum Fe:C quota of nanophytoplankton given their Chlorophyll content and N limitations 
+real :: phy_maxQFe                      ! Maximum Fe:C quota of nanophytoplankton
+real :: phy_Feupt_upreg                 ! Upregulation of Fe uptake by nanophytoplankton in response to low Fe cellular quota
+real :: phy_Feupt_downreg               ! Downregulation of Fe uptake by nanophytoplankton in response to achieving high cellular Fe quotas
+real :: dia_minFeC                      ! Minimum Fe:C quota of microphytoplankton given their Chlorophyll content and N limitations         
+real :: dia_maxQFe                      ! Maximum Fe:C quota of microphytoplankton
+real :: dia_Feupt_upreg                 ! Upregulation of Fe uptake by microphytoplankton in response to low Fe cellular quota
+real :: dia_Feupt_downreg               ! Downregulation of Fe uptake by microphytoplankton in response to achieving high cellular Fe quotas
+real :: ligand                          ! Concentration of ligand in the ocean 
+real :: fe_keq                          ! Equilibrium coefficient determining fraction of dFe in Fe' or L-Fe (ligand bound) (~ temperature)
+real :: fe_III                          ! Estimated concentration of Fe' (ferric iron form, Fe(III))
+real :: fe_lig                          ! Amount of dFe bound to organic ligands
+real :: fe_col                          ! Amount of dFe within the colloidal form
+real :: fesol1                          ! Fe solubility constant 1 (~ Salinity and Temperature)
+real :: fesol2                          ! Fe solubility constant 2 (~ Salinity and Temperature)
+real :: fesol3                          ! Fe solubility constant 3 (~ Salinity and Temperature)
+real :: fesol4                          ! Fe solubility constant 4 (~ Salinity and Temperature)
+real :: fesol5                          ! Fe solubility constant 5 (~ Salinity and Temperature)
+real :: hp                              ! concentration of hydrogen ions (H+) derived from pH
+real :: fe3sol                          ! Solubility of Fe(III) as Fe' (free iron)
+real :: precip                          ! Rate of Fe' precipitation to Fe hydroxides and oxyhydroxides (permanent loss of dFe)
+real :: partic                          ! Concentration of particles (Carbon detritus + CaCO3 + BSi)
+real :: scaven                          ! Rate of scavenging of Fe' (Fe(III)) to total detritus
+real :: scadet                          ! Rate of scavenging of Fe' (Fe(III)) to slow-sinking fraction of detritus
+real :: scapoc                          ! Rate of scavenging of Fe' (Fe(III)) to fast-sinking fraction of detritus
+real :: feloss                          ! Rate of ambiguous dFe losses in near-coastal environments (i.e., amplified scavenging, etc.)
+real :: fe2det                          ! Rate of coagulation of colloidal dFe to slow-sinking detritus
+real :: fe2poc                          ! Rate of coagulation of colloidal dFe to fast-sinking detritus
+real :: phy_FeC(isc:iec,grid%nk)        ! Nanophytoplankton Fe:C ratio
+real :: dia_FeC(isc:iec,grid%nk)        ! Microphytoplankton Fe:C ratio
+real :: zoo_FeC(isc:iec,grid%nk)        ! Microzooplankton Fe:C ratio
+real :: mes_FeC(isc:iec,grid%nk)        ! Mesozooplankton Fe:C ratio
+real :: det_FeC(isc:iec,grid%nk)        ! Slow-sinking detritus Fe:C ratio
+real :: poc_FeC(isc:iec,grid%nk)        ! Fast-sinking detritus Fe:C ratio
+real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
+real :: dia_Feupt(isc:iec,grid%nk)      ! Microphytoplankton Fe uptake rate
+
+! ----------------- !
+!!! ------------- !!!
+!!! Silicon cycle !!!
+!!! ------------- !!!
+! ----------------- !
+real :: sicfac1                         ! Factor determining Si:C ratio of diatoms --> varies from [1,5.4] as silicate increases and as nutrient/daylight limitation increases 
+real :: sicfac2                         ! Factor determining Si:C ratio of diatoms --> varies from [1,3] as silicate increases
+real :: sio3eq                          ! Solubility of silicic acid in seawater. Increases as temperature increases
+real :: sisat1                          ! Silicic acid saturation factor --> goes to 1 when silicic acid concentration is much less than the solubility
+real :: sisat2                          ! Silicic acid saturation factor --> 0.8 at 0ºC and 14.5 at 30ºC
+real :: sidisr                          ! Overall temperature-dependent scaler for the dissolution rate of biogenic silicate 
+real :: siremin                         ! Rate of biogenic silicate dissolution into silicic acid
+real :: dia_SiC(isc:iec,grid%nk)        ! Microphytoplankton Si:C ratio
+real :: poc_SiC(isc:iec,grid%nk)        ! Fast-sinking detritus Si:C ratio
+real :: si_xlabile(isc:iec,grid%nk)     ! Fraction of biogenic silicate that is labile
+real :: si_lab2non(isc:iec,grid%nk)     ! Ratio of labile to non-labile biogenic silicate
+real :: dia_SiCupt(isc:iec,grid%nk)     ! Microphytoplankton Si:C uptake rate
+
+! -------------------- !
+!!! ---------------- !!!
+!!! Detrital routing !!!
+!!! ---------------- !!!
+! -------------------- !
+real :: phy_xsize                       ! Proxy for average size of nanophytoplankton community (larger during bloom conditions)
+real :: dia_xsize                       ! Proxy for average size of microphytoplankton community (larger during bloom conditions)
+real :: phy_det2poc                     ! Fraction of nanophytoplankton biomass that is routed to slow-sinking detritus
+real :: dia_det2poc                     ! Fraction of microphytoplankton biomass that is routed to slow-sinking detritus
+real :: zoo_det2poc                     ! Fraction of microzooplankton biomass that is routed to slow-sinking detritus
+real :: mes_det2poc                     ! Fraction of mesozooplankton biomass that is routed to slow-sinking detritus
+
+! -------------------- !
+!!! ---------------- !!!
+!!! Detrital sinking !!!
+!!! ---------------- !!!
+! -------------------- !
+real :: adv_fb1(isc:iec,1:grid%nk+1)    ! Sinking of slow-sinking detritus (carbon)
+real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of slow-sinking detritus (iron)
+real :: adv_fb3(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (carbon)
+real :: adv_fb4(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (iron)
+real :: adv_fb5(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (silicate)
+
+! ------------------- !
+!!! --------------- !!!
+!!! Chemoautotrophy !!!
+!!! --------------- !!!
+! ------------------- !
+real :: nitrif(isc:iec,grid%nk)         ! Nitrification rate (NH4 --> NO3)
+
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -274,7 +500,8 @@ integer :: index_temp, index_salt
   call time_interp_external(diamaxqf_id, time%model_time, diamaxqf) !Diatom maximum Fe:C quota 
   call time_interp_external(phyoptqf_id, time%model_time, phyoptqf) !Phytoplankton optimal Fe:C quota
   call time_interp_external(diaoptqf_id, time%model_time, diaoptqf) !Diatom optimal Fe:C quota 
-  call time_interp_external(abioa_id, time%model_time, abioa)       !Autotrophic T-dependent scalar
+  call time_interp_external(abioa_phy_id, time%model_time, abioa_phy) !Autotrophic T-dependent scalar
+  call time_interp_external(abioa_dia_id, time%model_time, abioa_dia) !Autotrophic T-dependent scalar
   call time_interp_external(bbioa_id, time%model_time, bbioa)       !Autotrophic T-dependent base
   call time_interp_external(cbioa_id, time%model_time, cbioa)       !Autotrophic T-dependent exponent
   call time_interp_external(abioh_id, time%model_time, abioh)       !Heterotrophic T-dependent scalar
@@ -306,7 +533,7 @@ integer :: index_temp, index_salt
   call time_interp_external(mesqmor_id, time%model_time, mesqmor)   !Mesozooplankton quadratic mortality
   call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
-  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Sinking rate of fast detritus
+  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Sinking rate of slow detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
@@ -516,14 +743,16 @@ do n = 1, instances  !{
        chl_lday(:,:) = 1e-2
        keuphot(:) = 4  ! set k level of euphotic zone to 10 metres
 
-       do k=1,grid%nk
-         do i=isc,iec
-
-! pjb - Calculate the daylength (hours per day) given the latitude and day of year
+       do i=isc,iec
+           ! Calculate the daylength (hours per day) given the latitude and day of year
            day_angle = 2.0*pi*(days_in_this_year-1)/365.0
            declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
            cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
-           daylight_hours = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+           daylight(i) = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+       enddo
+
+       do k=1,grid%nk
+         do i=isc,iec
 
 ! pjb - Get the attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
            zchl = MAX(0.05, MIN(10.0, biotr(i,k,id_pchl)+biotr(i,k,id_dchl) ))
@@ -600,16 +829,16 @@ do n = 1, instances  !{
 
 ! pjb - Calculate average light level in the mixed layer
            if (grid%zw(k) .le. mld(i,j)) then
-             z1_dep = 1.0/par_z_mldsum(i)
-             par_phymld(i,k) = par_phy_mldsum(i) * z1_dep
-             par_diamld(i,k) = par_dia_mldsum(i) * z1_dep
+             zval = 1.0/par_z_mldsum(i)
+             par_phymld(i,k) = par_phy_mldsum(i) * zval
+             par_diamld(i,k) = par_dia_mldsum(i) * zval
            else
              par_phymld(i,k) = par_phy(i,k)
              par_diamld(i,k) = par_dia(i,k)
            endif
 
 ! pjb - Calculate impact of daylength on phytoplankton and chlorophyll production
-           zval = MAX(1.0, daylight_hours)
+           zval = MAX(1.0, daylight(i))
            if (grid%zw(k) .le. mld(i,j)) then
              zval = zval * MIN(1.0, (zeuphot(i,j)+epsi)/(mld(i,j)+epsi))
            endif
@@ -622,8 +851,8 @@ do n = 1, instances  !{
 
            ! Temperature-dependent maximum growth rate (Eppley curve)
            ztem = t_prog(index_temp)%field(i,j,k,time%tau)
-           mumax_phy(i,k) = abioa(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) * 1.0/86400.0
-           mumax_dia(i,k) = abioa(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) * 1.0/86400.0
+           mumax_phy(i,k) = abioa_phy(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) * 1.0/86400.0
+           mumax_dia(i,k) = abioa_dia(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) * 1.0/86400.0
 
          enddo  ! i
        enddo  ! k
@@ -759,7 +988,7 @@ do n = 1, instances  !{
           precip = max(0.0, ( fe_III - fe3sol ) ) * 0.01/86400.0
 
           ! 3. Scavenging of Fe` (Fe` --> DET & POC)
-          partic = (biodet + biopoc + biocaco3)
+          partic = (biodet + biopoc + biocaco3 + biopocsi)
           scaven = fe_III * (3e-5 + 0.005 * partic) / 86400.0 * 1e-3
           scadet = scaven * (biodet+epsi) / (partic+epsi)
           scapoc = scaven * (biopoc+epsi) / (partic+epsi)
@@ -791,27 +1020,27 @@ do n = 1, instances  !{
           ! Calculate the variable half-saturation Ks (change with population biomass)
           phy_conc1 = max(0.0, biophy - phybiot(i,j))  ! phybiot is threshold of phyto biomass in µM
           phy_conc2 = biophy - phy_conc1
-          phy_k_nit = max( phykn(i,j),                                                             &
+          phy_k_nit = max( phykn(i,j),                                                      &
                            ( phy_conc2 * phykn(i,j) + phy_conc1 * 3.0 * phykn(i,j) )               &
                             / ( biophy + epsi ) )
-          phy_k_fer = max( phykf(i,j),                                                             &
+          phy_k_fer = max( phykf(i,j),                                                      &
                            ( phy_conc2 * phykf(i,j) + phy_conc1 * 3.0 * phykf(i,j) )               &
                            / ( biophy + epsi ) )
-          phy_k_pho = max( phykp(i,j),                                                             &
+          phy_k_pho = max( phykp(i,j),                                                      &
                            ( phy_conc2 * phykp(i,j) + phy_conc1 * 3.0 * phykp(i,j) )               &
                            / ( biophy + epsi ) )
           dia_conc1 = max(0.0, biodia - diabiot(i,j))  ! diabiot is threshold of diatom biomass in µM
           dia_conc2 = biodia - dia_conc1
-          dia_k_nit = max( diakn(i,j),                                                             &
+          dia_k_nit = max( diakn(i,j),                                                      &
                            ( dia_conc2 * diakn(i,j) + dia_conc1 * 3.0 * diakn(i,j) )               &
                            / ( biodia + epsi ) )
-          dia_k_fer = max( diakf(i,j),                                                             &
+          dia_k_fer = max( diakf(i,j),                                                      &
                            ( dia_conc2 * diakf(i,j) + dia_conc1 * 3.0 * diakf(i,j) )               &
                            / ( biodia + epsi ) )
-          dia_k_pho = max( diakp(i,j),                                                             &
+          dia_k_pho = max( diakp(i,j),                                                      &
                            ( dia_conc2 * diakp(i,j) + dia_conc1 * 3.0 * diakp(i,j) )               &
                            / ( biodia + epsi ) )
-          dia_k_sil = max(8.0, 1.0 + 7.*biosil**2 / (biosil**2 + 16.5**2) )
+          dia_k_sil = max(8.0, 1.0 + 7.0*biosil**2 / (biosil**2 + 16.5**2) )
 
 
           ! Nitrogen (NH4 & NO3)
@@ -875,11 +1104,11 @@ do n = 1, instances  !{
           phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * phyminqc(i,j))
           dia_pisl(i,k) = MAX(alphabio(i,j) * dia_chlc(i,k), alphabio(i,j) * diaminqc(i,j))
           !   2. Alter the slope to account for respiration and daylength limitation
-          phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * phy_lday(i,k) )
-          dia_pisl2= dia_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * dia_lday(i,k) )
+          phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
+          dia_pisl2= dia_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
           !   3. Calculate light limitation
-          phy_lpar(i,k) = 1.0 - EXP(-phy_pisl2 * par_phy(i,k))
-          dia_lpar(i,k) = 1.0 - EXP(-dia_pisl2 * par_dia(i,k))
+          phy_lpar(i,k) = (1.0 - EXP(-phy_pisl2 * par_phy(i,k))) * phy_lday(i,k)
+          dia_lpar(i,k) = (1.0 - EXP(-dia_pisl2 * par_dia(i,k))) * dia_lday(i,k)
           !   4. Apply to maximum growth rate
           mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
           mu_dia(i,k) = mumax_dia(i,k) * dia_lpar(i,k)
@@ -903,6 +1132,8 @@ do n = 1, instances  !{
           sicfac1 = 1.0 + 4.4 * exp(-4.23 * min(dia_lday(i,k), dia_limnut)) *                       &
                    max(0.0, min(1.0, 2.2 * (zval-0.5) ) )
           sicfac2 = 1.0 + 2.0 * biosil**3 / (biosil**3 + 20.0**3) 
+          ! sicfac1 --> [1.0,5.4] as SiOH4 increases and as daylight/nutrient limitation strengthens
+          ! sicfac2 --> [1.0,3.0] as SiOH4 increases 
           dia_SiCupt(i,k) = 0.14 * zval * sicfac1 * sicfac2
 
 
@@ -915,10 +1146,10 @@ do n = 1, instances  !{
           sidisr = 0.225 * (1.0 + ztem/15.0) * sisat1 + 0.775*sisat2*sisat1**9.25 
           if (grid%zt(k) .gt. max(zeuphot(i,j), mld(i,j))) then
             si_lab2non(i,k) = si_lab2non(i,k-1) * exp( -0.5 * (0.03 - 0.003) * sidisr *            &
-                              thickness%dzt(i,j,k) / (wdetbio(i,j)*86400.0) )
+                              thickness%dzt(i,j,k) / (wdetbio(i,j)*10*86400.0) )
             si_xlabile(i,k) = si_lab2non(i,k) / (1.0 + si_lab2non(i,k))
             si_lab2non(i,k) = si_lab2non(i,k) * exp( -0.5 * (0.03 - 0.003) * sidisr *              &
-                              thickness%dzt(i,j,k) / (wdetbio(i,j)*86400.0) )
+                              thickness%dzt(i,j,k) / (wdetbio(i,j)*10*86400.0) )
           endif 
           siremin = 0.03 * si_xlabile(i,k) + 0.003 * (1.-si_xlabile(i,k)) * sidisr
 
@@ -928,11 +1159,11 @@ do n = 1, instances  !{
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           
           !     1. Light-limitation of chlorophyll production
-          phy_chl_pisl = phy_pisl(i,k) / (mumax_phy(i,k) * 86400.0 * chl_lday(i,k)) 
-          phy_chl_lpar(i,k) = 1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))
+          phy_chl_pisl = phy_pisl(i,k) / (mumax_phy(i,k) * 86400.0 * max(daylight(i),1.0)/24.0) 
+          phy_chl_lpar(i,k) = (1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))) * chl_lday(i,k)
           phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
-          dia_chl_pisl = dia_pisl(i,k) / (mumax_dia(i,k) * 86400.0 * chl_lday(i,k)) 
-          dia_chl_lpar(i,k) = 1.0 - EXP( -dia_chl_pisl * par_diamld(i,k))
+          dia_chl_pisl = dia_pisl(i,k) / (mumax_dia(i,k) * 86400.0 * max(daylight(i),1.0)/24.0) 
+          dia_chl_lpar(i,k) = (1.0 - EXP( -dia_chl_pisl * par_diamld(i,k))) * chl_lday(i,k)
           dia_chl_prod(i,k) = mumax_dia(i,k) * dia_chl_lpar(i,k)
           !     2. Minimum rate of chlorophyll growth
           mumin_pchl = phyminqc(i,j) * u_phy * biophy * 12. 
@@ -943,10 +1174,8 @@ do n = 1, instances  !{
           max_dchl = min(diamaxqc(i,j), (diamaxqc(i,j) /                                           &
                      (1.0 - 1.14 / 43.4 * ztem)) * (1.0 - 1.14 / 43.4 * 20.0))
           !     4. Calculate mg Chl produced per mg C Phy 
-          mu_pchl(i,k) = u_phy * biophy * 12. * 86400.0 *                                          &
-                         (phy_chl_prod(i,k) * min(phy_limnit(i,k), phy_limpho(i,k), phy_limfe(i,k))) 
-          mu_dchl(i,k) = u_dia * biodia * 12. * 86400.0 *                                          &
-                         (dia_chl_prod(i,k) * min(dia_limnit(i,k), dia_limpho(i,k), dia_limfe(i,k))) 
+          mu_pchl(i,k) = u_phy * biophy * 12. * 86400.0 * phy_chl_prod(i,k) * phy_limnut 
+          mu_dchl(i,k) = u_dia * biodia * 12. * 86400.0 * dia_chl_prod(i,k) * dia_limnut 
           if (mu_pchl(i,k).gt.0.0) then
             mu_pchl(i,k) = mumin_pchl + ( (max_pchl - phyminqc(i,j)) * mu_pchl(i,k) )              &
                                       / ( phy_pisl(i,k) * par_phymld(i,k)/chl_lday(i,k) )
@@ -1024,9 +1253,6 @@ do n = 1, instances  !{
           ! Depress mortality in nutrient limited regime. Assumes investment in cell maintenance over growth.
           phy_slmor = MIN(1.0, MAX(0.0, min(phy_limnit(i,k), phy_limpho(i,k), phy_limfe(i,k))/0.3))
           dia_slmor = MIN(1.0, MAX(0.0, min(dia_limnit(i,k), dia_limpho(i,k), dia_limfe(i,k))/0.3))
-          ! Depress mortality as phytoplankton population dilutes. Assumes density-dependent transfer
-!          phy_sqmor = biophy_min / (phyqmor(i,j)*86400 + biophy)
-!          dia_sqmor = biodia_min / (phyqmor(i,j)*86400 + biodia)
 
 
           !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1193,7 +1419,7 @@ do n = 1, instances  !{
           
           if (id_poc.ne.0) then
             phy_xsize = ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) ) /(biophy+epsi)
-            dia_xsize = ( min(diabiot(i,j),biodia) + 3*max(0.0,biodia-diabiot(i,j)) ) /(biodia+epsi)
+            dia_xsize = ( min(diabiot(i,j),biodia) + 9*max(0.0,biodia-diabiot(i,j)) ) /(biodia+epsi)
             phy_det2poc = min(0.80, 1.0/(phy_xsize + epsi))
             dia_det2poc = min(0.66, 1.0/(dia_xsize + epsi))
             zoo_det2poc = max(0.0, min( 0.7, (phy_det2poc*biophy + dia_det2poc*biodia)             &
@@ -1473,11 +1699,11 @@ do n = 1, instances  !{
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        do k=2,grid%nk+1
         do i=isc,iec
-         adv_fb1(i,k) = wdetbio(i,j)*0.1 * biotr(i,k-1,id_det)
-         adv_fb2(i,k) = wdetbio(i,j)*0.1 * biotr(i,k-1,id_detfe)
-         adv_fb3(i,k) = wdetbio(i,j) * biotr(i,k-1,id_poc)
-         adv_fb4(i,k) = wdetbio(i,j) * biotr(i,k-1,id_pocfe)
-         adv_fb5(i,k) = wdetbio(i,j) * biotr(i,k-1,id_pocsi)
+         adv_fb1(i,k) = wdetbio(i,j) * biotr(i,k-1,id_det)
+         adv_fb2(i,k) = wdetbio(i,j) * biotr(i,k-1,id_detfe)
+         adv_fb3(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_poc)
+         adv_fb4(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocfe)
+         adv_fb5(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocsi)
         enddo  ! i
        enddo  ! k
 
