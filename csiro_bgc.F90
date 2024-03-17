@@ -974,9 +974,13 @@ logical  :: used
          if (id_fe.ne.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
          if (id_sil.ne.0)  T_prog(ind_sil)%btf(i,j)  = -rho0 * biotic(n)%detsi_sed_remin(i,j)
          if (id_no3.ne.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
-         if (id_alk.ne.0)  T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)  &
-                                                       + T_prog(ind_nh4)%btf(i,j)                    &
-                                                       - T_prog(ind_no3)%btf(i,j)
+         if (id_alk.ne.0 .and. id_nh4.ne.0) &
+           T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
+                                                   + T_prog(ind_nh4)%btf(i,j)                        &
+                                                   - T_prog(ind_no3)%btf(i,j)
+         if (id_alk.ne.0 .and. id_nh4.eq.0) &
+           T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
+                                                   - T_prog(ind_no3)%btf(i,j)
 
 
        endif !} k > 0
