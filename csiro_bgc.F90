@@ -307,6 +307,8 @@ integer                                 :: id_wdet100 = -1
 integer                                 :: id_wpoc100 = -1
 integer                                 :: id_wdet3d = -1
 integer                                 :: id_wpoc3d = -1
+integer                                 :: id_phyxsize = -1
+integer                                 :: id_diaxsize = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
@@ -410,7 +412,7 @@ real, allocatable, dimension(:,:) :: adic_intmld,dic_intmld,o2_intmld,no3_intmld
 real, allocatable, dimension(:,:) :: adic_int100,dic_int100,o2_int100,no3_int100,fe_int100,phy_int100,det_int100
 real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
-real, allocatable, dimension(:,:,:) :: radbio3d
+real, allocatable, dimension(:,:,:) :: radbio3d, phyxsize, diaxsize
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
 real, allocatable, dimension(:,:,:) :: wdet3d, wpoc3d
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
@@ -443,10 +445,10 @@ integer                                 :: phyminqc_id
 real, allocatable, dimension(:,:)       :: phyminqc
 integer                                 :: diaminqc_id
 real, allocatable, dimension(:,:)       :: diaminqc
-integer                                 :: phymaxqc_id
-real, allocatable, dimension(:,:)       :: phymaxqc
-integer                                 :: diamaxqc_id
-real, allocatable, dimension(:,:)       :: diamaxqc
+integer                                 :: phyoptqc_id
+real, allocatable, dimension(:,:)       :: phyoptqc
+integer                                 :: diaoptqc_id
+real, allocatable, dimension(:,:)       :: diaoptqc
 integer                                 :: phymaxqf_id
 real, allocatable, dimension(:,:)       :: phymaxqf
 integer                                 :: diamaxqf_id
@@ -657,6 +659,8 @@ allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
 allocate( wdet3d(isc:iec,jsc:jec,nk) )
 allocate( wpoc3d(isc:iec,jsc:jec,nk) )
+allocate( phyxsize(isc:iec,jsc:jec,nk) )
+allocate( diaxsize(isc:iec,jsc:jec,nk) )
 allocate( npp2d(isc:iec,jsc:jec) )
 allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( nsp3d(isc:iec,jsc:jec,nk) )
@@ -768,8 +772,8 @@ allocate( phybiot(isd:ied,jsd:jed) )
 allocate( diabiot(isd:ied,jsd:jed) )
 allocate( phyminqc(isd:ied,jsd:jed) )
 allocate( diaminqc(isd:ied,jsd:jed) )
-allocate( phymaxqc(isd:ied,jsd:jed) )
-allocate( diamaxqc(isd:ied,jsd:jed) )
+allocate( phyoptqc(isd:ied,jsd:jed) )
+allocate( diaoptqc(isd:ied,jsd:jed) )
 allocate( phymaxqf(isd:ied,jsd:jed) )
 allocate( diamaxqf(isd:ied,jsd:jed) )
 allocate( phyoptqf(isd:ied,jsd:jed) )
@@ -2350,7 +2354,7 @@ days_in_this_year = days_in_this_year + day - 1 + hour/24.0 + &
 !-----------------------------------------------------------------------
 
 
- select case(bio_version)
+select case(bio_version)
 case(0)
 ! call bio_v0a(Thickness)
 !include "bio_v0.f90"
@@ -2435,7 +2439,9 @@ if (dust_id .gt. 0) then
 endif
 !det export at 100 m 
 if (id_wdet100 .gt. 0) then
-  wdet100(:,:) = wdetbio(isc:iec,jsc:jec)*t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  wdet100(:,:) = wdetbio(isc:iec,jsc:jec) *                                                        &
+                 phyxsize(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1)) *                          &
+                 t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
@@ -2448,7 +2454,9 @@ endif
 !det export  
 if (id_wdet3d .gt. 0) then
   do k = 1,grid%nk !{
-    wdet3d(:,:,k) = wdetbio(isc:iec,jsc:jec) * t_prog(ind_det)%field(isc:iec,jsc:jec,k,time%taum1)
+    wdet3d(:,:,k) = wdetbio(isc:iec,jsc:jec) *                                                     &
+                    phyxsize(isc:iec,jsc:jec,k) *                                                  &
+                    t_prog(ind_det)%field(isc:iec,jsc:jec,k,time%taum1)
   enddo
   used = send_data(id_wdet3d, wdet3d(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
@@ -2459,6 +2467,15 @@ if (id_wpoc3d .gt. 0) then
     wpoc3d(:,:,k) = wdetbio(isc:iec,jsc:jec)*10 * t_prog(ind_poc)%field(isc:iec,jsc:jec,k,time%taum1)
   enddo
   used = send_data(id_wpoc3d, wpoc3d(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+!phytoplankton size proxy 
+if (id_phyxsize .gt. 0) then
+  used = send_data(id_phyxsize, phyxsize(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diaxsize .gt. 0) then
+  used = send_data(id_diaxsize, diaxsize(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2940,10 +2957,10 @@ phyminqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "phyminqc", domain = Domain%domain2d)
 diaminqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "diaminqc", domain = Domain%domain2d)
-phymaxqc_id = init_external_field("INPUT/bgc_param.nc",          &
-        "phymaxqc", domain = Domain%domain2d)
-diamaxqc_id = init_external_field("INPUT/bgc_param.nc",          &
-        "diamaxqc", domain = Domain%domain2d)
+phyoptqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "phyoptqc", domain = Domain%domain2d)
+diaoptqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "diaoptqc", domain = Domain%domain2d)
 phymaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "phymaxqf", domain = Domain%domain2d)
 diamaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3232,6 +3249,14 @@ id_wpoc3d = register_diag_field('ocean_model','wpoc3d', &
      grid%tracer_axes(1:3),Time%model_time, 'POC export (poc*sinking rate)', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
 
+id_phyxsize = register_diag_field('ocean_model','phyxsize', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton size proxy', &
+     ' ',missing_value = -1.0e+10)
+
+id_diaxsize = register_diag_field('ocean_model','diaxsize', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton size proxy', &
+     ' ',missing_value = -1.0e+10)
+
 id_npp3d = register_diag_field('ocean_model','npp3d', &
      grid%tracer_axes(1:3),Time%model_time, 'Net primary productivity', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
@@ -3265,43 +3290,43 @@ id_mprod_gross = register_diag_field('ocean_model','mprod_gross', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
 
 id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton light limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton light limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_parlimit = register_diag_field('ocean_model','dia_parlimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom light limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton light limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_phy_Felimit = register_diag_field('ocean_model','phy_Felimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton Fe limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Felimit = register_diag_field('ocean_model','dia_Felimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom Fe limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_phy_Nlimit = register_diag_field('ocean_model','phy_Nlimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton N limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton N limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Nlimit = register_diag_field('ocean_model','dia_Nlimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom N limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton N limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_phy_Plimit = register_diag_field('ocean_model','phy_Plimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton P limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton P limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Plimit = register_diag_field('ocean_model','dia_Plimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom P limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton P limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Silimit = register_diag_field('ocean_model','dia_Silimit', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom Si limitation', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton Si limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_SiCupta = register_diag_field('ocean_model','dia_SiCupta', &
-     grid%tracer_axes(1:3),Time%model_time, 'diatom Si:C ratio of uptake', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton Si:C ratio of uptake', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
@@ -3445,16 +3470,16 @@ do n = 1, instances  !{
    name4 = 'Flux into sediment - silicic acid'
   endif
   if (nn .eq. id_phy) then 
-   name1 = 'Flux into ocean - phytoplankton'
-   name2 = 'Virtual flux into ocean - phytoplankton'
-   name3 = 'Source term - phytoplankton'
-   name4 = 'Flux into sediment - phytoplankton'
+   name1 = 'Flux into ocean - nanophytoplankton'
+   name2 = 'Virtual flux into ocean - nanophytoplankton'
+   name3 = 'Source term - nanophytoplankton'
+   name4 = 'Flux into sediment - nanophytoplankton'
   endif
   if (nn .eq. id_dia) then 
-   name1 = 'Flux into ocean - diatom'
-   name2 = 'Virtual flux into ocean - diatom'
-   name3 = 'Source term - diatom'
-   name4 = 'Flux into sediment - diatom'
+   name1 = 'Flux into ocean - microphytoplankton'
+   name2 = 'Virtual flux into ocean - microphytoplankton'
+   name3 = 'Source term - microphytoplankton'
+   name4 = 'Flux into sediment - microphytoplankton'
   endif
   if (nn .eq. id_zoo) then 
    name1 = 'Flux into ocean - zooplankton'
@@ -3526,34 +3551,34 @@ do n = 1, instances  !{
    bgc_si_prefix = 'm'
   endif
   if (nn .eq. id_pchl) then ! pjb 
-   name1 = 'Flux into ocean - phyto chlorophyll'
-   name2 = 'Virtual flux into ocean - phyto chlorophyll'
-   name3 = 'Source term - phyto chlorophyll'
-   name4 = 'Flux into sediment - phyto chlorophyll'
+   name1 = 'Flux into ocean - nanophytoplankton chlorophyll'
+   name2 = 'Virtual flux into ocean - nanophytoplankton chlorophyll'
+   name3 = 'Source term - nanophytoplankton chlorophyll'
+   name4 = 'Flux into sediment - nanophytoplankton chlorophyll'
   endif
   if (nn .eq. id_dchl) then ! pjb 
-   name1 = 'Flux into ocean - diatom chlorophyll'
-   name2 = 'Virtual flux into ocean - diatom chlorophyll'
-   name3 = 'Source term - diatom chlorophyll'
-   name4 = 'Flux into sediment - diatom chlorophyll'
+   name1 = 'Flux into ocean - microphytoplankton chlorophyll'
+   name2 = 'Virtual flux into ocean - microphytoplankton chlorophyll'
+   name3 = 'Source term - microphytoplankton chlorophyll'
+   name4 = 'Flux into sediment - microphytoplankton chlorophyll'
   endif
   if (nn .eq. id_phyfe) then ! pjb 
-   name1 = 'Flux into ocean - Phytoplankton Fe'
-   name2 = 'Virtual flux into ocean - Phytoplankton Fe'
-   name3 = 'Source term - Phytoplankton Fe'
-   name4 = 'Flux into sediment - Phytoplankton Fe'
+   name1 = 'Flux into ocean - Nanophytoplankton Fe'
+   name2 = 'Virtual flux into ocean - Nanophytoplankton Fe'
+   name3 = 'Source term - Nanophytoplankton Fe'
+   name4 = 'Flux into sediment - Nanophytoplankton Fe'
   endif
   if (nn .eq. id_diafe) then ! pjb 
-   name1 = 'Flux into ocean - diatom Fe'
-   name2 = 'Virtual flux into ocean - diatom Fe'
-   name3 = 'Source term - diatom Fe'
-   name4 = 'Flux into sediment - diatom Fe'
+   name1 = 'Flux into ocean - microphytoplankton Fe'
+   name2 = 'Virtual flux into ocean - microphytoplankton Fe'
+   name3 = 'Source term - microphytoplankton Fe'
+   name4 = 'Flux into sediment - microphytoplankton Fe'
   endif
   if (nn .eq. id_diasi) then ! pjb 
-   name1 = 'Flux into ocean - diatom Si'
-   name2 = 'Virtual flux into ocean - diatom Si'
-   name3 = 'Source term - diatom Si'
-   name4 = 'Flux into sediment - diatom Si'
+   name1 = 'Flux into ocean - microphytoplankton Si'
+   name2 = 'Virtual flux into ocean - microphytoplankton Si'
+   name3 = 'Source term - microphytoplankton Si'
+   name4 = 'Flux into sediment - microphytoplankton Si'
   endif
   if (nn .eq. id_zoofe) then ! pjb 
    name1 = 'Flux into ocean - Zooplankton Fe'

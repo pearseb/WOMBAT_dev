@@ -56,6 +56,7 @@ subroutine bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 !       11.12 Collect major source and sink terms for tendency equations
 !       11.13 Apply sources and sinks to tendency equations 
 !       11.14 Collect key diagnostics
+!       11.15 Check for conservation of mass by ecosystem component
 !
 !               [ END do loop over t, k and i indices ]
 !
@@ -145,6 +146,7 @@ real :: mld(isd:ied,jsd:jed)            ! Mixed layer depth
 !!! Tracer values !!!
 !!! ------------- !!!
 !-------------------!
+real :: biodic                          ! MAX(0.0, dissolved inorganic carbon)
 real :: biopo4                          ! MAX(0.0, phosphate)
 real :: biono3                          ! MAX(0.0, nitrate)
 real :: biofe                           ! MAX(0.0, dissolved iron)
@@ -212,6 +214,8 @@ real :: f41det                          ! Remineralisation of slow-sinking detri
 real :: f51                             ! Remineralisation of CaCO3 to DIC and Alkalinity
 real :: caco3_bgc_change                ! Total change in CaCO3 following time-splitting of ecosystem component
 real :: no3_bgc_change                  ! Total change in nitrate following time-splitting of ecosystem component
+real :: c_pools(isc:iec,grid%nk,2)      ! Total biological carbon budget (PHY + ZOO + DET + DIC + CaCO3)
+real :: n_pools(isc:iec,grid%nk,2)      ! Total biological nitrogen budget (PHY + ZOO + DET + NO3)
 
 ! ------------------------- !
 !!! --------------------- !!!
@@ -221,8 +225,8 @@ real :: no3_bgc_change                  ! Total change in nitrate following time
 real :: zchl                            ! Total chlorophyll in mg/m3  || used to find light attenuation coefficients
 real :: phy_pisl2                       ! Photosynthetic-Irradiance slope of nanophytoplankton (~ Chl:C, respiration, daylength, zeuph/zmld)
 real :: phy_chl_pisl                    ! Photosynthetic-Irradiance slope of nanophytoplankton chlorophyll (~ Chl:C, µmax, daylength, zeuph/zmld)
-real :: max_pchl                        ! Maximum nanophytoplankton Chl:C ratio (~ temperature)
-real :: mumin_pchl                      ! Minimum rate of chlorophyll growth in nanophytoplankton to achieve minimum Chl:C ratio
+real :: mumin_pchl                      ! Rate of chlorophyll growth in nanophytoplankton to achieve minimum Chl:C ratio
+real :: muopt_pchl                      ! Rate of chlorophyll growth in nanophytoplankton to achieve optimal Chl:C ratio
 real :: keuphot(isc:iec)                ! Estimated depth of the euphotic zone
 real :: daylight(isc:iec)               ! Number of daylight hours in a day
 real :: par_phy_mldsum(isc:iec)         ! Sum of photosynthetic active radiation seen by nanophytoplankton in the mixed layer
@@ -234,11 +238,10 @@ real :: par_phymld(isc:iec,grid%nk)     ! Average photosynthetic active radiatio
 real :: par_eup(isc:iec,grid%nk)        ! Photosynthetic active radiation for calculation of euphotic zone depth
 real :: phy_pisl(isc:iec,grid%nk)       ! Initial guess at photosynthesis-irradiance slope (~ Chl:C) for nanophytoplankton
 real :: phy_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for nanophytoplankton
-real :: chl_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for chlorophyll production
+real :: chl_lday(isc:iec,grid%nk)       ! Daylength and euphotic < MLD limitation term for chlorophyll production ????
 real :: phy_lpar(isc:iec,grid%nk)       ! Light limitation term for nanophytoplankton
 real :: phy_chl_lpar(isc:iec,grid%nk)   ! Light limitation term for nanophytoplankton chlorophyll
 real :: phy_chlc(isc:iec,grid%nk)       ! Nanophytoplankton Chl:C ratio
-real :: phy_chl_prod(isc:iec,grid%nk)   ! Realised growth rate of nanophytoplankton chlorophyll (light limited)
 real :: mu_pchl(isc:iec,grid%nk)        ! Growth rate of nanophytoplankton chlorophyll
 real :: ek_rgb(isc:iec,grid%nk,3)       ! Attenutation coefficients for red, green and blue light
 real :: par_rgb(isc:iec,grid%nk,3)      ! Photosynthetic active radiation split into red, green and blue light wavelength bands
@@ -282,7 +285,6 @@ real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
 !!! Detrital sinking !!!
 !!! ---------------- !!!
 ! -------------------- !
-real :: phy_xsize                       ! Proxy for average size of nanophytoplankton community (larger during bloom conditions)
 real :: detwsink                        ! Scaler for sinking rate of detritus
 real :: adv_fb1(isc:iec,1:grid%nk+1)    ! Sinking of detritus (carbon)
 real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
@@ -375,7 +377,7 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(parbio_id, time%model_time, parbio)     !Proportion of SW rad that is PAR
   call time_interp_external(phybiot_id, time%model_time, phybiot)   !Phytoplankton biomass threshold
   call time_interp_external(phyminqc_id, time%model_time, phyminqc) !Phytoplankton minimum Chl:C quota
-  call time_interp_external(phymaxqc_id, time%model_time, phymaxqc) !Phytoplankton maximum Chl:C quota
+  call time_interp_external(phyoptqc_id, time%model_time, phyoptqc) !Phytoplankton optimal Chl:C quota
   call time_interp_external(phymaxqf_id, time%model_time, phymaxqf) !Phytoplankton maximum Fe:C quota
   call time_interp_external(phyoptqf_id, time%model_time, phyoptqf) !Phytoplankton optimal Fe:C quota
   call time_interp_external(abioa_phy_id, time%model_time, abioa_phy) !Autotrophic T-dependent scalar
@@ -436,7 +438,7 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
                               Dens%pressure_at_depth(isd:ied,jsd:jed,:), mld)
 
 !  write (stdout(),*) ' AO-NPZD model will do ',ts_npzd,' time steps'
-!  write (stdout(),*) ' time step in NPZD model will be ',      &
+!  write (stdout(),*) ' time step in NPZD model will be ',  dtts/ts_npzd,'sec.'  
 
 !
 !
@@ -467,6 +469,7 @@ do n = 1, instances  !{
   zprod_gross(:,:,:) = 0.0
   light_limit(:,:) = 0.0
   radbio3d(:,:,:) = 0.0
+  phyxsize(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
   nsp3d(:,:,:) = 0.0
   adic_intmld(:,:) = 0.0
@@ -544,6 +547,7 @@ do n = 1, instances  !{
         do i=isc,iec
 
           ! ESSENTIAL TRACERS
+          biotr(i,k,id_dic) = max(0.0,t_prog(ind_dic)%field(i,j,k,Time%taum1)) 
           biotr(i,k,id_no3) = max(0.0,t_prog(ind_no3)%field(i,j,k,Time%taum1)) 
           biotr(i,k,id_phy) = max(0.0,t_prog(ind_phy)%field(i,j,k,Time%taum1))
           biotr(i,k,id_zoo) = max(0.0,t_prog(ind_zoo)%field(i,j,k,Time%taum1))
@@ -557,14 +561,14 @@ do n = 1, instances  !{
           if (id_phyfe.ne.0) biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
           if (id_zoofe.ne.0) biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
           if (id_detfe.ne.0) biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
-          ! IF OPTIONAL TRACER IS OFF, SET TO A CONSTANT VALUE 
-          if (id_caco3.eq.0) biotr(i,k,id_caco3) = 0.0 
-          if (id_po4.eq.0)   biotr(i,k,id_po4) = 1000.0    ! Make PO4 unlimiting to growth
-          if (id_fe.eq.0)    biotr(i,k,id_fe) = 1000.0     ! Make dFe unlimiting to growth
-          if (id_pchl.eq.0)  biotr(i,k,id_pchl) = 0.10
-          if (id_phyfe.eq.0) biotr(i,k,id_phyfe) = 10e-6
-          if (id_zoofe.eq.0) biotr(i,k,id_zoofe) = 10e-6
-          if (id_detfe.eq.0) biotr(i,k,id_detfe) = 10e-6
+          !! IF OPTIONAL TRACER IS OFF, SET TO A CONSTANT VALUE 
+          !if (id_caco3.eq.0) biotr(i,k,id_caco3) = 0.0 
+          !if (id_po4.eq.0)   biotr(i,k,id_po4) = 1000.0    ! Make PO4 unlimiting to growth
+          !if (id_fe.eq.0)    biotr(i,k,id_fe) = 1000.0     ! Make dFe unlimiting to growth
+          !if (id_pchl.eq.0)  biotr(i,k,id_pchl) = 0.10
+          !if (id_phyfe.eq.0) biotr(i,k,id_phyfe) = 10e-6
+          !if (id_zoofe.eq.0) biotr(i,k,id_zoofe) = 10e-6
+          !if (id_detfe.eq.0) biotr(i,k,id_detfe) = 10e-6
 
          enddo ! i
        enddo ! k
@@ -613,6 +617,7 @@ do n = 1, instances  !{
        phy_lday(:,:) = 1e-2
        chl_lday(:,:) = 1e-2
        keuphot(:) = 4  ! set k level of euphotic zone to 10 metres
+       daylight(:) = 0.0
 
 
        do i=isc,iec
@@ -626,14 +631,14 @@ do n = 1, instances  !{
        do k=1,grid%nk
          do i=isc,iec
 
-           ! Get the attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
+           ! Attenuation coefficients for Red, Green and Blue light given chlorophyll concentration
            zchl = MAX(0.05, MIN(10.0, biotr(i,k,id_pchl) ))
            ichl = NINT( 41 + 20.0*LOG10(zchl) + epsi )
            ek_rgb(i,k,1) = zrgb(2,ichl) * thickness%dzt(i,j,k)
            ek_rgb(i,k,2) = zrgb(3,ichl) * thickness%dzt(i,j,k)
            ek_rgb(i,k,3) = zrgb(4,ichl) * thickness%dzt(i,j,k)
 
-           ! Estimate the amount of RGB light available in the water column given RGB attenuation
+           ! RGB light available in the water column given RGB attenuation
            if (k.eq.1) then
             if (swflx(i,j).gt.0.0) then
              par_rgb(i,k,1) = swflx(i,j) * parbio(i,j) * 1./3. * EXP(-0.5 * ek_rgb(i,k,1))
@@ -650,7 +655,7 @@ do n = 1, instances  !{
              par_rgb(i,k,3) = par_rgb(i,k-1,3) * EXP(-0.5 * (ek_rgb(i,k-1,3)+ek_rgb(i,k,3)))
            endif
 
-           ! Calculate the amount of light available for phytoplankton
+           ! Light available for phytoplankton
            if (swflx(i,j).gt.0.0) then
              par_tot(i,k) =        par_rgb(i,k,1) +        par_rgb(i,k,2) +        par_rgb(i,k,3)
              par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
@@ -660,7 +665,7 @@ do n = 1, instances  !{
            endif
            par_eup(i,k) = par_rgb(i,k,1) + par_rgb(i,k,2) + par_rgb(i,k,3)
 
-           ! Calculate the integrated light level in the mixed layer
+           ! Integrated light level in the mixed layer
            if (grid%zw(k) .le. mld(i,j)) then
              par_tot_mldsum(i) = par_tot_mldsum(i) + par_tot(i,k) * thickness%dzt(i,j,k)
              par_phy_mldsum(i) = par_phy_mldsum(i) + par_phy(i,k) * thickness%dzt(i,j,k)
@@ -718,7 +723,7 @@ do n = 1, instances  !{
 
            ! Calculate average light level in the mixed layer
            if (grid%zw(k) .le. mld(i,j)) then
-             zval = 1.0/par_z_mldsum(i)
+             zval = 1.0/(par_z_mldsum(i)+epsi)
              par_phymld(i,k) = par_phy_mldsum(i) * zval
            else
              par_phymld(i,k) = par_phy(i,k)
@@ -753,6 +758,10 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
+       ! Arrays for checking that ecosystem component equations conserve mass
+       n_pools(:,:,:) = 0.0
+       c_pools(:,:,:) = 0.0
+
        do tn = 1,ts_npzd
 
          ! Initialise some arrays to zero
@@ -761,19 +770,20 @@ do n = 1, instances  !{
          zoo_FeC(:,:) = 0.0       ! iron to carbon ratio of zooplankton
          det_FeC(:,:) = 0.0       ! iron to carbon ratio of slow sinking detritus
          phy_Feupt(:,:) = 0.0     ! iron uptake rate of phytoplankton
-         phy_limfe(:,:) = 0.0     ! iron limitation of phytoplankton
-         phy_lpar(:,:) = 0.0      ! light limitation of phytoplankton growth
+         phy_lpar(:,:) = 1.0      ! light limitation of phytoplankton growth
          mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
          phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
-         phy_chl_prod(:,:) = 0.0  ! phytoplankton chlorophyll realised growth rate
          mu_pchl(:,:) = 0.0       ! Growth of chlorophyll in phytoplankton
-         phy_limnit(:,:) = 0.0    ! Phytoplankton nitrogen limitation
-         phy_limfe(:,:) = 0.0     ! Phytoplankton iron limitation
-         phy_limpho(:,:) = 0.0    ! Phytoplankton phosphorus limitation
+         phy_limnit(:,:) = 1.0    ! Phytoplankton nitrogen limitation
+         phy_limfe(:,:) = 1.0     ! Phytoplankton iron limitation
+         phy_limpho(:,:) = 1.0    ! Phytoplankton phosphorus limitation
+
+         n_pools(:,:,2) = n_pools(:,:,1)  ! Save values from the last timestep
+         c_pools(:,:,2) = c_pools(:,:,1)  ! Save values from the last timestep
 
          do k=1,grid%nk
            do i=isc,iec
-
+         
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -784,18 +794,36 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
+             biodic = max(0.0,biotr(i,k,id_dic))
              biono3 = max(0.0,biotr(i,k,id_no3))
              biophy = max(0.0,biotr(i,k,id_phy))
              biozoo = max(0.0,biotr(i,k,id_zoo))
              biodet = max(0.0,biotr(i,k,id_det))
              biooxy = max(0.0,biotr(i,k,id_o2))
-             biopo4 = max(0.0,biotr(i,k,id_po4))
-             biocaco3 = max(0.0,biotr(i,k,id_caco3))
-             biofe = max(0.0,biotr(i,k,id_fe))
-             biopchl = max(0.0,biotr(i,k,id_pchl))
-             biophyfe = max(0.0,biotr(i,k,id_phyfe))
-             biozoofe = max(0.0,biotr(i,k,id_zoofe))
-             biodetfe = max(0.0,biotr(i,k,id_detfe))
+             ! NOTE: for some reason the if statements here are essential to prevent model crash
+             if (id_po4.ne.0)   biopo4 = max(0.0,biotr(i,k,id_po4))
+             if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
+             if (id_fe.ne.0)    biofe = max(0.0,biotr(i,k,id_fe))
+             if (id_pchl.ne.0)  biopchl = max(0.0,biotr(i,k,id_pchl))
+             if (id_phyfe.ne.0) biophyfe = max(0.0,biotr(i,k,id_phyfe))
+             if (id_zoofe.ne.0) biozoofe = max(0.0,biotr(i,k,id_zoofe))
+             if (id_detfe.ne.0) biodetfe = max(0.0,biotr(i,k,id_detfe))
+
+             !if (k.lt.10 .and. i.eq.170 .and. j.eq.120) then
+             !  print*, "DIC", biodic
+             !  print*, "Nitrate", biono3
+             !  print*, "Nanophy", biophy
+             !  print*, "Microzoo", biozoo
+             !  print*, "Detritus", biodet
+             !  print*, "Oxygen", biooxy
+             !  print*, "PO4", biopo4
+             !  print*, "CaCO3", biocaco3
+             !  print*, "iron (nM)", biofe
+             !  print*, "Nanophy Chl", biopchl
+             !  print*, "Nanophy Fe", biophyfe
+             !  print*, "Microzoo Fe", biozoofe
+             !  print*, "Detrital Fe", biodetfe
+             !endif
    
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -808,9 +836,9 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              if (biophy*biopchl.gt.0.0)  phy_chlc(i,k) = biopchl / (biophy * 12)
-             if (biophy*biophyfe.gt.0.0) phy_FeC(i,k) = biophyfe/biophy
-             if (biozoo*biozoofe.gt.0.0) zoo_FeC(i,k) = biozoofe/biozoo
-             if (biodet*biodetfe.gt.0.0) det_FeC(i,k) = biodetfe/biodet
+             if (biophy*biophyfe.gt.0.0) phy_FeC(i,k)  = biophyfe/biophy
+             if (biozoo*biozoofe.gt.0.0) zoo_FeC(i,k)  = biozoofe/biozoo
+             if (biodet*biodetfe.gt.0.0) det_FeC(i,k)  = biodetfe/biodet
    
              ! Temperature and salinity
              ztem = t_prog(index_temp)%field(i,j,k,time%tau)
@@ -821,7 +849,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.3] - Dissolved Fe chemistry                                                         !
+!     Step [11.3] - Dissolved Iron chemistry                                                       !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -836,7 +864,7 @@ do n = 1, instances  !{
              fe_keq = 10**( 17.27 - 1565.7 / ztemk )
              fe_III = ( -( 1. + fe_keq * ligand*1e-9 - fe_keq * biofe*1e-9 )                       &
                         + SQRT( ( 1. + fe_keq * ligand*1e-9 - fe_keq * biofe*1e-9 )**2             &
-                                + 4. * biofe*1e-9 * fe_keq) ) / ( 2. * fe_keq ) * 1e9
+                                + 4. * biofe*1e-9 * fe_keq) ) / ( 2. * fe_keq + epsi ) * 1e9
              fe_lig = max(0.0, biofe - fe_III)
 
              ! 2. Precipitation of Fe` (creation of nanoparticles)
@@ -894,7 +922,7 @@ do n = 1, instances  !{
 
 
              ! Nitrogen (NO3)
-             phy_limnit(i,k) = biono3 / ( biono3 + phy_k_nit )
+             phy_limnit(i,k) = biono3 / ( biono3 + phy_k_nit + epsi )
 
 
              ! Iron
@@ -911,8 +939,29 @@ do n = 1, instances  !{
 
 
              ! Phosphorus (PO4)
-             phy_limpho(i,k) = biopo4 / ( biopo4 + phy_k_pho )
+             if (id_po4.ne.0) then
+               phy_limpho(i,k) = biopo4 / ( biopo4 + phy_k_pho + epsi )
+             else
+               phy_limpho(i,k) = 1.0
+             endif
 
+
+             !if (k.lt.10 .and. i.eq.170 .and. j.eq.120) then
+             !  print*, "Nutrient limitation at lon =", grid%xt(i,j)
+             !  print*, "Nutrient limitation at lat =", grid%yt(i,j)
+             !  print*, "Nutrient limitation at depth =", grid%zt(k)
+             !  print*, "phy_k_nit", phy_k_nit
+             !  print*, "phy_k_fer", phy_k_fer
+             !  print*, "phy_k_pho", phy_k_pho
+             !  print*, "phy_limnit(i,k)", phy_limnit(i,k)
+             !  print*, "phy_limfe(i,k)", phy_limfe(i,k)
+             !  print*, "phy_limpho(i,k)", phy_limpho(i,k)
+             !  print*, "phy_FeC(i,k)", phy_FeC(i,k)
+             !  print*, "phy_minFeC", phy_minFeC
+             !  print*, "biopchl/biophy", biopchl/biophy
+             !  print*, "phyoptqf(i,j)", phyoptqf(i,j)
+             !  print*, " "
+             !endif
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -930,9 +979,22 @@ do n = 1, instances  !{
              ! 4. Apply to maximum growth rate
 
              phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * phyminqc(i,j))
-             phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
+             phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 + epsi )
              phy_lpar(i,k) = (1.0 - EXP(-phy_pisl2 * par_phy(i,k))) * phy_lday(i,k)
              mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
+
+             !if (k.lt.10 .and. i.eq.170 .and. j.eq.120) then
+             !  print*, "Light limitation at depth =", grid%zt(k)
+             !  print*, "par_phy(i,k)", par_phy(i,k)
+             !  print*, "phy_chlc(i,k)", phy_chlc(i,k)
+             !  print*, "denominator", ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 + epsi )
+             !  print*, "phy_pisl(i,k)", phy_pisl(i,k)
+             !  print*, "phy_pisl2", phy_pisl2
+             !  print*, "phy_lpar(i,k)", phy_lpar(i,k)
+             !  print*, "mumax_phy(i,k)", mumax_phy(i,k)
+             !  print*, "mu_phy(i,k)", mu_phy(i,k)
+             !  print*, " "
+             !endif
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -959,21 +1021,19 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-             !     1. Light-limitation of chlorophyll production        (phy_chl_prod)
-             !     2. Minimum rate of chlorophyll growth                (mumin_pchl)
-             !     3. Maximum chlorophyll:C ratio based on temperature  (max_pchl)
-             !     4. Calculate mg Chl produced per mg C Phy            (mu_pchl)
+             !     1. Light-limitation of chlorophyll production        (phy_chl_lpar)
+             !     2. Minimum and optimal rates of chlorophyll growth   (mumin_pchl & muopt_pchl)
+             !     3. Calculate mg Chl m-3 s-1                          (mu_pchl)
 
-             phy_chl_pisl = phy_pisl(i,k) / (mumax_phy(i,k) * 86400.0 * max(daylight(i),1.0)/24.0)
-             phy_chl_lpar(i,k) = (1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))) * chl_lday(i,k)
-             phy_chl_prod(i,k) = mumax_phy(i,k) * phy_chl_lpar(i,k)
+             phy_chl_pisl = phy_pisl(i,k) / ( mumax_phy(i,k) * 86400.0                             &
+                                              * max(daylight(i),1.0)/24.0                          &   
+                                              * (1.0 - phy_limnut) + epsi)
+             phy_chl_lpar(i,k) = (1.0 - EXP( -phy_chl_pisl * par_phymld(i,k))) * phy_lday(i,k)
              mumin_pchl = phyminqc(i,j) * u_phy * biophy * 12.
-             max_pchl = min(phymaxqc(i,j), (phymaxqc(i,j) /                                        &
-                        (1.0 - 1.14 / 43.4 * ztem)) * (1.0 - 1.14 / 43.4 * 20.0))
-             mu_pchl(i,k) = u_phy * biophy * 12. * 86400.0 * phy_chl_prod(i,k) * phy_limnut
-             if (mu_pchl(i,k).gt.0.0) then
-               mu_pchl(i,k) = mumin_pchl + ( (max_pchl - phyminqc(i,j)) * mu_pchl(i,k) )           &
-                                         / ( phy_pisl(i,k) * par_phymld(i,k)/chl_lday(i,k) )
+             muopt_pchl = phyoptqc(i,j) * u_phy * biophy * 12.
+             mu_pchl(i,k) = (muopt_pchl - mumin_pchl) * phy_chl_lpar(i,k) * phy_limnut
+             if (phy_pisl(i,k)*par_phymld(i,k).gt.0.0) then
+               mu_pchl(i,k) = mumin_pchl + mu_pchl(i,k) / (phy_pisl(i,k) * par_phymld(i,k))
              endif
 
 
@@ -991,13 +1051,22 @@ do n = 1, instances  !{
              ! 2. Ensure that Fe uptake increases or decreases in response to standing quotas
              ! 3. Iron uptake by phytoplankton
 
-             if (phy_FeC(i,k).gt.0.0) then
+             if (phy_FeC(i,k).gt.0.0 .and. biophy.gt.0.0) then
                phy_maxQFe = biophy * phymaxqf(i,j)
                phy_Feupt_upreg   = (4.0 - 4.5 * phy_limfe(i,k) / (phy_limfe(i,k) + 0.5))
                phy_Feupt_downreg = max(0.0, (1.0 - biophyfe/phy_maxQFe) / abs(1.05 - biophyfe/phy_maxQFe) )
                phy_Feupt(i,k) = biophy * mumax_phy(i,k) * phymaxqf(i,j) *                           &
-                                biofe / (biofe + phy_k_fer) * phy_Feupt_downreg * phy_Feupt_upreg
+                                biofe / (biofe + phy_k_fer + epsi) * phy_Feupt_downreg * phy_Feupt_upreg
              endif
+
+             !if (k.lt.10 .and. i.eq.170 .and. j.eq.120) then
+             !  print*, "Phyto Fe uptake at depth =", grid%zt(k) 
+             !  print*, "phy_maxQFe", phy_maxQFe
+             !  print*, "phy_Feupt_upreg", phy_Feupt_upreg
+             !  print*, "phy_Feupt_downreg", phy_Feupt_downreg
+             !  print*, "phy_Feupt(i,k)", phy_Feupt(i,k)
+             !  print*, " "
+             !endif
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1029,7 +1098,7 @@ do n = 1, instances  !{
              ! preferences and prey availability
              zooprey = zprefphy(i,j)*biophy_min + zprefdet(i,j)*biodet_min
              g_zoo = zoogmax(i,j)*fbc * epszoo(i,j) * zooprey*zooprey /                            & 
-                     ( zoogmax(i,j)*fbc + epszoo(i,j) * zooprey*zooprey )
+                     ( zoogmax(i,j)*fbc + epszoo(i,j) * zooprey*zooprey + epsi )
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1059,6 +1128,7 @@ do n = 1, instances  !{
 
              ! PRIMARY PRODUCTION
              f11phy = u_phy * biophy                                        * biomask(i,k)         ! DIC --> PHY
+             
 
              ! GRAZING
              if (zooprey.gt.0.0) then
@@ -1131,6 +1201,17 @@ do n = 1, instances  !{
              biotr(i,k,id_phyfe)= biotr(i,k,id_phyfe)+dtsb * (phy_Feupt(i,k) -                     &
                                                               (z21phy+f22phy+f23phy)*phy_FeC(i,k))
 
+             !if (k.lt.10 .and. i.eq.170 .and. j.eq.120) then
+             !  print*, "Phyto sources and sinks terms =", grid%zt(k) 
+             !  print*, "f11phy", f11phy
+             !  print*, "z21phy", z21phy 
+             !  print*, "f22phy", f22phy
+             !  print*, "f23phy", f23phy
+             !  print*, "phy_Feupt(i,k)", phy_Feupt(i,k)
+             !  print*, "biomask(i,k)", biomask(i,k)
+             !  print*, "biotr(i,k,id_dic)", biotr(i,k,id_dic)
+             !  print*, " "
+             !endif
 
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
              ! microzooplankton equation !
@@ -1143,7 +1224,8 @@ do n = 1, instances  !{
                                                               (z31+z32)*zoo_FeC(i,k) )
 
 
-             phy_xsize = ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) ) /(biophy+epsi)
+             phyxsize(i,j,k) = ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) )       &
+                                / (biophy + epsi)
 
              !!!!!!!!!!!!
              ! Detritus !
@@ -1164,14 +1246,37 @@ do n = 1, instances  !{
              if (id_caco3.ne.0)                                                                    &
              biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (                                &
                                    (1.-zooassi(i,j))*z21phy + f23phy + z32 ) * f_inorg(i,j) - f51)
-   
+  
+
+             !!!!!!!!!!!!!!!!
+             ! DIC equation !
+             !!!!!!!!!!!!!!!!
+             biotr(i,k,id_dic)  = biotr(i,k,id_dic) + dtsb * ( f41det + f51                        &
+                                                              + z31 + f22phy                       & 
+                                                              - f11phy                             &
+                                      - ( (1.-zooassi(i,j))*z21phy + f23phy + z32 )*f_inorg(i,j) )
+
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
              !!!!!!!!!!!!!!!!!!!!!!!!!
              if (id_pchl.ne.0)                                                                     &
              biotr(i,k,id_pchl) = biotr(i,k,id_pchl) + dtsb * ( mu_pchl(i,k) - phy_chlc(i,k) *     &
                                                                 (z21phy + f22phy + f23phy) * 12.0 )
-   
+  
+
+            !print*, "Oxygen concentration", biotr(i,k,id_o2)
+            !print*, "Phosphate concentration", biotr(i,k,id_po4)
+            !print*, "Nitrate concentration", biotr(i,k,id_no3)
+            !print*, "dFe concentration", biotr(i,k,id_fe)
+            !print*, "Nano concentration", biotr(i,k,id_phy)
+            !print*, "Nano Fe concentration", biotr(i,k,id_phyfe)
+            !print*, "Zoo concentration", biotr(i,k,id_zoo)
+            !print*, "Zoo Fe concentration", biotr(i,k,id_zoofe)
+            !print*, "Det concentration", biotr(i,k,id_det)
+            !print*, "Det Fe concentration", biotr(i,k,id_detfe)
+            !print*, "CaCO3 concentration", biotr(i,k,id_caco3)
+            !print*, "pChl concentration", biotr(i,k,id_pchl)
+
    
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1210,6 +1315,56 @@ do n = 1, instances  !{
              endif
 
 
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!     Step [11.15] - Check for conservation of mass by ecosystem component                         !
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+             n_pools(i,k,1) = biotr(i,k,id_no3) + (biotr(i,k,id_phy) + biotr(i,k,id_det)           &
+                              + biotr(i,k,id_zoo))*16/122.
+             c_pools(i,k,1) = biotr(i,k,id_dic) + biotr(i,k,id_phy) + biotr(i,k,id_det)            &
+                              + biotr(i,k,id_zoo) + biotr(i,k,id_caco3)
+             
+             if (tn.gt.1) then
+               if (abs(n_pools(i,k,2) - n_pools(i,k,1)) .gt. 1e-6 ) then
+                 print*, "Error: Ecosystem model is not conserving nitrogen"
+                 print*, "       Longitude = ", grid%xt(i,j)
+                 print*, "       Latitude  = ", grid%yt(i,j)
+                 print*, "       Depth     = ", grid%zt(k)
+                 print*, " "
+                 print*, "       Biological N budget (mmol N m-3) at two timesteps ", n_pools(i,k,:)
+                 stop
+               endif
+               if (abs(c_pools(i,k,2) - c_pools(i,k,1)) .gt. 1e-6 ) then
+                 print*, "Error: Ecosystem model is not conserving carbon"
+                 print*, "       Longitude = ", grid%xt(i,j)
+                 print*, "       Latitude  = ", grid%yt(i,j)
+                 print*, "       Depth     = ", grid%zt(k)
+                 print*, " "
+                 print*, "       Biological C budget (mmol C m-3) at two timesteps ", c_pools(i,k,:)
+                 stop
+               endif
+             endif
+             
+
+             !if (i.eq.170 .and. j.eq.120 .and. k.lt.10) then
+             !  print*, "Longitude =", grid%xt(i,j)
+             !  print*, "Latitude =", grid%yt(i,j)
+             !  print*, "Depth =", grid%zt(k)
+             !  print*, "timestep", tn, "of",ts_npzd
+             !  print*, "biotr(i,k,id_phy)*16/122.", biotr(i,k,id_phy)*16/122.
+             !  print*, "biotr(i,k,id_zoo)*16/122.", biotr(i,k,id_zoo)*16/122.
+             !  print*, "biotr(i,k,id_det)*16/122.", biotr(i,k,id_det)*16/122.
+             !  print*, "biotr(i,k,id_no3)", biotr(i,k,id_no3)
+             !  print*, "Bio Nitrogen budget", n_pools(i,k,:)
+             !  print*, "Bio Carbon budget", c_pools(i,k,:)
+             !endif
+
            enddo  ! i
          enddo  ! k
        enddo  ! tn
@@ -1243,12 +1398,10 @@ do n = 1, instances  !{
            t_prog(ind_phy)%field(i,j,k,time%taum1) = biotr(i,k,id_phy)
            t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
+           t_prog(ind_dic)%field(i,j,k,time%taum1) = biotr(i,k,id_dic) 
            if ( id_po4.ne.0) t_prog(ind_po4)%field(i,j,k,time%taum1) = biotr(i,k,id_po4)
            if ( id_caco3.ne.0) t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
            if ( id_fe.ne.0) t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
-           if (id_dic.ne.0) &
-           t_prog(ind_dic)%field(i,j,k,time%taum1) = t_prog(ind_dic)%field(i,j,k,time%taum1) +     &
-                                                     122./16. * no3_bgc_change - caco3_bgc_change
            if (id_adic.ne.0) &
            t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
                                                       122./16. * no3_bgc_change - caco3_bgc_change
@@ -1259,6 +1412,7 @@ do n = 1, instances  !{
            if (id_phyfe.ne.0) t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe)
            if (id_zoofe.ne.0) t_prog(ind_zoofe)%field(i,j,k,time%taum1) = biotr(i,k,id_zoofe)
            if (id_detfe.ne.0) t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe)
+
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1328,8 +1482,8 @@ do n = 1, instances  !{
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wdetbio(i,j) * biotr(i,k-1,id_det)
-           adv_fb2(i,k) = wdetbio(i,j) * biotr(i,k-1,id_detfe)
+           adv_fb1(i,k) = wdetbio(i,j) * phyxsize(i,j,k) * biotr(i,k-1,id_det)
+           adv_fb2(i,k) = wdetbio(i,j) * phyxsize(i,j,k) * biotr(i,k-1,id_detfe)
          enddo  ! i
        enddo  ! k
 
