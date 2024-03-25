@@ -235,9 +235,10 @@ integer                                 :: package_index
 integer :: id_po4, id_nh4, id_no3, id_fe, id_sil,                       & 
            id_dic, id_alk, id_caco3, id_adic,                           & 
            id_o2,                                                       &
-           id_phy, id_dia, id_det, id_zoo, id_poc, id_mes,              &
+           id_phy, id_dia, id_diz, id_det, id_zoo, id_poc, id_mes,      &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
-           id_pchl, id_dchl, id_phyfe, id_diafe, id_diasi, id_zoofe,    &
+           id_pchl, id_dchl, id_zchl,                                   & 
+           id_phyfe, id_diafe, id_dizfe, id_diasi, id_zoofe,            &
            id_mesfe, id_detfe, id_pocfe, id_pocsi, id_detsi_sediment
 ! internal pointer to make reading the code easier
 integer,public :: ind_po4 = -1
@@ -249,6 +250,7 @@ integer,public :: ind_no3 = -1
 integer,public :: ind_sil = -1
 integer,public :: ind_phy = -1
 integer,public :: ind_dia = -1
+integer,public :: ind_diz = -1
 integer,public :: ind_det = -1
 integer,public :: ind_poc = -1
 integer,public :: ind_zoo = -1
@@ -258,8 +260,10 @@ integer,public :: ind_adic = -1
 integer,public :: ind_fe = -1
 integer,public :: ind_pchl = -1  ! pjb
 integer,public :: ind_dchl = -1  ! pjb
+integer,public :: ind_zchl = -1  ! pjb
 integer,public :: ind_phyfe = -1  ! pjb
 integer,public :: ind_diafe = -1  ! pjb
+integer,public :: ind_dizfe = -1  ! pjb
 integer,public :: ind_diasi = -1  ! pjb
 integer,public :: ind_zoofe = -1  ! pjb
 integer,public :: ind_mesfe = -1  ! pjb
@@ -312,17 +316,23 @@ integer                                 :: id_diaxsize = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
+integer                                 :: id_diz_parlimit = -1
 integer                                 :: id_phy_Felimit = -1
 integer                                 :: id_dia_Felimit = -1
+integer                                 :: id_diz_Felimit = -1
 integer                                 :: id_phy_Nlimit = -1
 integer                                 :: id_dia_Nlimit = -1
+integer                                 :: id_diz_Nlimit = -1
 integer                                 :: id_phy_Plimit = -1
 integer                                 :: id_dia_Plimit = -1
+integer                                 :: id_diz_Plimit = -1
 integer                                 :: id_dia_Silimit = -1
 integer                                 :: id_dia_SiCupta = -1
 integer                                 :: id_zoo_grazpres = -1
 integer                                 :: id_mes_grazpres = -1
-integer                                 :: id_nitrif1 = -1
+integer                                 :: id_nitrific = -1
+integer                                 :: id_denitrif = -1
+integer                                 :: id_diazofix = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -417,10 +427,12 @@ real, allocatable, dimension(:,:) :: wdet100, wpoc100
 real, allocatable, dimension(:,:,:) :: wdet3d, wpoc3d
 real, allocatable, dimension(:,:) :: npp2d, zeuphot
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
-real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit,                    &
+real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
                                        zoo_grazpres, mes_grazpres,                                 &
-                                       phy_Felimit, dia_Felimit, phy_Nlimit, dia_Nlimit,           &
-                                       phy_Plimit, dia_Plimit, dia_Silimit, dia_SiCupta,nitrif1
+                                       phy_Felimit, dia_Felimit, diz_Felimit,                      & 
+                                       phy_Nlimit, dia_Nlimit, diz_Nlimit,                         &
+                                       phy_Plimit, dia_Plimit, diz_Plimit,                         &
+                                       dia_Silimit, dia_SiCupta, nitrific, denitrif, diazofix
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross, mprod_gross
 real, allocatable, dimension(:) :: ray
@@ -441,28 +453,42 @@ integer                                 :: phybiot_id
 real, allocatable, dimension(:,:)       :: phybiot
 integer                                 :: diabiot_id
 real, allocatable, dimension(:,:)       :: diabiot
+integer                                 :: dizbiot_id
+real, allocatable, dimension(:,:)       :: dizbiot
 integer                                 :: phyminqc_id
 real, allocatable, dimension(:,:)       :: phyminqc
 integer                                 :: diaminqc_id
 real, allocatable, dimension(:,:)       :: diaminqc
+integer                                 :: dizminqc_id
+real, allocatable, dimension(:,:)       :: dizminqc
 integer                                 :: phyoptqc_id
 real, allocatable, dimension(:,:)       :: phyoptqc
 integer                                 :: diaoptqc_id
 real, allocatable, dimension(:,:)       :: diaoptqc
+integer                                 :: dizoptqc_id
+real, allocatable, dimension(:,:)       :: dizoptqc
 integer                                 :: phymaxqf_id
 real, allocatable, dimension(:,:)       :: phymaxqf
 integer                                 :: diamaxqf_id
 real, allocatable, dimension(:,:)       :: diamaxqf
+integer                                 :: dizmaxqf_id
+real, allocatable, dimension(:,:)       :: dizmaxqf
 integer                                 :: phyoptqf_id
 real, allocatable, dimension(:,:)       :: phyoptqf
 integer                                 :: diaoptqf_id
 real, allocatable, dimension(:,:)       :: diaoptqf
+integer                                 :: dizoptqf_id
+real, allocatable, dimension(:,:)       :: dizoptqf
 integer                                 :: abioa_phy_id
 real, allocatable, dimension(:,:)       :: abioa_phy
 integer                                 :: abioa_dia_id
 real, allocatable, dimension(:,:)       :: abioa_dia
+integer                                 :: abioa_diz_id
+real, allocatable, dimension(:,:)       :: abioa_diz
 integer                                 :: bbioa_id
 real, allocatable, dimension(:,:)       :: bbioa
+integer                                 :: beta_diz_id
+real, allocatable, dimension(:,:)       :: beta_diz
 integer                                 :: cbioa_id
 real, allocatable, dimension(:,:)       :: cbioa
 integer                                 :: abioh_id
@@ -483,6 +509,12 @@ integer                                 :: diakf_id
 real, allocatable, dimension(:,:)       :: diakf
 integer                                 :: diakp_id
 real, allocatable, dimension(:,:)       :: diakp
+integer                                 :: dizkn_id
+real, allocatable, dimension(:,:)       :: dizkn
+integer                                 :: dizkf_id
+real, allocatable, dimension(:,:)       :: dizkf
+integer                                 :: dizkp_id
+real, allocatable, dimension(:,:)       :: dizkp
 integer                                 :: phylmor_id
 real, allocatable, dimension(:,:)       :: phylmor
 integer                                 :: phyqmor_id
@@ -501,6 +533,8 @@ integer                                 :: zprefphy_id
 real, allocatable, dimension(:,:)       :: zprefphy
 integer                                 :: zprefdia_id
 real, allocatable, dimension(:,:)       :: zprefdia
+integer                                 :: zprefdiz_id
+real, allocatable, dimension(:,:)       :: zprefdiz
 integer                                 :: zprefdet_id
 real, allocatable, dimension(:,:)       :: zprefdet
 integer                                 :: zprefpoc_id
@@ -509,6 +543,8 @@ integer                                 :: mprefphy_id
 real, allocatable, dimension(:,:)       :: mprefphy
 integer                                 :: mprefdia_id
 real, allocatable, dimension(:,:)       :: mprefdia
+integer                                 :: mprefdiz_id
+real, allocatable, dimension(:,:)       :: mprefdiz
 integer                                 :: mprefdet_id
 real, allocatable, dimension(:,:)       :: mprefdet
 integer                                 :: mprefpoc_id
@@ -671,17 +707,23 @@ allocate( mprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_parlimit(isc:iec,jsc:jec,nk) )
+allocate( diz_parlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_Felimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Felimit(isc:iec,jsc:jec,nk) )
+allocate( diz_Felimit(isc:iec,jsc:jec,nk) )
 allocate( phy_Nlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Nlimit(isc:iec,jsc:jec,nk) )
+allocate( diz_Nlimit(isc:iec,jsc:jec,nk) )
 allocate( phy_Plimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Plimit(isc:iec,jsc:jec,nk) )
+allocate( diz_Plimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Silimit(isc:iec,jsc:jec,nk) )
 allocate( dia_SiCupta(isc:iec,jsc:jec,nk) )
 allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
 allocate( mes_grazpres(isc:iec,jsc:jec,nk) )
-allocate( nitrif1(isc:iec,jsc:jec,nk) )
+allocate( nitrific(isc:iec,jsc:jec,nk) )
+allocate( denitrif(isc:iec,jsc:jec,nk) )
+allocate( diazofix(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -770,17 +812,24 @@ allocate( alphabio(isd:ied,jsd:jed) )
 allocate( parbio(isd:ied,jsd:jed) )
 allocate( phybiot(isd:ied,jsd:jed) )
 allocate( diabiot(isd:ied,jsd:jed) )
+allocate( dizbiot(isd:ied,jsd:jed) )
 allocate( phyminqc(isd:ied,jsd:jed) )
 allocate( diaminqc(isd:ied,jsd:jed) )
+allocate( dizminqc(isd:ied,jsd:jed) )
 allocate( phyoptqc(isd:ied,jsd:jed) )
 allocate( diaoptqc(isd:ied,jsd:jed) )
+allocate( dizoptqc(isd:ied,jsd:jed) )
 allocate( phymaxqf(isd:ied,jsd:jed) )
 allocate( diamaxqf(isd:ied,jsd:jed) )
+allocate( dizmaxqf(isd:ied,jsd:jed) )
 allocate( phyoptqf(isd:ied,jsd:jed) )
 allocate( diaoptqf(isd:ied,jsd:jed) )
+allocate( dizoptqf(isd:ied,jsd:jed) )
 allocate( abioa_phy(isd:ied,jsd:jed) )
 allocate( abioa_dia(isd:ied,jsd:jed) )
+allocate( abioa_diz(isd:ied,jsd:jed) )
 allocate( bbioa(isd:ied,jsd:jed) )
+allocate( beta_diz(isd:ied,jsd:jed) )
 allocate( cbioa(isd:ied,jsd:jed) )
 allocate( abioh(isd:ied,jsd:jed) )
 allocate( bbioh(isd:ied,jsd:jed) )
@@ -791,6 +840,9 @@ allocate( phykp(isd:ied,jsd:jed) )
 allocate( diakn(isd:ied,jsd:jed) )
 allocate( diakf(isd:ied,jsd:jed) )
 allocate( diakp(isd:ied,jsd:jed) )
+allocate( dizkn(isd:ied,jsd:jed) )
+allocate( dizkf(isd:ied,jsd:jed) )
+allocate( dizkp(isd:ied,jsd:jed) )
 allocate( phylmor(isd:ied,jsd:jed) )
 allocate( phyqmor(isd:ied,jsd:jed) )
 allocate( zooassi(isd:ied,jsd:jed) )
@@ -800,10 +852,12 @@ allocate( epszoo(isd:ied,jsd:jed) )
 allocate( epsmes(isd:ied,jsd:jed) )
 allocate( zprefphy(isd:ied,jsd:jed) )
 allocate( zprefdia(isd:ied,jsd:jed) )
+allocate( zprefdiz(isd:ied,jsd:jed) )
 allocate( zprefdet(isd:ied,jsd:jed) )
 allocate( zprefpoc(isd:ied,jsd:jed) )
 allocate( mprefphy(isd:ied,jsd:jed) )
 allocate( mprefdia(isd:ied,jsd:jed) )
+allocate( mprefdiz(isd:ied,jsd:jed) )
 allocate( mprefdet(isd:ied,jsd:jed) )
 allocate( mprefpoc(isd:ied,jsd:jed) )
 allocate( mprefzoo(isd:ied,jsd:jed) )
@@ -1911,6 +1965,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_sil',0)      
   call fm_util_set_value('id_phy',0)      
   call fm_util_set_value('id_dia',0)     !pjb    
+  call fm_util_set_value('id_diz',0)     !pjb    
   call fm_util_set_value('id_zoo',0)      
   call fm_util_set_value('id_mes',0)      
   call fm_util_set_value('id_det',0)      
@@ -1919,8 +1974,10 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('id_fe',0)      
   call fm_util_set_value('id_pchl',0)    !pjb     
   call fm_util_set_value('id_dchl',0)    !pjb     
+  call fm_util_set_value('id_zchl',0)    !pjb     
   call fm_util_set_value('id_phyfe',0)   !pjb     
   call fm_util_set_value('id_diafe',0)   !pjb     
+  call fm_util_set_value('id_dizfe',0)   !pjb     
   call fm_util_set_value('id_diasi',0)   !pjb     
   call fm_util_set_value('id_zoofe',0)   !pjb     
   call fm_util_set_value('id_mesfe',0)   !pjb     
@@ -1977,14 +2034,17 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   id_mes   =   fm_util_get_integer ('id_mes', scalar = .true.)
   id_phy   =   fm_util_get_integer ('id_phy', scalar = .true.)
   id_dia   =   fm_util_get_integer ('id_dia', scalar = .true.)
+  id_diz   =   fm_util_get_integer ('id_diz', scalar = .true.)
   id_det   =   fm_util_get_integer ('id_det', scalar = .true.)
   id_poc   =   fm_util_get_integer ('id_poc', scalar = .true.)
   id_caco3 =   fm_util_get_integer ('id_caco3', scalar = .true.)
   id_fe    =   fm_util_get_integer ('id_fe', scalar = .true.)
   id_pchl  =   fm_util_get_integer ('id_pchl', scalar = .true.)  ! pjb
   id_dchl  =   fm_util_get_integer ('id_dchl', scalar = .true.)  ! pjb
+  id_zchl  =   fm_util_get_integer ('id_zchl', scalar = .true.)  ! pjb
   id_phyfe =   fm_util_get_integer ('id_phyfe', scalar = .true.)  ! pjb
   id_diafe =   fm_util_get_integer ('id_diafe', scalar = .true.)  ! pjb
+  id_dizfe =   fm_util_get_integer ('id_dizfe', scalar = .true.)  ! pjb
   id_diasi =   fm_util_get_integer ('id_diasi', scalar = .true.)  ! pjb
   id_zoofe =   fm_util_get_integer ('id_zoofe', scalar = .true.)  ! pjb
   id_mesfe =   fm_util_get_integer ('id_mesfe', scalar = .true.)  ! pjb
@@ -1998,10 +2058,12 @@ call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check =
 sum_ntr = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
           min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
           min(1,id_o2) + min(1,id_sil) +                                      &
-          min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
+          min(1,id_phy) + min(1,id_dia) + min(1,id_diz) +                     &
+          min(1,id_zoo) + min(1,id_mes) +                                     &
           min(1,id_det) + min(1,id_poc) +                                     &
-          min(1,id_pchl) + min(1,id_dchl) +                                   &
-          min(1,id_phyfe) + min(1,id_diafe) + min(1,id_diasi) +               &
+          min(1,id_pchl) + min(1,id_dchl) + min(1,id_zchl) +                  &
+          min(1,id_phyfe) + min(1,id_diafe) + min(1,id_dizfe) +               &
+          min(1,id_diasi) +                                                   &
           min(1,id_zoofe) + min(1,id_detfe) + min(1,id_pocfe) +               &
           min(1,id_mesfe) + min(1,id_pocsi)
 if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',sum_ntr
@@ -2022,10 +2084,12 @@ do n = 1, instances  !{
   biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
                       min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
                       min(1,id_o2) + min(1,id_sil) +                                      &
-                      min(1,id_phy) + min(1,id_dia) + min(1,id_zoo) + min(1,id_mes) +     &
+                      min(1,id_phy) + min(1,id_dia) + min(1,id_diz) +                     &
+                      min(1,id_zoo) + min(1,id_mes) +                                     &
                       min(1,id_det) + min(1,id_poc) +                                     &
-                      min(1,id_pchl) + min(1,id_dchl) +                                   &
-                      min(1,id_phyfe) + min(1,id_diafe) + min(1,id_zoofe) +               &
+                      min(1,id_pchl) + min(1,id_dchl) + min(1,id_zchl) +                  &
+                      min(1,id_phyfe) + min(1,id_diafe) + min(1,id_dizfe) +               &
+                      min(1,id_zoofe) +                                                   &
                       min(1,id_diasi) + min(1,id_detfe) + min(1,id_pocfe) +               &
                       min(1,id_mesfe) + min(1,id_pocsi)
   if (mpp_pe() == mpp_root_pe() ) print*,'Number bgc tracers = ',biotic(n)%ntr_bgc
@@ -2061,6 +2125,10 @@ do n = 1, instances  !{
           max_range=10.0
     else if ( nn ==  id_dia ) then
           bgc_trc='dia'
+          min_range=-1e-7
+          max_range=10.0
+    else if ( nn ==  id_diz ) then
+          bgc_trc='diz'
           min_range=-1e-7
           max_range=10.0
     else if (nn == id_o2 ) then
@@ -2115,12 +2183,20 @@ do n = 1, instances  !{
           bgc_trc='dchl'
           min_range=0.0
           max_range=100.0
+    else if (nn == id_zchl ) then  ! pjb
+          bgc_trc='zchl'
+          min_range=0.0
+          max_range=100.0
     else if (nn == id_phyfe ) then  ! pjb
           bgc_trc='phyfe'
           min_range=0.0
           max_range=10.0
     else if (nn == id_diafe ) then  ! pjb
           bgc_trc='diafe'
+          min_range=0.0
+          max_range=10.0
+    else if (nn == id_dizfe ) then  ! pjb
+          bgc_trc='dizfe'
           min_range=0.0
           max_range=10.0
     else if (nn == id_diasi ) then  ! pjb
@@ -2226,12 +2302,15 @@ do n = 1, instances  !{
    ind_det  = biotic(n)%ind_bgc(id_det)
 
    if(id_dia.ne.0) ind_dia  = biotic(n)%ind_bgc(id_dia)      ! pjb
+   if(id_diz.ne.0) ind_diz  = biotic(n)%ind_bgc(id_diz)      ! pjb
    if(id_mes.ne.0) ind_mes  = biotic(n)%ind_bgc(id_mes)      ! pjb
    if(id_poc.ne.0) ind_poc  = biotic(n)%ind_bgc(id_poc)      ! pjb
    if(id_pchl.ne.0) ind_pchl= biotic(n)%ind_bgc(id_pchl)     ! pjb
    if(id_dchl.ne.0) ind_dchl= biotic(n)%ind_bgc(id_dchl)     ! pjb
+   if(id_zchl.ne.0) ind_zchl= biotic(n)%ind_bgc(id_zchl)     ! pjb
    if(id_phyfe.ne.0) ind_phyfe= biotic(n)%ind_bgc(id_phyfe)  ! pjb
    if(id_diafe.ne.0) ind_diafe= biotic(n)%ind_bgc(id_diafe)  ! pjb
+   if(id_dizfe.ne.0) ind_dizfe= biotic(n)%ind_bgc(id_dizfe)  ! pjb
    if(id_diasi.ne.0) ind_diasi= biotic(n)%ind_bgc(id_diasi)  ! pjb
    if(id_zoofe.ne.0) ind_zoofe= biotic(n)%ind_bgc(id_zoofe)  ! pjb
    if(id_detfe.ne.0) ind_detfe= biotic(n)%ind_bgc(id_detfe)  ! pjb
@@ -2488,6 +2567,10 @@ if (id_dia_parlimit .gt. 0) then
   used = send_data(id_dia_parlimit, dia_parlimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_diz_parlimit .gt. 0) then
+  used = send_data(id_diz_parlimit, diz_parlimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Iron limitation of phytoplankton
 if (id_phy_Felimit .gt. 0) then
   used = send_data(id_phy_Felimit, phy_Felimit(isc:iec,jsc:jec,:),          &
@@ -2495,6 +2578,10 @@ if (id_phy_Felimit .gt. 0) then
 endif
 if (id_dia_Felimit .gt. 0) then
   used = send_data(id_dia_Felimit, dia_Felimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diz_Felimit .gt. 0) then
+  used = send_data(id_diz_Felimit, diz_Felimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 ! Nitrogen limitation of phytoplankton
@@ -2506,6 +2593,10 @@ if (id_dia_Nlimit .gt. 0) then
   used = send_data(id_dia_Nlimit, dia_Nlimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_diz_Nlimit .gt. 0) then
+  used = send_data(id_diz_Nlimit, diz_Nlimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 ! Phosphorus limitation of phytoplankton
 if (id_phy_Plimit .gt. 0) then
   used = send_data(id_phy_Plimit, phy_Plimit(isc:iec,jsc:jec,:),          &
@@ -2513,6 +2604,10 @@ if (id_phy_Plimit .gt. 0) then
 endif
 if (id_dia_Plimit .gt. 0) then
   used = send_data(id_dia_Plimit, dia_Plimit(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diz_Plimit .gt. 0) then
+  used = send_data(id_diz_Plimit, diz_Plimit(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 ! Silicic acid limitation of diatoms
@@ -2534,8 +2629,18 @@ if (id_mes_grazpres .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 ! Nitrification
-if (id_nitrif1 .gt. 0) then
-  used = send_data(id_nitrif1, nitrif1(isc:iec,jsc:jec,:),          &
+if (id_nitrific .gt. 0) then
+  used = send_data(id_nitrific, nitrific(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Denitrification
+if (id_denitrif .gt. 0) then
+  used = send_data(id_denitrif, denitrif(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Nitrogen fixation
+if (id_diazofix .gt. 0) then
+  used = send_data(id_diazofix, diazofix(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2953,28 +3058,42 @@ phybiot_id = init_external_field("INPUT/bgc_param.nc",          &
         "phybiot", domain = Domain%domain2d)
 diabiot_id = init_external_field("INPUT/bgc_param.nc",          &
         "diabiot", domain = Domain%domain2d)
+dizbiot_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizbiot", domain = Domain%domain2d)
 phyminqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "phyminqc", domain = Domain%domain2d)
 diaminqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "diaminqc", domain = Domain%domain2d)
+dizminqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizminqc", domain = Domain%domain2d)
 phyoptqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "phyoptqc", domain = Domain%domain2d)
 diaoptqc_id = init_external_field("INPUT/bgc_param.nc",          &
         "diaoptqc", domain = Domain%domain2d)
+dizoptqc_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizoptqc", domain = Domain%domain2d)
 phymaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "phymaxqf", domain = Domain%domain2d)
 diamaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "diamaxqf", domain = Domain%domain2d)
+dizmaxqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizmaxqf", domain = Domain%domain2d)
 phyoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "phyoptqf", domain = Domain%domain2d)
 diaoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
         "diaoptqf", domain = Domain%domain2d)
+dizoptqf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizoptqf", domain = Domain%domain2d)
 abioa_phy_id = init_external_field("INPUT/bgc_param.nc",          &
         "abioa_phy", domain = Domain%domain2d)
 abioa_dia_id = init_external_field("INPUT/bgc_param.nc",          &
         "abioa_dia", domain = Domain%domain2d)
+abioa_diz_id = init_external_field("INPUT/bgc_param.nc",          &
+        "abioa_diz", domain = Domain%domain2d)
 bbioa_id = init_external_field("INPUT/bgc_param.nc",          &
         "bbioa", domain = Domain%domain2d)
+beta_diz_id = init_external_field("INPUT/bgc_param.nc",          &
+        "beta_diz", domain = Domain%domain2d)
 cbioa_id = init_external_field("INPUT/bgc_param.nc",          &
         "cbioa", domain = Domain%domain2d)
 abioh_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -2995,6 +3114,12 @@ diakf_id = init_external_field("INPUT/bgc_param.nc",          &
         "diakf", domain = Domain%domain2d)
 diakp_id = init_external_field("INPUT/bgc_param.nc",          &
         "diakp", domain = Domain%domain2d)
+dizkn_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizkn", domain = Domain%domain2d)
+dizkf_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizkf", domain = Domain%domain2d)
+dizkp_id = init_external_field("INPUT/bgc_param.nc",          &
+        "dizkp", domain = Domain%domain2d)
 phylmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "phylmor", domain = Domain%domain2d)
 phyqmor_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3013,6 +3138,8 @@ zprefphy_id = init_external_field("INPUT/bgc_param.nc",          &
         "zprefphy", domain = Domain%domain2d)
 zprefdia_id = init_external_field("INPUT/bgc_param.nc",          &
         "zprefdia", domain = Domain%domain2d)
+zprefdiz_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zprefdiz", domain = Domain%domain2d)
 zprefdet_id = init_external_field("INPUT/bgc_param.nc",          &
         "zprefdet", domain = Domain%domain2d)
 zprefpoc_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3021,6 +3148,8 @@ mprefphy_id = init_external_field("INPUT/bgc_param.nc",          &
         "mprefphy", domain = Domain%domain2d)
 mprefdia_id = init_external_field("INPUT/bgc_param.nc",          &
         "mprefdia", domain = Domain%domain2d)
+mprefdiz_id = init_external_field("INPUT/bgc_param.nc",          &
+        "mprefdiz", domain = Domain%domain2d)
 mprefdet_id = init_external_field("INPUT/bgc_param.nc",          &
         "mprefdet", domain = Domain%domain2d)
 mprefpoc_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3297,12 +3426,20 @@ id_dia_parlimit = register_diag_field('ocean_model','dia_parlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton light limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
+id_diz_parlimit = register_diag_field('ocean_model','diz_parlimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph light limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
 id_phy_Felimit = register_diag_field('ocean_model','phy_Felimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Felimit = register_diag_field('ocean_model','dia_Felimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton Fe limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_diz_Felimit = register_diag_field('ocean_model','diz_Felimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph Fe limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_phy_Nlimit = register_diag_field('ocean_model','phy_Nlimit', &
@@ -3313,12 +3450,20 @@ id_dia_Nlimit = register_diag_field('ocean_model','dia_Nlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton N limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
+id_diz_Nlimit = register_diag_field('ocean_model','diz_Nlimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph N limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
 id_phy_Plimit = register_diag_field('ocean_model','phy_Plimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton P limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Plimit = register_diag_field('ocean_model','dia_Plimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton P limitation', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_diz_Plimit = register_diag_field('ocean_model','diz_Plimit', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph P limitation', &
      '[0-1]',missing_value = -1.0e+10)
 
 id_dia_Silimit = register_diag_field('ocean_model','dia_Silimit', &
@@ -3337,8 +3482,16 @@ id_mes_grazpres = register_diag_field('ocean_model','mes_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'mesozooplankton specific grazing pressure', &
      'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
 
-id_nitrif1 = register_diag_field('ocean_model','nitrif1', &
+id_nitrific = register_diag_field('ocean_model','nitrific', &
      grid%tracer_axes(1:3),Time%model_time, 'Nitrification rate (NH4-->NO3)', &
+     'mmolN/m^3/s',missing_value = -1.0e+10)
+
+id_denitrif = register_diag_field('ocean_model','denitrif', &
+     grid%tracer_axes(1:3),Time%model_time, 'Denitrification rate (NO3-->N2)', &
+     'mmolN/m^3/s',missing_value = -1.0e+10)
+
+id_diazofix = register_diag_field('ocean_model','diazofix', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nitrogen fixation rate (N2-->DIZ(N))', &
      'mmolN/m^3/s',missing_value = -1.0e+10)
 
 id_caco3_sediment = register_diag_field('ocean_model','caco3_sediment', &
@@ -3481,6 +3634,12 @@ do n = 1, instances  !{
    name3 = 'Source term - microphytoplankton'
    name4 = 'Flux into sediment - microphytoplankton'
   endif
+  if (nn .eq. id_diz) then 
+   name1 = 'Flux into ocean - diazotroph'
+   name2 = 'Virtual flux into ocean - diazotroph'
+   name3 = 'Source term - diazotroph'
+   name4 = 'Flux into sediment - diazotroph'
+  endif
   if (nn .eq. id_zoo) then 
    name1 = 'Flux into ocean - zooplankton'
    name2 = 'Virtual flux into ocean - zooplankton'
@@ -3562,6 +3721,12 @@ do n = 1, instances  !{
    name3 = 'Source term - microphytoplankton chlorophyll'
    name4 = 'Flux into sediment - microphytoplankton chlorophyll'
   endif
+  if (nn .eq. id_zchl) then ! pjb 
+   name1 = 'Flux into ocean - diazotroph chlorophyll'
+   name2 = 'Virtual flux into ocean - diazotroph chlorophyll'
+   name3 = 'Source term - diazotroph chlorophyll'
+   name4 = 'Flux into sediment - diazotroph chlorophyll'
+  endif
   if (nn .eq. id_phyfe) then ! pjb 
    name1 = 'Flux into ocean - Nanophytoplankton Fe'
    name2 = 'Virtual flux into ocean - Nanophytoplankton Fe'
@@ -3573,6 +3738,12 @@ do n = 1, instances  !{
    name2 = 'Virtual flux into ocean - microphytoplankton Fe'
    name3 = 'Source term - microphytoplankton Fe'
    name4 = 'Flux into sediment - microphytoplankton Fe'
+  endif
+  if (nn .eq. id_dizfe) then ! pjb 
+   name1 = 'Flux into ocean - diazotroph Fe'
+   name2 = 'Virtual flux into ocean - diazotroph Fe'
+   name3 = 'Source term - diazotroph Fe'
+   name4 = 'Flux into sediment - diazotroph Fe'
   endif
   if (nn .eq. id_diasi) then ! pjb 
    name1 = 'Flux into ocean - microphytoplankton Si'
