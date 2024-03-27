@@ -166,7 +166,7 @@ character(len=48), parameter                    :: mod_name = 'csiro_bgc_mod'
 character(len=fm_string_len), parameter         :: default_file_in = 'INPUT/csiro_bgc.res.nc'
 character(len=fm_string_len), parameter         :: default_file_out = 'RESTART/csiro_bgc.res.nc'
 
-integer, parameter                              :: ntr_bmax = 30
+integer, parameter                              :: ntr_bmax = 32
 
 !-------------------------------------------------------
 ! private types
@@ -314,6 +314,7 @@ integer                                 :: id_wpoc3d = -1
 integer                                 :: id_phyxsize = -1
 integer                                 :: id_diaxsize = -1
 integer                                 :: id_zeuphot = -1
+integer                                 :: id_chlorophyll = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
 integer                                 :: id_diz_parlimit = -1
@@ -425,7 +426,7 @@ real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d, phyxsize, diaxsize
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
 real, allocatable, dimension(:,:,:) :: wdet3d, wpoc3d
-real, allocatable, dimension(:,:) :: npp2d, zeuphot
+real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
                                        zoo_grazpres, mes_grazpres,                                 &
@@ -586,7 +587,7 @@ type(restart_file_type), save    :: sed_restart
 
 ! Tracer names
 
-character(5), dimension(30) :: tracer_name
+character(5), dimension(32) :: tracer_name
 
 !-----------------------------------------------------------------------
 !
@@ -705,6 +706,7 @@ allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( mprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
+allocate( chlorophyll(isc:iec,jsc:jec) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_parlimit(isc:iec,jsc:jec,nk) )
 allocate( diz_parlimit(isc:iec,jsc:jec,nk) )
@@ -2519,7 +2521,6 @@ endif
 !det export at 100 m 
 if (id_wdet100 .gt. 0) then
   wdet100(:,:) = wdetbio(isc:iec,jsc:jec) *                                                        &
-                 phyxsize(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1)) *                          &
                  t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
@@ -2534,7 +2535,6 @@ endif
 if (id_wdet3d .gt. 0) then
   do k = 1,grid%nk !{
     wdet3d(:,:,k) = wdetbio(isc:iec,jsc:jec) *                                                     &
-                    phyxsize(isc:iec,jsc:jec,k) *                                                  &
                     t_prog(ind_det)%field(isc:iec,jsc:jec,k,time%taum1)
   enddo
   used = send_data(id_wdet3d, wdet3d(isc:iec,jsc:jec,:),          &
@@ -2774,6 +2774,11 @@ endif
 ! Euphotic Zone depth (1% light level, function of chlorophyll).
 if (id_zeuphot .gt. 0) then
   used = send_data(id_zeuphot, zeuphot(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+! Total surface chlorophyll concentration (mg/m3) 
+if (id_chlorophyll .gt. 0) then
+  used = send_data(id_chlorophyll, chlorophyll(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
@@ -3353,6 +3358,10 @@ id_zeuphot = register_diag_field('ocean_model','zeuphot', &
      grid%tracer_axes(1:2),Time%model_time, &
      'euphotic zone depth', &
      'metres',missing_value = -1.0e+10)     
+id_chlorophyll = register_diag_field('ocean_model','chlorophyll', &
+     grid%tracer_axes(1:2),Time%model_time, &
+     'surface chlorophyll', &
+     'mg/m^3',missing_value = -1.0e+10)     
 
 id_radbio1 = register_diag_field('ocean_model','radbio1', &
      grid%tracer_axes(1:2),Time%model_time, 'Photosynthetically active radiation for phytoplankton growth at surface', &
