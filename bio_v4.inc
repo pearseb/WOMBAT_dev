@@ -48,19 +48,18 @@ subroutine bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 !       11.4  Nutrient limitation terms for phytoplankton growth  
 !       11.5  Light limitation terms for phytoplankton growth  
 !       11.6  Realised growth rate given resource availability
-!       11.7  Find rate of nitrogen fixation (facultative)
-!       11.8  Si:C ratio for diatom productivity 
-!       11.9  Silicate dissolution rate 
-!       11.10 Growth in chlorophyll (mg Chl / m3)
-!       11.11 Phytoplankton uptake of Fe (nmol Fe / m3)
-!       11.12 Temperature dependence of heterotrophy / respiration
-!       11.13 Grazing functions 
-!       11.14 Mortality scalers
-!       11.15 Bacterial processes
-!       11.16 Collect major source and sink terms for tendency equations
-!       11.17 Apply sources and sinks to tendency equations 
-!       11.18 Collect key diagnostics
-!       11.19 Check for conservation of mass by ecosystem component
+!       11.7  Si:C ratio for diatom productivity 
+!       11.8  Silicate dissolution rate 
+!       11.9  Growth in chlorophyll (mg Chl / m3)
+!       11.10 Phytoplankton uptake of Fe (nmol Fe / m3)
+!       11.11 Temperature dependence of heterotrophy / respiration
+!       11.12 Grazing functions 
+!       11.13 Mortality scalers
+!       11.14 Bacterial processes
+!       11.15 Collect major source and sink terms for tendency equations
+!       11.16 Apply sources and sinks to tendency equations 
+!       11.17 Collect key diagnostics
+!       11.18 Check for conservation of mass by ecosystem component
 !
 !               [ END do loop over t, k and i indices ]
 !
@@ -302,7 +301,7 @@ real :: caco3_bgc_change                ! Total change in CaCO3 following time-s
 real :: no3_bgc_change                  ! Total change in nitrate following time-splitting of ecosystem component 
 real :: nh4_bgc_change                  ! Total change in ammonium following time-splitting of ecosystem component
 real :: c_pools(isc:iec,grid%nk,2)      ! Total biological carbon budget (PHY + DIA + ZOO + MES + DET + POC + DIC + CaCO3)
-real :: n_pools(isc:iec,grid%nk,2)      ! Total biological nitrogen budget (PHY + DIA + ZOO + MES + DET + POC + NO3 + NH4) 
+real :: p_pools(isc:iec,grid%nk,2)      ! Total biological phosphorus budget (PHY + DIA + ZOO + MES + DET + POC + PO4) 
 
 ! ------------------------- !
 !!! --------------------- !!!
@@ -436,6 +435,7 @@ real :: dia_det2poc                     ! Fraction of microphytoplankton biomass
 real :: diz_det2poc                     ! Fraction of diazotroph biomass that is routed to slow-sinking detritus
 real :: zoo_det2poc                     ! Fraction of microzooplankton biomass that is routed to slow-sinking detritus
 real :: mes_det2poc                     ! Fraction of mesozooplankton biomass that is routed to slow-sinking detritus
+real :: caco3_prod                      ! Production of CaCO3 by ecosystem component
 
 ! -------------------- !
 !!! ---------------- !!!
@@ -697,6 +697,7 @@ do n = 1, instances  !{
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
   zeuphot(:,:) = 10.0       ! minimum euphotic zone depth is 20 metres
+  chlorophyll(:,:) = 0.0    ! total surface chlorophyll
   phy_parlimit(:,:,:) = 0.0
   dia_parlimit(:,:,:) = 0.0
   diz_parlimit(:,:,:) = 0.0
@@ -740,7 +741,7 @@ do n = 1, instances  !{
   ind_adic = biotic(n)%ind_bgc(id_adic)     ! mmol DIC / m3
   ind_phy  = biotic(n)%ind_bgc(id_phy)      ! mmol C / m3
   ind_dia  = biotic(n)%ind_bgc(id_dia)      ! mmol C / m3
-  ind_diz= biotic(n)%ind_bgc(id_diz)        ! mmol C / m3
+  ind_diz  = biotic(n)%ind_bgc(id_diz)      ! mmol C / m3
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)      ! mmol C / m3
   ind_mes  = biotic(n)%ind_bgc(id_mes)      ! mmol C / m3
   ind_det  = biotic(n)%ind_bgc(id_det)      ! mmol C / m3
@@ -789,7 +790,7 @@ do n = 1, instances  !{
            if (id_po4.ne.0)   biotr(i,k,id_po4) = max(0.0,t_prog(ind_po4)%field(i,j,k,Time%taum1))
            if (id_sil.ne.0)   biotr(i,k,id_sil) = max(0.0,t_prog(ind_sil)%field(i,j,k,Time%taum1))
            if (id_dia.ne.0)   biotr(i,k,id_dia) = max(0.0,t_prog(ind_dia)%field(i,j,k,Time%taum1))
-           if (id_diz.ne.0) biotr(i,k,id_diz) = max(0.0,t_prog(ind_diz)%field(i,j,k,Time%taum1))
+           if (id_diz.ne.0)   biotr(i,k,id_diz) = max(0.0,t_prog(ind_diz)%field(i,j,k,Time%taum1))
            if (id_mes.ne.0)   biotr(i,k,id_mes) = max(0.0,t_prog(ind_mes)%field(i,j,k,Time%taum1))
            if (id_poc.ne.0)   biotr(i,k,id_poc) = max(0.0,t_prog(ind_poc)%field(i,j,k,Time%taum1))
            if (id_caco3.ne.0) biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
@@ -865,11 +866,16 @@ do n = 1, instances  !{
        daylight(:) = 0.0
 
        do i=isc,iec
+
          ! Calculate the daylength (hours per day) given the latitude and day of year
          day_angle = 2.0*pi*(days_in_this_year-1)/365.0
          declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
          cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
          daylight(i) = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+
+         ! Save the surface chlorophyll concentrations
+         chlorophyll(i,j) = biotr(i,1,id_pchl) + biotr(i,1,id_dchl) + biotr(i,1,id_zchl)
+
        enddo
 
        do k=1,grid%nk
@@ -1002,8 +1008,8 @@ do n = 1, instances  !{
            ztem = t_prog(index_temp)%field(i,j,k,time%tau)
            mumax_phy(i,k) = abioa_phy(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) / 86400.0
            mumax_dia(i,k) = abioa_dia(i,j) * bbioa(i,j)**(cbioa(i,j) * ztem) / 86400.0
-           mumax_diz(i,k) = abioa_diz(i,j) * exp(- (ztem - beta_diz(i,j)) /                        &
-                                                   (8.0 - 0.5*(ztem - beta_diz(i,j)))) / 86400.0
+           mumax_diz(i,k) = abioa_diz(i,j) * exp(- ( (ztem - beta_diz(i,j)) /                      &
+                                                (8.0 - 0.5*(ztem - beta_diz(i,j)) + epsi))**2 ) / 86400.0
 
          enddo  ! i
        enddo  ! k
@@ -1020,7 +1026,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
        ! Arrays for checking that ecosystem component equations conserve mass
-       n_pools(:,:,:) = 0.0
+       p_pools(:,:,:) = 0.0
        c_pools(:,:,:) = 0.0
 
        do tn = 1,ts_npzd
@@ -1071,7 +1077,7 @@ do n = 1, instances  !{
          ! Calculate the ratio of labile to non-labile particulate silicate
          si_lab2non(:,:) = si_xlabile(:,:)/(1.0-si_xlabile(:,:))   
         
-         n_pools(:,:,2) = n_pools(:,:,1)  ! Save values from the last timestep
+         p_pools(:,:,2) = p_pools(:,:,1)  ! Save values from the last timestep
          c_pools(:,:,2) = c_pools(:,:,1)  ! Save values from the last timestep
 
 
@@ -1308,11 +1314,13 @@ do n = 1, instances  !{
                if (biozchl*biodiz.gt.0.0) then
                  diz_minFeC = 0.0016 / 55.85 * biozchl/biodiz +                                    &
                               1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3
+                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
+                              13e-6 * (1.0 - diz_limnit(i,k))
                else
                  diz_minFeC = 0.0016 / 55.85 * dizminqc(i,j)*12 +                                  &
                               1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3
+                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
+                              13e-6 * (1.0 - diz_limnit(i,k))
                endif
                phy_limfe(i,k) = min(1.0, max(0.0, (phy_FeC(i,k) - phy_minFeC)/phyoptqf(i,j) ))
                dia_limfe(i,k) = min(1.0, max(0.0, (dia_FeC(i,k) - dia_minFeC)/diaoptqf(i,j) ))
@@ -1390,7 +1398,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.8] - Si:C ratio for diatom productivity                                             !
+!     Step [11.7] - Si:C ratio for diatom productivity                                             !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1409,7 +1417,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.9] - Silicate dissolution rate                                                      !
+!     Step [11.8] - Silicate dissolution rate                                                      !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1433,7 +1441,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.10] - Growth in chlorophyll (mg Chl / m3)                                            !
+!     Step [11.9] - Growth in chlorophyll (mg Chl / m3)                                            !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1481,7 +1489,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.11] - Phytoplankton uptake of Fe (nmol Fe / m3)                                     !
+!     Step [11.10] - Phytoplankton uptake of Fe (nmol Fe / m3)                                     !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1523,7 +1531,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.12] - Temperature dependence of heterotrophy / respiration                          !
+!     Step [11.11] - Temperature dependence of heterotrophy / respiration                          !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1536,7 +1544,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.13] - Grazing functions                                                             !
+!     Step [11.12] - Grazing functions                                                             !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1567,7 +1575,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.14] - Mortality scalers                                                             !
+!     Step [11.13] - Mortality scalers                                                             !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1586,7 +1594,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.15] - Bacterial processes                                                           !
+!     Step [11.14] - Bacterial processes                                                           !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1601,7 +1609,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.16] - Collect major source and sink terms for tendency equations                    !
+!     Step [11.15] - Collect major source and sink terms for tendency equations                    !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1805,6 +1813,7 @@ do n = 1, instances  !{
                                   / (biodia+epsi)
                phy_det2poc = min(0.80, 1.0/(phyxsize(i,j,k) + epsi))
                dia_det2poc = min(0.66, 1.0/(diaxsize(i,j,k) + epsi))
+               diz_det2poc = 0.8
                zoo_det2poc = max(0.0, min( 0.7, (phy_det2poc*biophy + dia_det2poc*biodia)          &
                                                 / (biophy + biodia + epsi) ))
                mes_det2poc = max(0.0, min( 0.5,                                                    &
@@ -1815,8 +1824,8 @@ do n = 1, instances  !{
                dia_det2poc = 1.0
                zoo_det2poc = 1.0
                mes_det2poc = 1.0
+               diz_det2poc = 1.0
              endif
-             diz_det2poc = 0.8
 
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1901,22 +1910,23 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!
              ! CaCO3 equation !
              !!!!!!!!!!!!!!!!!!
+             caco3_prod = f_inorg(i,j) * ( f23phy + (1.-zooassi(i,j))*(z21phy + m21phy) )
+             if (zooprey.gt.0.0)                                                                   &
+               caco3_prod = caco3_prod + f_inorg(i,j) * z32* ( biophy_min*zprefphy(i,j) / zooprey )
+             if (mesprey.gt.0.0)                                                                   &
+               caco3_prod = caco3_prod + f_inorg(i,j) * m32* ( biophy_min*mprefphy(i,j) / mesprey )
+
              if (id_caco3.ne.0)                                                                    &
-             biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( f_inorg(i,j) * ( f23phy          &
-                                   + (1.-zooassi(i,j))*(z21phy + m21phy)                           &
-                                   + z32*(biophy*zprefphy(i,j)/(zooprey+epsi))                     &
-                                   + m32*(biophy*mprefphy(i,j)/(mesprey+epsi)) ) - f51)   
+             biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( caco3_prod - f51 ) 
 
 
              !!!!!!!!!!!!!!!!
              ! DIC equation !
              !!!!!!!!!!!!!!!!
-             biotr(i,k,id_dic)  = biotr(i,k,id_dic) + dtsb * ( f41det + f41poc + f51               &
-                                                             + z31 + m31 + f22phy + f22dia + f22diz&
+             biotr(i,k,id_dic)  = biotr(i,k,id_dic) + dtsb * ( f41det + f41poc + f51 + z31 + m31   &
+                                                             + f22phy + f22dia + f22diz            &
                                                              - f11phy - f11dia - f11diz            &
-                                  - f_inorg(i,j) * ( f23phy + (1.-zooassi(i,j))*(z21phy + m21phy)  &
-                                                     + z32*(biophy*zprefphy(i,j)/(zooprey+epsi))   &
-                                                     + m32*(biophy*mprefphy(i,j)/(mesprey+epsi)) ) )
+                                                             - caco3_prod )
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
@@ -2008,35 +2018,37 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!             
 
-             n_pools(i,k,1) = biotr(i,k,id_nh4) + biotr(i,k,id_no3)                                & 
+             p_pools(i,k,1) = biotr(i,k,id_po4)                                                    & 
                               + (biotr(i,k,id_phy) + biotr(i,k,id_dia) + biotr(i,k,id_diz)         &
                               +  biotr(i,k,id_zoo) + biotr(i,k,id_mes)                             &
-                              +  biotr(i,k,id_det) + biotr(i,k,id_poc) ) * 16/122.0
+                              +  biotr(i,k,id_det) + biotr(i,k,id_poc) ) * 1/122.0
              c_pools(i,k,1) = biotr(i,k,id_dic) + biotr(i,k,id_caco3)                              & 
                               + (biotr(i,k,id_phy) + biotr(i,k,id_dia) + biotr(i,k,id_diz)         & 
                               +  biotr(i,k,id_zoo) + biotr(i,k,id_mes)                             &
                               +  biotr(i,k,id_det) + biotr(i,k,id_poc) )
 
-             if (tn.gt.1) then
-               !if (abs(n_pools(i,k,2) - n_pools(i,k,1)) .gt. 1e-6 ) then
-               !  print*, "Error: Ecosystem model is not conserving nitrogen"
-               !  print*, "       Longitude = ", grid%xt(i,j)
-               !  print*, "       Latitude  = ", grid%yt(i,j)
-               !  print*, "       Depth     = ", grid%zt(k)
-               !  print*, " "
-               !  print*, "       Biological N budget at two timesteps ", n_pools(i,k,:)
-               !  stop
-               !endif
-               if (abs(c_pools(i,k,2) - c_pools(i,k,1)) .gt. 1e-6 ) then
-                 print*, "Error: Ecosystem model is not conserving carbon"
-                 print*, "       Longitude = ", grid%xt(i,j)
-                 print*, "       Latitude  = ", grid%yt(i,j)
-                 print*, "       Depth     = ", grid%zt(k)
-                 print*, " "
-                 print*, "       Biological C budget at two timesteps ", c_pools(i,k,:)
-                 stop
-               endif
-             endif
+             ! This code is commented because it is used during development to convince ourselves
+             ! that the ecosystem component of WOMBAT is conserving mass.
+             !if (tn.gt.1) then
+             !  if (abs(p_pools(i,k,2) - p_pools(i,k,1)) .gt. 1e-6 ) then
+             !    print*, "Error: Ecosystem model is not conserving phosphorus"
+             !    print*, "       Longitude = ", grid%xt(i,j)
+             !    print*, "       Latitude  = ", grid%yt(i,j)
+             !    print*, "       Depth     = ", grid%zt(k)
+             !    print*, " "
+             !    print*, "       Biological P budget at two timesteps ", p_pools(i,k,:)
+             !    stop
+             !  endif
+             !  if (abs(c_pools(i,k,2) - c_pools(i,k,1)) .gt. 1e-6 ) then
+             !    print*, "Error: Ecosystem model is not conserving carbon"
+             !    print*, "       Longitude = ", grid%xt(i,j)
+             !    print*, "       Latitude  = ", grid%yt(i,j)
+             !    print*, "       Depth     = ", grid%zt(k)
+             !    print*, " "
+             !    print*, "       Biological C budget at two timesteps ", c_pools(i,k,:)
+             !    stop
+             !  endif
+             !endif
 
            enddo  ! i
          enddo  ! k
@@ -2124,6 +2136,7 @@ do n = 1, instances  !{
            nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
            zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
            mes_grazpres(i,j,k)= rdtts * mes_grazpres(i,j,k)* grid%tmask(i,j,k)
+           diazofix(i,j,k)    = rdtts * diazofix(i,j,k)    * grid%tmask(i,j,k)
 
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
@@ -2178,11 +2191,11 @@ do n = 1, instances  !{
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wdetbio(i,j)*phyxsize(i,j,k) * biotr(i,k-1,id_det)
-           adv_fb2(i,k) = wdetbio(i,j)*phyxsize(i,j,k) * biotr(i,k-1,id_detfe)
-           adv_fb3(i,k) = wdetbio(i,j)*10*diaxsize(i,j,k) * biotr(i,k-1,id_poc)
-           adv_fb4(i,k) = wdetbio(i,j)*10*diaxsize(i,j,k) * biotr(i,k-1,id_pocfe)
-           adv_fb5(i,k) = wdetbio(i,j)*10*diaxsize(i,j,k) * biotr(i,k-1,id_pocsi)
+           adv_fb1(i,k) = wdetbio(i,j) * biotr(i,k-1,id_det)
+           adv_fb2(i,k) = wdetbio(i,j) * biotr(i,k-1,id_detfe)
+           adv_fb3(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_poc)
+           adv_fb4(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocfe)
+           adv_fb5(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocsi)
          enddo  ! i
        enddo  ! k
 
