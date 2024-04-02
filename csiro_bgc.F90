@@ -309,8 +309,8 @@ integer                                 :: id_radbio1 = -1
 integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_wpoc100 = -1
-integer                                 :: id_wdet3d = -1
-integer                                 :: id_wpoc3d = -1
+integer                                 :: id_wdet = -1
+integer                                 :: id_wpoc = -1
 integer                                 :: id_phyxsize = -1
 integer                                 :: id_diaxsize = -1
 integer                                 :: id_zeuphot = -1
@@ -425,7 +425,7 @@ real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d, phyxsize, diaxsize
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
-real, allocatable, dimension(:,:,:) :: wdet3d, wpoc3d
+real, allocatable, dimension(:,:,:) :: wdet, wpoc
 real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
@@ -578,6 +578,18 @@ integer                                 :: fe_bkgnd_id
 real, allocatable, dimension(:,:)       :: fe_bkgnd
 integer                                 :: f_inorg_id
 real, allocatable, dimension(:,:)       :: f_inorg
+integer                                 :: knitrif_id
+real, allocatable, dimension(:,:)       :: knitrif
+integer                                 :: kdenitr_id
+real, allocatable, dimension(:,:)       :: kdenitr
+integer                                 :: kcoag_dfe_id
+real, allocatable, dimension(:,:)       :: kcoag_dfe
+integer                                 :: kcoag2_dfe_id
+real, allocatable, dimension(:,:)       :: kcoag2_dfe
+integer                                 :: kscav_dfe_id
+real, allocatable, dimension(:,:)       :: kscav_dfe
+integer                                 :: knano_dfe_id
+real, allocatable, dimension(:,:)       :: knano_dfe
 
 
 ! for extra restart file(s)
@@ -694,8 +706,8 @@ allocate( radbio_int100(isc:iec,jsc:jec) )
 allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
-allocate( wdet3d(isc:iec,jsc:jec,nk) )
-allocate( wpoc3d(isc:iec,jsc:jec,nk) )
+allocate( wdet(isc:iec,jsc:jec,nk) )
+allocate( wpoc(isc:iec,jsc:jec,nk) )
 allocate( phyxsize(isc:iec,jsc:jec,nk) )
 allocate( diaxsize(isc:iec,jsc:jec,nk) )
 allocate( npp2d(isc:iec,jsc:jec) )
@@ -876,6 +888,12 @@ allocate( nat_co2(isd:ied,jsd:jed) )
 allocate( tscav_fe(isd:ied,jsd:jed) )
 allocate( fe_bkgnd(isd:ied,jsd:jed) )
 allocate( f_inorg(isd:ied,jsd:jed) )
+allocate( knitrif(isd:ied,jsd:jed) )
+allocate( kdenitr(isd:ied,jsd:jed) )
+allocate( knano_dfe(isd:ied,jsd:jed) )
+allocate( kscav_dfe(isd:ied,jsd:jed) )
+allocate( kcoag_dfe(isd:ied,jsd:jed) )
+allocate( kcoag2_dfe(isd:ied,jsd:jed) )
 
 
 !       initialize some arrays
@@ -2520,7 +2538,7 @@ if (dust_id .gt. 0) then
 endif
 !det export at 100 m 
 if (id_wdet100 .gt. 0) then
-  wdet100(:,:) = wdetbio(isc:iec,jsc:jec) *                                                        &
+  wdet100(:,:) = wdet(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1)) *                           &
                  t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
@@ -2532,20 +2550,16 @@ if (id_wpoc100 .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 !det export  
-if (id_wdet3d .gt. 0) then
-  do k = 1,grid%nk !{
-    wdet3d(:,:,k) = wdetbio(isc:iec,jsc:jec) *                                                     &
-                    t_prog(ind_det)%field(isc:iec,jsc:jec,k,time%taum1)
-  enddo
-  used = send_data(id_wdet3d, wdet3d(isc:iec,jsc:jec,:),          &
+if (id_wdet .gt. 0) then
+  used = send_data(id_wdet, wdet(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 !poc export
-if (id_wpoc3d .gt. 0) then
+if (id_wpoc .gt. 0) then
   do k = 1,grid%nk !{
-    wpoc3d(:,:,k) = wdetbio(isc:iec,jsc:jec)*10 * t_prog(ind_poc)%field(isc:iec,jsc:jec,k,time%taum1)
+    wpoc(:,:,k) = wdetbio(isc:iec,jsc:jec)*10 * t_prog(ind_poc)%field(isc:iec,jsc:jec,k,time%taum1)
   enddo
-  used = send_data(id_wpoc3d, wpoc3d(isc:iec,jsc:jec,:),          &
+  used = send_data(id_wpoc, wpoc(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 !phytoplankton size proxy 
@@ -3187,6 +3201,18 @@ fe_bkgnd_id = init_external_field("INPUT/bgc_param.nc",          &
         "fe_bkgnd", domain = Domain%domain2d)
 f_inorg_id = init_external_field("INPUT/bgc_param.nc",          &
         "f_inorg", domain = Domain%domain2d)
+knitrif_id = init_external_field("INPUT/bgc_param.nc",          &
+        "knitrif", domain = Domain%domain2d)
+kdenitr_id = init_external_field("INPUT/bgc_param.nc",          &
+        "kdenitr", domain = Domain%domain2d)
+knano_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
+        "knano_dfe", domain = Domain%domain2d)
+kscav_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
+        "kscav_dfe", domain = Domain%domain2d)
+kcoag_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
+        "kcoag_dfe", domain = Domain%domain2d)
+kcoag2_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
+        "kcoag2_dfe", domain = Domain%domain2d)
 
 ! ---------------------------------
 !
@@ -3379,11 +3405,11 @@ id_wpoc100 = register_diag_field('ocean_model','wpoc100', &
      grid%tracer_axes(1:2),Time%model_time, 'POC export at 100 m (poc*sinking rate)', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
 
-id_wdet3d = register_diag_field('ocean_model','wdet3d', &
-     grid%tracer_axes(1:3),Time%model_time, 'detritus export (det*sinking rate)', &
-     'mmolC/m^2/s',missing_value = -1.0e+10)
+id_wdet = register_diag_field('ocean_model','wdet', &
+     grid%tracer_axes(1:3),Time%model_time, 'detritus sinking rate', &
+     'm/s',missing_value = -1.0e+10)
 
-id_wpoc3d = register_diag_field('ocean_model','wpoc3d', &
+id_wpoc = register_diag_field('ocean_model','wpoc', &
      grid%tracer_axes(1:3),Time%model_time, 'POC export (poc*sinking rate)', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
 

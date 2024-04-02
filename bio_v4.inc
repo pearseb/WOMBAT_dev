@@ -604,6 +604,12 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
   call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
+  call time_interp_external(knitrif_id, time%model_time, knitrif)   !Rate of nitrification (NH4-->NO3)
+  call time_interp_external(kdenitr_id, time%model_time, kdenitr)   !Rate of denitrification (NO3-->N2)
+  call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
+  call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
+  call time_interp_external(kcoag_dfe_id, time%model_time, kcoag_dfe) !Rate of dFe colloidal coagulation (dFe-->detritus)
+  call time_interp_external(kcoag2_dfe_id, time%model_time, kcoag2_dfe) !Rate of dFe colloidal coagulation (dFe-->POC)
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1187,11 +1193,11 @@ do n = 1, instances  !{
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
-             precip = max(0.0, ( fe_III - fe3sol ) ) * 0.01/86400.0
+             precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
              ! 3. Scavenging of Fe` (Fe` --> DET & POC)
              partic = (biodet + biopoc + biocaco3 + biopocsi)
-             scaven = fe_III * (3e-5 + 0.005 * partic) / 86400.0 * 1e-3
+             scaven = fe_III * (3e-8 + kscav_dfe(i,k) * partic) / 86400.0
              scadet = scaven * (biodet+epsi) / (partic+epsi)
              scapoc = scaven * (biopoc+epsi) / (partic+epsi)
 
@@ -1202,15 +1208,15 @@ do n = 1, instances  !{
              ! 5. Coagulation of colloidal Fe (nM) into small and large particles (uM)
              fe_col = fe_lig * 0.5
              if (grid%zw(k) .le. mld(i,j)) then
-               zval =        ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+               zval =        ( 0.001 + biodet * kcoag_dfe(i,j) )
              else
-               zval = 0.01 * ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+               zval = 0.01 * ( 0.001 + biodet * kcoag_dfe(i,j) )
              endif
              fe2det = fe_col * zval / 86400.0
              if (grid%zw(k) .le. mld(i,j)) then
-               zval =        ( 3.53e3 * biopoc*1e-6 )
+               zval =        ( kcoag2_dfe(i,j) * biopoc )
              else
-               zval = 0.01 * ( 3.53e3 * biopoc*1e-6 )
+               zval = 0.01 * ( kcoag2_dfe(i,j) * biopoc )
              endif
              fe2poc = fe_col * zval / 86400
 
@@ -1600,9 +1606,10 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-             ! Denitrification and nitrification (set at maximum of 5% of NH4 per day)
-             nitrif(i,k) = 0.05/86400.0 * bionh4
-             denitr(i,k) = 0.05/86400.0 * biono3 * min(1.0, exp(-biooxy))
+             ! Denitrification and nitrification
+             nitrif(i,k) = knitrif(i,j)/86400.0 * bionh4
+             denitr(i,k) = kdenitr(i,j) * (biono3/(biono3+5.0)) * min(1.0, exp(-biooxy)) *  &
+                           (biodet + biopoc) * detlrem(i,j) * fbc * 8.4/10.6
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -2136,6 +2143,8 @@ do n = 1, instances  !{
            nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
            zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
            mes_grazpres(i,j,k)= rdtts * mes_grazpres(i,j,k)* grid%tmask(i,j,k)
+           nitrific(i,j,k)    = rdtts * nitrific(i,j,k)    * grid%tmask(i,j,k)
+           denitrif(i,j,k)    = rdtts * denitrif(i,j,k)    * grid%tmask(i,j,k)
            diazofix(i,j,k)    = rdtts * diazofix(i,j,k)    * grid%tmask(i,j,k)
 
            ! Collect other diagnostic terms
