@@ -285,7 +285,8 @@ real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
 !!! Detrital sinking !!!
 !!! ---------------- !!!
 ! -------------------- !
-real :: detwsink                        ! Scaler for sinking rate of detritus
+real :: biodetsed(isc:iec)              ! Temporary array for rate of accumulation in sediments 
+real :: biodetfesed(isc:iec)            ! Temporary array for rate of accumulation in sediments
 real :: adv_fb1(isc:iec,1:grid%nk+1)    ! Sinking of detritus (carbon)
 real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
 
@@ -405,6 +406,9 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
   call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
+  call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
+  call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
+  call time_interp_external(kcoag_dfe_id, time%model_time, kcoag_dfe) !Rate of dFe colloidal coagulation (dFe-->detritus)
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -493,6 +497,8 @@ do n = 1, instances  !{
   npp_int100(:,:) = 0.0
   radbio_int100(:,:) = 0.0
   zeuphot(:,:) = 10.0       ! minimum euphotic zone depth is 20 metres
+  chlorophyll(:,:) = 0.0    ! total surface chlorophyll
+  wdet(:,:,:) = 0.0         ! sinking rate of detritus
   phy_parlimit(:,:,:) = 0.0
   phy_Felimit(:,:,:) = 0.0
   phy_Nlimit(:,:,:) = 0.0
@@ -621,11 +627,16 @@ do n = 1, instances  !{
 
 
        do i=isc,iec
+
          ! Calculate the daylength (hours per day) given the latitude and day of year
          day_angle = 2.0*pi*(days_in_this_year-1)/365.0
          declination = 0.409 * sin(2*pi*days_in_this_year/365 - 1.39)
          cos_hour_angle = max(min(-tan(declination) * tan(grid%yt(i,j) * pi/180.0), 1.0), -1.0)
          daylight(i) = 2 * (acos(cos_hour_angle) * 180 / pi) / 15.0
+
+         ! Save the surface chlorophyll concentrations
+         chlorophyll(i,j) = biotr(i,1,id_pchl)
+
        enddo
 
        do k=1,grid%nk
@@ -876,11 +887,11 @@ do n = 1, instances  !{
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
-             precip = max(0.0, ( fe_III - fe3sol ) ) * 0.01/86400.0
+             precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
              ! 3. Scavenging of Fe` (Fe` --> DET)
              partic = (biodet + biocaco3)
-             scaven = fe_III * (3e-5 + 0.005 * partic) / 86400.0 * 1e-3
+             scaven = fe_III * (3e-8 + kscav_dfe(i,j) * partic) / 86400.0
              scadet = scaven * (biodet+epsi) / (partic+epsi)
 
              ! 4. Increased loss of Fe in near-coastal environments
@@ -890,9 +901,9 @@ do n = 1, instances  !{
              ! 5. Coagulation of colloidal Fe (nM) into small and large particles (uM)
              fe_col = fe_lig * 0.5
              if (grid%zw(k) .le. mld(i,j)) then
-               zval =        ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+               zval =        ( 0.001 + biodet*kcoag_dfe(i,j) )
              else
-               zval = 0.01 * ( 0.369 * 0.3 * 40e-6 + 102.4 * biodet*1e-6 ) + ( 114. * 0.3 * 40e-6 )
+               zval = 0.01 * ( 0.001 + biodet*kcoag_dfe(i,j) )
              endif
              fe2det = fe_col * zval / 86400.0
 
@@ -1473,38 +1484,89 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-       ! initialise advective sinking arrays
-       adv_fb1(:,:) = 0.0
-       adv_fb2(:,:) = 0.0
+       ! collect tracer values before sinking and find sinking rates
+       do i=isc,iec
 
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! RASF upstream sinking of detritus and particulates !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       do k=2,grid%nk+1
+         ! Find sinking rate as a function of average phytoplankton community size in euphotic zone
+         wdet(i,j,:) = wdetbio(i,j) * max(1.0, min(3.0,                                            &
+                       SUM(phyxsize(i,j,1:keuphot(i)) * Thickness%dzt(i,j,1:keuphot(i)), dim=1)    &
+                       / SUM(Thickness%dzt(i,j,1:keuphot(i)), dim=1) ))
+
+         do k=1,grid%nk
+
+           ! Collect tracer values before we sink them 
+           biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
+           if (id_detfe.ne.0) biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
+
+           ! Sinking rate increases logarithmically with pressure (also decreased very shallow)
+           wdet(i,j,k) = wdet(i,j,k) * max(0.1, min(2.0, 0.5*LOG10(grid%zt(k)/4 + 1.0) + 0.1))
+
+           !if (i.eq.170 .and. j.eq.120) then
+           !  print*, " "
+           !  print*, "Longitude =", grid%xt(i,j)
+           !  print*, "Latitude =", grid%yt(i,j)
+           !  print*, "Depth =", grid%zt(k)
+           !  print*, "Sinking rate (m/s)", wdet(i,j,k) * 86400.0
+           !endif
+
+         enddo
+       enddo
+      
+       ! Initialise deposition arrays
+       biodetsed(:) = 0.0
+       biodetfesed(:) = 0.0
+
+       ! start timesplitting
+       do tn = 1,ts_npzd !{
+
+         ! initialise advective sinking arrays
+         adv_fb1(:,:) = 0.0
+         adv_fb2(:,:) = 0.0
+
+
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! RASF upstream sinking of detritus and particulates !
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
          do i=isc,iec
-           adv_fb1(i,k) = wdetbio(i,j) * phyxsize(i,j,k) * biotr(i,k-1,id_det)
-           adv_fb2(i,k) = wdetbio(i,j) * phyxsize(i,j,k) * biotr(i,k-1,id_detfe)
+           do k=2,grid%nk+1
+             adv_fb1(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_det))
+             if (id_detfe.ne.0) adv_fb2(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_detfe))
+           enddo  ! i
+         enddo  ! k
+
+         ! Deposit tracer to sediment as tracer sinks through base of column,
+         !    accounting for burial and denitrification in csiro_bgc.F90
+         do i = isc,iec
+           k = grid%kmt(i,j)
+           if (k.gt.0) then
+             biodetsed(i) = biodetsed(i) + adv_fb1(i,k+1)
+             if (id_detfe.ne.0) biodetfesed(i) = biodetfesed(i) + adv_fb2(i,k+1)
+           endif  ! k.gt.0
          enddo  ! i
-       enddo  ! k
 
-       ! Deposit tracer to sediment as tracer sinks through base of column,
-       !    accounting for burial and denitrification
-       do i = isc,iec
-         k = grid%kmt(i,j)
-         if (k.gt.0) then
-           biotic(n)%det_sed_depst(i,j) = adv_fb1(i,k+1)
-           biotic(n)%detfe_sed_depst(i,j) = adv_fb2(i,k+1)
-         endif  ! k.gt.0
-       enddo  ! i
+         ! Update the tracer arrays at each timesplit
+         do k =1,grid%nk  !{
+           do i =isc,iec  !{
+             biotr(i,k,id_det) = biotr(i,k,id_det) + grid%tmask(i,j,k) * dtsb *                    &
+                                 (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
+             if (id_detfe.ne.0)                                                                    &
+             biotr(i,k,id_detfe) = biotr(i,k,id_detfe) + grid%tmask(i,j,k) * dtsb *                &
+                                 (-adv_fb2(i,k+1) + adv_fb2(i,k))/Thickness%dzt(i,j,k)
+           enddo  !} i
+         enddo  !} k
 
-       do k =1,grid%nk  !{
-         do i =isc,iec  !{
-           t_prog(ind_det)%field(i,j,k,time%taum1) = t_prog(ind_det)%field(i,j,k,time%taum1) +     &
-               grid%tmask(i,j,k) * dtts * (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
-           t_prog(ind_detfe)%field(i,j,k,time%taum1) = t_prog(ind_detfe)%field(i,j,k,time%taum1) + &
-               grid%tmask(i,j,k) * dtts * (-adv_fb2(i,k+1) + adv_fb2(i,k))/Thickness%dzt(i,j,k)
-         enddo  !} i
-       enddo  !} k
+       enddo !} tn
+
+       ! Update the actual tracer values and deposit material to sediments after the timesplitting
+       do i = isc,iec !{
+         do k = 1,grid%nk !{
+           t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
+           if (id_detfe.ne.0) t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe)
+         enddo !}
+         biotic(n)%det_sed_depst(i,j) = biodetsed(i)
+         biotic(n)%detfe_sed_depst(i,j) = biodetfesed(i)
+       enddo !}
 
        ! Make sure we pass this zero array of sediment silicate deposition to subroutine "csiro_bgc_bbc"
        biotic(n)%detsi_sed_depst(:,:) = 0.0
