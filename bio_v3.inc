@@ -504,6 +504,7 @@ do n = 1, instances  !{
   phy_Nlimit(:,:,:) = 0.0
   phy_Plimit(:,:,:) = 0.0
   zoo_grazpres(:,:,:) = 0.0
+  phy_dFeupt(:,:,:) = 0.0
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1325,6 +1326,10 @@ do n = 1, instances  !{
                zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb * (z21phy+z21det) / (biophy+biodet)
              endif
 
+             ! Phytoplankton uptake of dFe (nM dFe per second)
+             if (id_fe.ne.0) then
+               phy_dFeupt(i,j,k) = phy_dFeupt(i,j,k) + dtsb * phy_Feupt(i,k) * 1e3
+             endif
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1442,6 +1447,7 @@ do n = 1, instances  !{
            npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
            nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
            zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
+           phy_dFeupt(i,j,k)  = rdtts * phy_dFeupt(i,j,k)  * grid%tmask(i,j,k)
   
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
