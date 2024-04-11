@@ -7,12 +7,12 @@ subroutine bio_v4(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 ! Based on the pt_npzd.aos version  - which is the optimized version
 !
 !
-!     (\___/)
-!     / o o \
-!    (   "   )
-!     \__ __/
-!     
-!
+!     (\___/)  .-.   .-. .--. .-..-..---.  .--. .-----.
+!     / o o \  : :.-.: :: ,. :: `' :: .; :: .; :`-. .-'
+!    (   "   ) : :: :: :: :: :: .. ::   .':    :  : :  
+!     \__ __/  : `' `' ;: :; :: :; :: .; :: :: :  : :  
+!               `.,`.,' `.__.':_;:_;:___.':_;:_;  :_;    
+!      
 ! World Ocean Model of Biogeochemistry And Trophic-dynamics (WOMBAT)
 !
 !  Authors:
@@ -290,7 +290,7 @@ real :: f23dia                          ! Microphytoplankton biomass loss via qu
 real :: f22diz                          ! Diazotroph biomass loss via linear mortality (respiration)
 real :: f23diz                          ! Diazotroph biomass loss via quadratic mortality (viral lysis, etc.)
 real :: z31                             ! Microzooplankton biomass loss via linear mortality (excretion)
-real :: z32                             ! Mesozooplankton biomass loss via quadratic mortality (predation, infection, etc.)
+real :: z32                             ! Microzooplankton biomass loss via quadratic mortality (predation, infection, etc.)
 real :: m31                             ! Mesozooplankton biomass loss via linear mortality (excretion)
 real :: m32                             ! Mesozooplankton biomass loss via quadratic mortality (predation, infection, etc.)
 real :: f41det                          ! Remineralisation of slow-sinking detritus to inorganic constituents   
@@ -430,12 +430,16 @@ real :: dia_SiCupt(isc:iec,grid%nk)     ! Microphytoplankton Si:C uptake rate
 !!! Detrital routing !!!
 !!! ---------------- !!!
 ! -------------------- !
-real :: phy_det2poc                     ! Fraction of nanophytoplankton biomass that is routed to slow-sinking detritus
-real :: dia_det2poc                     ! Fraction of microphytoplankton biomass that is routed to slow-sinking detritus
-real :: diz_det2poc                     ! Fraction of diazotroph biomass that is routed to slow-sinking detritus
-real :: zoo_det2poc                     ! Fraction of microzooplankton biomass that is routed to slow-sinking detritus
-real :: mes_det2poc                     ! Fraction of mesozooplankton biomass that is routed to slow-sinking detritus
+real :: phyxsize                        ! Proxy for average cell size of nanophytoplankton
+real :: diaxsize                        ! Proxy for average cell size of microphytoplankton
+real :: dizxsize                        ! Proxy for average colony size of diazotrophs
+real :: phy2det                         ! Fraction of nanophytoplankton biomass that is routed to slow-sinking detritus
+real :: dia2det                         ! Fraction of microphytoplankton biomass that is routed to slow-sinking detritus
+real :: diz2det                         ! Fraction of diazotroph biomass that is routed to slow-sinking detritus
+real :: zoo2det                         ! Fraction of microzooplankton biomass that is routed to slow-sinking detritus
+real :: mes2det                         ! Fraction of mesozooplankton biomass that is routed to slow-sinking detritus
 real :: caco3_prod                      ! Production of CaCO3 by ecosystem component
+
 
 ! -------------------- !
 !!! ---------------- !!!
@@ -447,6 +451,9 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of slow-sinking detritus (iron
 real :: adv_fb3(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (carbon)
 real :: adv_fb4(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (iron)
 real :: adv_fb5(isc:iec,1:grid%nk+1)    ! Sinking of fast-sinking detritus (silicate)
+real :: biodetsed(isc:iec)              ! Temporary array for rate of accumulation in sediments
+real :: biodetfesed(isc:iec)            ! Temporary array for rate of accumulation in sediments
+real :: biodetsised(isc:iec)            ! Temporary array for rate of accumulation in sediments
 
 ! ----------------------- !
 !!! ------------------- !!!
@@ -678,8 +685,14 @@ do n = 1, instances  !{
   mprod_gross(:,:,:) = 0.0
   light_limit(:,:) = 0.0
   radbio3d(:,:,:) = 0.0
-  phyxsize(:,:,:) = 0.0
-  diaxsize(:,:,:) = 0.0
+  phy_size(:,:,:) = 0.0
+  dia_size(:,:,:) = 0.0
+  diz_size(:,:,:) = 0.0
+  phy_2det(:,:,:) = 0.0
+  dia_2det(:,:,:) = 0.0
+  diz_2det(:,:,:) = 0.0
+  zoo_2det(:,:,:) = 0.0
+  mes_2det(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
   nsp3d(:,:,:) = 0.0
   adic_intmld(:,:) = 0.0
@@ -718,6 +731,8 @@ do n = 1, instances  !{
   diz_Plimit(:,:,:) = 0.0
   dia_Silimit(:,:,:) = 0.0
   dia_SiCupta(:,:,:) = 0.0
+  phy_dFeupt(:,:,:) = 0.0
+  dia_dFeupt(:,:,:) = 0.0
   zoo_grazpres(:,:,:) = 0.0
   mes_grazpres(:,:,:) = 0.0
   nitrific(:,:,:) = 0.0
@@ -792,27 +807,27 @@ do n = 1, instances  !{
            biotr(i,k,id_zoo) = max(0.0,t_prog(ind_zoo)%field(i,j,k,Time%taum1))
            biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
            biotr(i,k,id_o2)  = max(0.0,t_prog(ind_o2)%field(i,j,k,Time%taum1)) 
-           if (id_nh4.ne.0)   biotr(i,k,id_nh4) = max(0.0,t_prog(ind_nh4)%field(i,j,k,Time%taum1))
-           if (id_po4.ne.0)   biotr(i,k,id_po4) = max(0.0,t_prog(ind_po4)%field(i,j,k,Time%taum1))
-           if (id_sil.ne.0)   biotr(i,k,id_sil) = max(0.0,t_prog(ind_sil)%field(i,j,k,Time%taum1))
-           if (id_dia.ne.0)   biotr(i,k,id_dia) = max(0.0,t_prog(ind_dia)%field(i,j,k,Time%taum1))
-           if (id_diz.ne.0)   biotr(i,k,id_diz) = max(0.0,t_prog(ind_diz)%field(i,j,k,Time%taum1))
-           if (id_mes.ne.0)   biotr(i,k,id_mes) = max(0.0,t_prog(ind_mes)%field(i,j,k,Time%taum1))
-           if (id_poc.ne.0)   biotr(i,k,id_poc) = max(0.0,t_prog(ind_poc)%field(i,j,k,Time%taum1))
-           if (id_caco3.ne.0) biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
-           if (id_fe.ne.0)    biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
-           if (id_pchl.ne.0)  biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1))
-           if (id_dchl.ne.0)  biotr(i,k,id_dchl) = max(0.0,t_prog(ind_dchl)%field(i,j,k,Time%taum1))
-           if (id_zchl.ne.0)  biotr(i,k,id_zchl) = max(0.0,t_prog(ind_zchl)%field(i,j,k,Time%taum1))
-           if (id_phyfe.ne.0) biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
-           if (id_diafe.ne.0) biotr(i,k,id_diafe) = max(0.0,t_prog(ind_diafe)%field(i,j,k,Time%taum1))
-           if (id_dizfe.ne.0) biotr(i,k,id_dizfe) = max(0.0,t_prog(ind_dizfe)%field(i,j,k,Time%taum1))
-           if (id_diasi.ne.0) biotr(i,k,id_diasi) = max(0.0,t_prog(ind_diasi)%field(i,j,k,Time%taum1))
-           if (id_zoofe.ne.0) biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
-           if (id_mesfe.ne.0) biotr(i,k,id_mesfe) = max(0.0,t_prog(ind_mesfe)%field(i,j,k,Time%taum1))
-           if (id_detfe.ne.0) biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
-           if (id_pocfe.ne.0) biotr(i,k,id_pocfe) = max(0.0,t_prog(ind_pocfe)%field(i,j,k,Time%taum1))
-           if (id_pocsi.ne.0) biotr(i,k,id_pocsi) = max(0.0,t_prog(ind_pocsi)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_nh4) = max(0.0,t_prog(ind_nh4)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_po4) = max(0.0,t_prog(ind_po4)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_sil) = max(0.0,t_prog(ind_sil)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_dia) = max(0.0,t_prog(ind_dia)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_diz) = max(0.0,t_prog(ind_diz)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_mes) = max(0.0,t_prog(ind_mes)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_poc) = max(0.0,t_prog(ind_poc)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_caco3) = max(0.0,t_prog(ind_caco3)%field(i,j,k,Time%taum1)) 
+           biotr(i,k,id_fe) = max(0.0,t_prog(ind_fe)%field(i,j,k,Time%taum1)) 
+           biotr(i,k,id_pchl) = max(0.0,t_prog(ind_pchl)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_dchl) = max(0.0,t_prog(ind_dchl)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_zchl) = max(0.0,t_prog(ind_zchl)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_diafe) = max(0.0,t_prog(ind_diafe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_dizfe) = max(0.0,t_prog(ind_dizfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_diasi) = max(0.0,t_prog(ind_diasi)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_mesfe) = max(0.0,t_prog(ind_mesfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_pocfe) = max(0.0,t_prog(ind_pocfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_pocsi) = max(0.0,t_prog(ind_pocsi)%field(i,j,k,Time%taum1))
 
          enddo  ! i
        enddo  ! k
@@ -1107,27 +1122,27 @@ do n = 1, instances  !{
              biozoo = max(0.0,biotr(i,k,id_zoo))
              biodet = max(0.0,biotr(i,k,id_det))
              biooxy = max(0.0,biotr(i,k,id_o2))
-             if (id_nh4.ne.0)   bionh4 = max(0.0,biotr(i,k,id_nh4))
-             if (id_po4.ne.0)   biopo4 = max(0.0,biotr(i,k,id_po4))
-             if (id_sil.ne.0)   biosil = max(0.0,biotr(i,k,id_sil))
-             if (id_poc.ne.0)   biopoc = max(0.0,biotr(i,k,id_poc))
-             if (id_dia.ne.0)   biodia = max(0.0,biotr(i,k,id_dia))
-             if (id_diz.ne.0)   biodiz = max(0.0,biotr(i,k,id_diz))
-             if (id_mes.ne.0)   biomes = max(0.0,biotr(i,k,id_mes))
-             if (id_caco3.ne.0) biocaco3 = max(0.0,biotr(i,k,id_caco3))
-             if (id_fe.ne.0)    biofe = max(0.0,biotr(i,k,id_fe))
-             if (id_pchl.ne.0)  biopchl = max(0.0,biotr(i,k,id_pchl))
-             if (id_dchl.ne.0)  biodchl = max(0.0,biotr(i,k,id_dchl))
-             if (id_zchl.ne.0)  biozchl = max(0.0,biotr(i,k,id_zchl))
-             if (id_phyfe.ne.0) biophyfe = max(0.0,biotr(i,k,id_phyfe))
-             if (id_diafe.ne.0) biodiafe = max(0.0,biotr(i,k,id_diafe))
-             if (id_dizfe.ne.0) biodizfe = max(0.0,biotr(i,k,id_dizfe))
-             if (id_diasi.ne.0) biodiasi = max(0.0,biotr(i,k,id_diasi))
-             if (id_zoofe.ne.0) biozoofe = max(0.0,biotr(i,k,id_zoofe))
-             if (id_mesfe.ne.0) biomesfe = max(0.0,biotr(i,k,id_mesfe))
-             if (id_detfe.ne.0) biodetfe = max(0.0,biotr(i,k,id_detfe))
-             if (id_pocfe.ne.0) biopocfe = max(0.0,biotr(i,k,id_pocfe))
-             if (id_pocsi.ne.0) biopocsi = max(0.0,biotr(i,k,id_pocsi))
+             bionh4 = max(0.0,biotr(i,k,id_nh4))
+             biopo4 = max(0.0,biotr(i,k,id_po4))
+             biosil = max(0.0,biotr(i,k,id_sil))
+             biopoc = max(0.0,biotr(i,k,id_poc))
+             biodia = max(0.0,biotr(i,k,id_dia))
+             biodiz = max(0.0,biotr(i,k,id_diz))
+             biomes = max(0.0,biotr(i,k,id_mes))
+             biocaco3 = max(0.0,biotr(i,k,id_caco3))
+             biofe = max(0.0,biotr(i,k,id_fe))
+             biopchl = max(0.0,biotr(i,k,id_pchl))
+             biodchl = max(0.0,biotr(i,k,id_dchl))
+             biozchl = max(0.0,biotr(i,k,id_zchl))
+             biophyfe = max(0.0,biotr(i,k,id_phyfe))
+             biodiafe = max(0.0,biotr(i,k,id_diafe))
+             biodizfe = max(0.0,biotr(i,k,id_dizfe))
+             biodiasi = max(0.0,biotr(i,k,id_diasi))
+             biozoofe = max(0.0,biotr(i,k,id_zoofe))
+             biomesfe = max(0.0,biotr(i,k,id_mesfe))
+             biodetfe = max(0.0,biotr(i,k,id_detfe))
+             biopocfe = max(0.0,biotr(i,k,id_pocfe))
+             biopocsi = max(0.0,biotr(i,k,id_pocsi))
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1143,19 +1158,15 @@ do n = 1, instances  !{
              if (biophy*biopchl.gt.0.0) phy_chlc(i,k) = biopchl / (biophy * 12)
              if (biodia*biodchl.gt.0.0) dia_chlc(i,k) = biodchl / (biodia * 12)
              if (biodiz*biozchl.gt.0.0) diz_chlc(i,k) = biozchl / (biodiz * 12)
-             if (id_fe.ne.0) then 
-               if (biophy*biophyfe.gt.0.0) phy_FeC(i,k) = biophyfe/biophy
-               if (biodia*biodiafe.gt.0.0) dia_FeC(i,k) = biodiafe/biodia
-               if (biodiz*biodizfe.gt.0.0) diz_FeC(i,k) = biodizfe/biodiz
-               if (biozoo*biozoofe.gt.0.0) zoo_FeC(i,k) = biozoofe/biozoo
-               if (biomes*biomesfe.gt.0.0) mes_FeC(i,k) = biomesfe/biomes
-               if (biodet*biodetfe.gt.0.0) det_FeC(i,k) = biodetfe/biodet
-               if (biopoc*biopocfe.gt.0.0) poc_FeC(i,k) = biopocfe/biopoc
-             endif
-             if (id_sil.ne.0) then
-               if (biodia*biodiasi.gt.0.0) dia_SiC(i,k) = biodiasi/biodia
-               if (biopoc*biopocsi.gt.0.0) poc_SiC(i,k) = biopocsi/biopoc
-             endif
+             if (biophy*biophyfe.gt.0.0) phy_FeC(i,k) = biophyfe/biophy
+             if (biodia*biodiafe.gt.0.0) dia_FeC(i,k) = biodiafe/biodia
+             if (biodiz*biodizfe.gt.0.0) diz_FeC(i,k) = biodizfe/biodiz
+             if (biozoo*biozoofe.gt.0.0) zoo_FeC(i,k) = biozoofe/biozoo
+             if (biomes*biomesfe.gt.0.0) mes_FeC(i,k) = biomesfe/biomes
+             if (biodet*biodetfe.gt.0.0) det_FeC(i,k) = biodetfe/biodet
+             if (biopoc*biopocfe.gt.0.0) poc_FeC(i,k) = biopocfe/biopoc
+             if (biodia*biodiasi.gt.0.0) dia_SiC(i,k) = biodiasi/biodia
+             if (biopoc*biopocsi.gt.0.0) poc_SiC(i,k) = biopocsi/biopoc
 
              ! Temperature and salinity
              ztem = t_prog(index_temp)%field(i,j,k,time%tau)
@@ -1197,9 +1208,9 @@ do n = 1, instances  !{
 
              ! 3. Scavenging of Fe` (Fe` --> DET & POC)
              partic = (biodet + biopoc + biocaco3 + biopocsi)
-             scaven = fe_III * (3e-8 + kscav_dfe(i,k) * partic) / 86400.0
-             scadet = scaven * (biodet+epsi) / (partic+epsi)
-             scapoc = scaven * (biopoc+epsi) / (partic+epsi)
+             scaven = fe_III * (3e-8 + kscav_dfe(i,j) * partic) / 86400.0
+             scadet = scaven * biodet / (partic+epsi)
+             scapoc = scaven * biopoc / (partic+epsi)
 
              ! 4. Increased loss of Fe in near-coastal environments
              zval = min(1.0, 1000.0 / (grid%zt(grid%kmt(i,j))+1) )
@@ -1218,8 +1229,12 @@ do n = 1, instances  !{
              else
                zval = 0.01 * ( kcoag2_dfe(i,j) * biopoc )
              endif
-             fe2poc = fe_col * zval / 86400
+             fe2poc = fe_col * zval / 86400.0
 
+             !precip = 0.0
+             !fe2det = 0.0
+             !fe2poc = 0.0
+             !feloss = 0.0
           
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1298,52 +1313,44 @@ do n = 1, instances  !{
 
 
              ! Iron
-             if (id_fe.ne.0) then 
-               if (biopchl*biophy.gt.0.0) then
-                 phy_minFeC = 0.0016 / 55.85 * biopchl/biophy +                                    &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * phy_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * phy_limno3
-               else
-                 phy_minFeC = 0.0016 / 55.85 * phyminqc(i,j)*12 +                                  &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * phy_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * phy_limno3
-               endif
-               if (biodchl*biodia.gt.0.0) then
-                 dia_minFeC = 0.0016 / 55.85 * biodchl/biodia +                                    &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * dia_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * dia_limno3
-               else
-                 dia_minFeC = 0.0016 / 55.85 * diaminqc(i,j)*12 +                                  &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * dia_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * dia_limno3
-               endif
-               if (biozchl*biodiz.gt.0.0) then
-                 diz_minFeC = 0.0016 / 55.85 * biozchl/biodiz +                                    &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
-                              13e-6 * (1.0 - diz_limnit(i,k))
-               else
-                 diz_minFeC = 0.0016 / 55.85 * dizminqc(i,j)*12 +                                  &
-                              1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
-                              1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
-                              13e-6 * (1.0 - diz_limnit(i,k))
-               endif
-               phy_limfe(i,k) = min(1.0, max(0.0, (phy_FeC(i,k) - phy_minFeC)/phyoptqf(i,j) ))
-               dia_limfe(i,k) = min(1.0, max(0.0, (dia_FeC(i,k) - dia_minFeC)/diaoptqf(i,j) ))
-               diz_limfe(i,k) = min(1.0, max(0.0, (diz_FeC(i,k) - diz_minFeC)/dizoptqf(i,j) ))
+             if (biopchl*biophy.gt.0.0) then
+               phy_minFeC = 0.0016 / 55.85 * biopchl/biophy +                                    &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * phy_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * phy_limno3
              else
-               phy_limfe(i,k) = 1.0
-               dia_limfe(i,k) = 1.0
-               diz_limfe(i,k) = 1.0
+               phy_minFeC = 0.0016 / 55.85 * phyminqc(i,j)*12 +                                  &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * phy_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * phy_limno3
              endif
+             if (biodchl*biodia.gt.0.0) then
+               dia_minFeC = 0.0016 / 55.85 * biodchl/biodia +                                    &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * dia_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * dia_limno3
+             else
+               dia_minFeC = 0.0016 / 55.85 * diaminqc(i,j)*12 +                                  &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * dia_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * dia_limno3
+             endif
+             if (biozchl*biodiz.gt.0.0) then
+               diz_minFeC = 0.0016 / 55.85 * biozchl/biodiz +                                    &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
+                            13e-6 * (1.0 - diz_limnit(i,k))
+             else
+               diz_minFeC = 0.0016 / 55.85 * dizminqc(i,j)*12 +                                  &
+                            1.21e-5 * 14.0 / 55.85 / 7.625 * 0.5 * 1.5 * diz_limnit(i,k) +       &
+                            1.15e-4 * 14.0 / 55.85 / 7.625 * 0.5 * diz_limno3 +                  &
+                            13e-6 * (1.0 - diz_limnit(i,k))
+             endif
+             phy_limfe(i,k) = min(1.0, max(0.0, (phy_FeC(i,k) - phy_minFeC)/phyoptqf(i,j) ))
+             dia_limfe(i,k) = min(1.0, max(0.0, (dia_FeC(i,k) - dia_minFeC)/diaoptqf(i,j) ))
+             diz_limfe(i,k) = min(1.0, max(0.0, (diz_FeC(i,k) - diz_minFeC)/dizoptqf(i,j) ))
 
 
              ! Phosphorus (PO4)
-             if (id_po4.gt.0) then
-               phy_limpho(i,k) = biopo4 / ( biopo4 + phy_k_pho )
-               dia_limpho(i,k) = biopo4 / ( biopo4 + dia_k_pho )
-               diz_limpho(i,k) = biopo4 / ( biopo4 + diz_k_pho )
-             endif
+             phy_limpho(i,k) = biopo4 / ( biopo4 + phy_k_pho )
+             dia_limpho(i,k) = biopo4 / ( biopo4 + dia_k_pho )
+             diz_limpho(i,k) = biopo4 / ( biopo4 + diz_k_pho )
 
 
              ! Silicic acid (Sil)
@@ -1366,17 +1373,17 @@ do n = 1, instances  !{
              ! 4. Apply to maximum growth rate
 
              phy_pisl(i,k) = MAX(alphabio(i,j) * phy_chlc(i,k), alphabio(i,j) * phyminqc(i,j))
-             phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
+             phy_pisl2= phy_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 + epsi )
              phy_lpar(i,k) = (1.0 - EXP(-phy_pisl2 * par_phy(i,k))) * phy_lday(i,k)
              mu_phy(i,k) = mumax_phy(i,k) * phy_lpar(i,k)
 
              dia_pisl(i,k) = MAX(alphabio(i,j) * dia_chlc(i,k), alphabio(i,j) * diaminqc(i,j))
-             dia_pisl2= dia_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
+             dia_pisl2= dia_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 + epsi )
              dia_lpar(i,k) = (1.0 - EXP(-dia_pisl2 * par_dia(i,k))) * dia_lday(i,k)
              mu_dia(i,k) = mumax_dia(i,k) * dia_lpar(i,k)
 
              diz_pisl(i,k) = MAX(alphabio(i,j) * diz_chlc(i,k), alphabio(i,j) * dizminqc(i,j))
-             diz_pisl2= diz_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 )
+             diz_pisl2= diz_pisl(i,k) / ( (1.0 + phylmor(i,j)*86400.0) * max(daylight(i),1.0)/24.0 + epsi )
              diz_lpar(i,k) = (1.0 - EXP(-diz_pisl2 * par_diz(i,k))) * diz_lday(i,k)
              mu_diz(i,k) = mumax_diz(i,k) * diz_lpar(i,k)
 
@@ -1505,31 +1512,29 @@ do n = 1, instances  !{
              ! 2. Ensure that Fe uptake increases or decreases in response to standing quotas
              ! 3. Iron uptake by phytoplankton
 
-             if (id_fe.ne.0) then 
-               if (phy_FeC(i,k).gt.0.0) then 
-                 phy_maxQFe = biophy * phymaxqf(i,j)
-                 phy_Feupt_upreg   = (4.0 - 4.5 * phy_limfe(i,k) / (phy_limfe(i,k) + 0.5)) 
-                 phy_Feupt_downreg = max(0.0, (1.0 - biophyfe/phy_maxQFe) /                        &
-                                              abs(1.05 - biophyfe/phy_maxQFe) )
-                 phy_Feupt(i,k) = biophy * mumax_phy(i,k) * phymaxqf(i,j) *                        &
-                                  biofe / (biofe + phy_k_fer) * phy_Feupt_downreg * phy_Feupt_upreg
-               endif
-               if (dia_FeC(i,k).gt.0.0) then 
-                 dia_maxQFe = biodia * diamaxqf(i,j)
-                 dia_Feupt_upreg   = (4.0 - 4.5 * dia_limfe(i,k) / (dia_limfe(i,k) + 0.5)) 
-                 dia_Feupt_downreg = max(0.0, (1.0 - biodiafe/dia_maxQFe) /                        &
-                                              abs(1.05 - biodiafe/dia_maxQFe) )
-                 dia_Feupt(i,k) = biodia * mumax_dia(i,k) * diamaxqf(i,j) *                        &
-                                  biofe / (biofe + dia_k_fer) * dia_Feupt_downreg * dia_Feupt_upreg
-               endif
-               if (diz_FeC(i,k).gt.0.0) then 
-                 diz_maxQFe = biodiz * dizmaxqf(i,j)
-                 diz_Feupt_upreg   = (4.0 - 4.5 * diz_limfe(i,k) / (diz_limfe(i,k) + 0.5)) 
-                 diz_Feupt_downreg = max(0.0, (1.0 - biodizfe/diz_maxQFe) /                        &
-                                              abs(1.05 - biodizfe/diz_maxQFe) )
-                 diz_Feupt(i,k) = biodiz * mumax_diz(i,k) * dizmaxqf(i,j) *                        &
-                                  biofe / (biofe + diz_k_fer) * diz_Feupt_downreg * diz_Feupt_upreg
-               endif
+             if (phy_FeC(i,k).gt.0.0 .and. biophy.gt.0.0) then 
+               phy_maxQFe = biophy * phymaxqf(i,j)
+               phy_Feupt_upreg   = (4.0 - 4.5 * phy_limfe(i,k) / (phy_limfe(i,k) + 0.5)) 
+               phy_Feupt_downreg = max(0.0, (1.0 - biophyfe/phy_maxQFe) /                          &
+                                            abs(1.05 - biophyfe/phy_maxQFe) )
+               phy_Feupt(i,k) = biophy * mumax_phy(i,k) * phymaxqf(i,j) *                          &
+                                biofe / (biofe + phy_k_fer) * phy_Feupt_downreg * phy_Feupt_upreg
+             endif
+             if (dia_FeC(i,k).gt.0.0 .and. biodia.gt.0.0) then 
+               dia_maxQFe = biodia * diamaxqf(i,j)
+               dia_Feupt_upreg   = (4.0 - 4.5 * dia_limfe(i,k) / (dia_limfe(i,k) + 0.5)) 
+               dia_Feupt_downreg = max(0.0, (1.0 - biodiafe/dia_maxQFe) /                          &
+                                            abs(1.05 - biodiafe/dia_maxQFe) )
+               dia_Feupt(i,k) = biodia * mumax_dia(i,k) * diamaxqf(i,j) *                          &
+                                biofe / (biofe + dia_k_fer) * dia_Feupt_downreg * dia_Feupt_upreg
+             endif
+             if (diz_FeC(i,k).gt.0.0 .and. biodiz.gt.0.0) then 
+               diz_maxQFe = biodiz * dizmaxqf(i,j)
+               diz_Feupt_upreg   = (4.0 - 4.5 * diz_limfe(i,k) / (diz_limfe(i,k) + 0.5)) 
+               diz_Feupt_downreg = max(0.0, (1.0 - biodizfe/diz_maxQFe) /                          &
+                                            abs(1.05 - biodizfe/diz_maxQFe) )
+               diz_Feupt(i,k) = biodiz * mumax_diz(i,k) * dizmaxqf(i,j) *                          &
+                                biofe / (biofe + diz_k_fer) * diz_Feupt_downreg * diz_Feupt_upreg
              endif
           
 
@@ -1677,7 +1682,7 @@ do n = 1, instances  !{
                f41det = f41det*.5   ! reduce decay below 180m
                f41poc = f41poc*.5   ! reduce decay below 180m
              endif
-             if (id_caco3.ne.0) f51 = caco3rem(i,j)* biocaco3 * biomask(i,k)
+             f51 = caco3rem(i,j)* biocaco3 * biomask(i,k)
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1701,7 +1706,6 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!
              ! phosphate equation !
              !!!!!!!!!!!!!!!!!!!!!!
-             if (id_po4.ne.0)                                                                      &
              biotr(i,k,id_po4)  = biotr(i,k,id_po4) + dtsb * 1./122. * (                           &
                                                       f41det + f41poc                              &
                                                     + z31 + m31 + f22phy + f22dia + f22diz         &
@@ -1710,14 +1714,12 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! silicic acid equation !
              !!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_sil.ne.0)                                                                      &
              biotr(i,k,id_sil)  = biotr(i,k,id_sil) + dtsb * ( f41pocsi + f22dia * dia_SiC(i,k)    &
                                                                - f11dia * dia_SiCupt(i,k) ) 
 
              !!!!!!!!!!!!!!!!!!!!!
              ! ammonium equation !
              !!!!!!!!!!!!!!!!!!!!!
-             if (id_nh4.ne.0)                                                                      &
              biotr(i,k,id_nh4)  = biotr(i,k,id_nh4) - dtsb * nitrif(i,k) + dtsb * 16./122. * (     &
                                                       f41det + f41poc                              &
                                                       + z31 + m31 + f22phy + f22dia + f22diz       &
@@ -1738,13 +1740,12 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!!!!!!
              ! dissolved iron equation !
              !!!!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_fe.ne.0)                                                                       &
              biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * (f41det*det_FeC(i,k) +                &
                                                               f41poc*poc_FeC(i,k) +                &
                                                               z31*zoo_FeC(i,k) +                   &
                                                               m31*mes_FeC(i,k) +                   &
                                                               f22phy*phy_FeC(i,k) +                &
-                                                              f22dia*dia_FeC(i,k) -                &
+                                                              f22dia*dia_FeC(i,k) +                &
                                                               f22diz*diz_FeC(i,k) -                &
                                                               phy_Feupt(i,k) -                     & 
                                                               dia_Feupt(i,k) - diz_Feupt(i,k))*1e3 &
@@ -1754,28 +1755,22 @@ do n = 1, instances  !{
              ! nanophytoplankton equation !
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
              biotr(i,k,id_phy)  = biotr(i,k,id_phy) + dtsb * (f11phy-z21phy-m21phy-f22phy-f23phy)
-             if (id_phyfe.ne.0)                                                                    &
              biotr(i,k,id_phyfe)= biotr(i,k,id_phyfe)+dtsb * (phy_Feupt(i,k) - (z21phy + m21phy    &
                                                              + f22phy + f23phy)*phy_FeC(i,k) )
 
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
              ! microphytoplankton equation !
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_dia.ne.0)                                                                      &
              biotr(i,k,id_dia)  = biotr(i,k,id_dia) + dtsb * (f11dia-z21dia-m21dia-f22dia-f23dia)
-             if (id_diafe.ne.0)                                                                    &
              biotr(i,k,id_diafe)= biotr(i,k,id_diafe)+dtsb * (dia_Feupt(i,k) - (z21dia + m21dia    &
                                                              + f22dia + f23dia)*dia_FeC(i,k) )
-             if (id_diasi.ne.0)                                                                    &
              biotr(i,k,id_diasi)= biotr(i,k,id_diasi)+dtsb * ( f11dia * dia_SiCupt(i,k) - (z21dia  &
                                                             + m21dia + f22dia + f23dia)*dia_SiC(i,k))
 
              !!!!!!!!!!!!!!!!!!!!!!!
              ! diazotroph equation !
              !!!!!!!!!!!!!!!!!!!!!!!
-             if (id_diz.ne.0)                                                                      &
              biotr(i,k,id_diz)  = biotr(i,k,id_diz) + dtsb * (f11diz-z21diz-m21diz-f22diz-f23diz)
-             if (id_dizfe.ne.0)                                                                    &
              biotr(i,k,id_dizfe)= biotr(i,k,id_dizfe)+dtsb * (diz_Feupt(i,k) - (z21diz + m21diz    &
                                                              + f22diz + f23diz)*diz_FeC(i,k) )
 
@@ -1786,7 +1781,6 @@ do n = 1, instances  !{
                                                              (z21phy + z21dia + z21diz +           &
                                                               z21det + z21poc) -                   &
                                                               z31 - z32 - m21zoo)
-             if (id_zoofe.ne.0)                                                                    &
              biotr(i,k,id_zoofe)= biotr(i,k,id_zoofe)+dtsb * (zooassi(i,j)*(z21phy*phy_FeC(i,k) +  &
                                                                             z21dia*dia_FeC(i,k) +  &
                                                                             z21diz*diz_FeC(i,k) +  &
@@ -1797,12 +1791,10 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!
              ! mesozooplankton equation !
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_mes.ne.0)                                                                      &
              biotr(i,k,id_mes)  = biotr(i,k,id_mes) + dtsb * (zooassi(i,j) *                       &
                                                              (m21phy + m21dia + m21diz +           &
                                                               m21det + m21poc + m21zoo)            &
                                                               - m31 - m32)
-             if (id_mesfe.ne.0)                                                                    &
              biotr(i,k,id_mesfe)= biotr(i,k,id_mesfe)+dtsb * (zooassi(i,j)*(m21phy*phy_FeC(i,k) +  &
                                                                             m21dia*dia_FeC(i,k) +  &
                                                                             m21diz*diz_FeC(i,k) +  &
@@ -1813,104 +1805,100 @@ do n = 1, instances  !{
         
 
              ! Determine detrital routing to slow or fast sinking detritus
-             if (id_poc.ne.0) then
-               phyxsize(i,j,k) = ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) )     &
-                                  / (biophy+epsi)
-               diaxsize(i,j,k) = ( min(diabiot(i,j),biodia) + 9*max(0.0,biodia-diabiot(i,j)) )     &
-                                  / (biodia+epsi)
-               phy_det2poc = min(0.80, 1.0/(phyxsize(i,j,k) + epsi))
-               dia_det2poc = min(0.66, 1.0/(diaxsize(i,j,k) + epsi))
-               diz_det2poc = 0.8
-               zoo_det2poc = max(0.0, min( 0.7, (phy_det2poc*biophy + dia_det2poc*biodia)          &
-                                                / (biophy + biodia + epsi) ))
-               mes_det2poc = max(0.0, min( 0.5,                                                    &
-                             (phy_det2poc*biophy + dia_det2poc*biodia + zoo_det2poc*biozoo)        &
-                                                / (biophy + biodia + biozoo + epsi) ))
-             else
-               phy_det2poc = 1.0
-               dia_det2poc = 1.0
-               zoo_det2poc = 1.0
-               mes_det2poc = 1.0
-               diz_det2poc = 1.0
-             endif
+             phyxsize = max(1.0, (min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)))       &
+                         / (biophy+epsi) )
+             diaxsize = max(1.0, (min(diabiot(i,j),biodia) + 4*max(0.0,biodia-diabiot(i,j)))       &
+                         / (biodia+epsi) )
+             dizxsize = max(1.0, (min(dizbiot(i,j),biodiz) + 3*max(0.0,biodiz-dizbiot(i,j)))       &
+                                / (biodiz+epsi) )
+             phy2det = min(0.90, 1.0/(phyxsize + epsi))
+             dia2det = min(0.80, 1.0/(diaxsize + epsi))
+             diz2det = min(0.90, 1.0/(dizxsize + epsi))
+             zoo2det = max(0.50, min( 0.8, (phy2det * biophy * zprefphy(i,j) +                     &
+                                            dia2det * biodia * zprefdia(i,j) +                     &
+                                            diz2det * biodiz * zprefdiz(i,j) + epsi) /             &
+                                           (biophy * zprefphy(i,j) + biodia * zprefdia(i,j) +      & 
+                                            biodiz * zprefdiz(i,j) + epsi) ))
+             mes2det = max(0.25, min( 0.7, (phy2det * biophy * mprefphy(i,j) +                     &
+                                            dia2det * biodia * mprefdia(i,j) +                     &
+                                            zoo2det * biozoo * mprefzoo(i,j) +                     &
+                                            diz2det * biodiz * mprefdiz(i,j) + epsi) /             &
+                                           (biophy*mprefphy(i,j) + biodia*mprefdia(i,j) +          & 
+                                            biodiz*mprefdiz(i,j) + biozoo*mprefzoo(i,j) + epsi) ))
 
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Slow-sinking detritus !
              !!!!!!!!!!!!!!!!!!!!!!!!!
              biotr(i,k,id_det)  = biotr(i,k,id_det) + dtsb * ( (1.-zooassi(i,j)) * z21det          &
-                                                      +(1.-zooassi(i,j)) * z21phy*phy_det2poc      &
-                                                      +(1.-zooassi(i,j)) * z21dia*dia_det2poc      &
-                                                      +(1.-zooassi(i,j)) * z21diz*diz_det2poc      &
+                                                      +(1.-zooassi(i,j)) * z21phy*phy2det          &
+                                                      +(1.-zooassi(i,j)) * z21dia*dia2det          &
+                                                      +(1.-zooassi(i,j)) * z21diz*diz2det          &
                                                       +(1.-zooassi(i,j)) * m21det                  &
-                                                      +(1.-zooassi(i,j)) * m21phy*phy_det2poc      &
-                                                      +(1.-zooassi(i,j)) * m21dia*dia_det2poc      &
-                                                      +(1.-zooassi(i,j)) * m21diz*diz_det2poc      &
-                                                      +(1.-zooassi(i,j)) * m21zoo*zoo_det2poc      &
-                                                      + f23phy * phy_det2poc                       &
-                                                      + f23dia * dia_det2poc                       &
-                                                      + f23diz * diz_det2poc                       &
-                                                      + z32 * zoo_det2poc                          &
-                                                      + m32 * mes_det2poc                          &
+                                                      +(1.-zooassi(i,j)) * m21phy*phy2det          &
+                                                      +(1.-zooassi(i,j)) * m21dia*dia2det          &
+                                                      +(1.-zooassi(i,j)) * m21diz*diz2det          &
+                                                      +(1.-zooassi(i,j)) * m21zoo*zoo2det          &
+                                                      + f23phy * phy2det                           &
+                                                      + f23dia * dia2det                           &
+                                                      + f23diz * diz2det                           &
+                                                      + z32 * zoo2det                              &
+                                                      + m32 * mes2det                              &
                                                       - (z21det + m21det + f41det) )
-             if (id_detfe.ne.0)                                                                    &
              biotr(i,k,id_detfe)= biotr(i,k,id_detfe) + dtsb * (                                   &
                                                (1.-zooassi(i,j)) * z21det*det_FeC(i,k)             &
-                                              +(1.-zooassi(i,j)) * z21phy*phy_det2poc*phy_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * z21dia*dia_det2poc*dia_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * z21diz*diz_det2poc*diz_FeC(i,k) &
+                                              +(1.-zooassi(i,j)) * z21phy*phy2det*phy_FeC(i,k)     &
+                                              +(1.-zooassi(i,j)) * z21dia*dia2det*dia_FeC(i,k)     &
+                                              +(1.-zooassi(i,j)) * z21diz*diz2det*diz_FeC(i,k)     &
                                               +            (1.-zooassi(i,j)) * m21det*det_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * m21phy*phy_det2poc*phy_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * m21dia*dia_det2poc*dia_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * m21diz*diz_det2poc*diz_FeC(i,k) &
-                                              +(1.-zooassi(i,j)) * m21zoo*zoo_det2poc*zoo_FeC(i,k) &
-                                              + f23phy * phy_FeC(i,k) * phy_det2poc                & 
-                                              + f23dia * dia_FeC(i,k) * dia_det2poc                &
-                                              + f23diz * diz_FeC(i,k) * diz_det2poc                &
-                                              + z32 * zoo_FeC(i,k) * zoo_det2poc                   &
-                                              + m32 * mes_FeC(i,k) * mes_det2poc                   &
+                                              +(1.-zooassi(i,j)) * m21phy*phy2det*phy_FeC(i,k)     &
+                                              +(1.-zooassi(i,j)) * m21dia*dia2det*dia_FeC(i,k)     &
+                                              +(1.-zooassi(i,j)) * m21diz*diz2det*diz_FeC(i,k)     &
+                                              +(1.-zooassi(i,j)) * m21zoo*zoo2det*zoo_FeC(i,k)     &
+                                              + f23phy * phy_FeC(i,k) * phy2det                    & 
+                                              + f23dia * dia_FeC(i,k) * dia2det                    &
+                                              + f23diz * diz_FeC(i,k) * diz2det                    &
+                                              + z32 * zoo_FeC(i,k) * zoo2det                       &
+                                              + m32 * mes_FeC(i,k) * mes2det                       &
                                               - (z21det + m21det + f41det)*det_FeC(i,k)            &
                                               + (scadet + fe2det)*1e-3 )
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Fast-sinking detritus !
              !!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_poc.ne.0)                                                                      &
              biotr(i,k,id_poc)  = biotr(i,k,id_poc) + dtsb * (                                     &
                                                       (1.-zooassi(i,j)) * z21poc                   &
-                                                     +(1.-zooassi(i,j)) * z21phy*(1.-phy_det2poc)  &
-                                                     +(1.-zooassi(i,j)) * z21dia*(1.-dia_det2poc)  &
-                                                     +(1.-zooassi(i,j)) * z21diz*(1.-diz_det2poc)  &
+                                                     +(1.-zooassi(i,j)) * z21phy*(1.-phy2det)      &
+                                                     +(1.-zooassi(i,j)) * z21dia*(1.-dia2det)      &
+                                                     +(1.-zooassi(i,j)) * z21diz*(1.-diz2det)      &
                                                      +      (1.-zooassi(i,j)) * m21poc             &
-                                                     +(1.-zooassi(i,j)) * m21phy*(1.-phy_det2poc)  &
-                                                     +(1.-zooassi(i,j)) * m21dia*(1.-dia_det2poc)  &
-                                                     +(1.-zooassi(i,j)) * m21diz*(1.-diz_det2poc)  &
-                                                     +(1.-zooassi(i,j)) * m21zoo*(1.-zoo_det2poc)  &
-                                                     + f23phy * (1.-phy_det2poc)                   &
-                                                     + f23dia * (1.-dia_det2poc)                   &
-                                                     + f23diz * (1.-diz_det2poc)                   &
-                                                     + z32 * (1.-zoo_det2poc)                      &
-                                                     + m32 * (1.-mes_det2poc)                      &
+                                                     +(1.-zooassi(i,j)) * m21phy*(1.-phy2det)      &
+                                                     +(1.-zooassi(i,j)) * m21dia*(1.-dia2det)      &
+                                                     +(1.-zooassi(i,j)) * m21diz*(1.-diz2det)      &
+                                                     +(1.-zooassi(i,j)) * m21zoo*(1.-zoo2det)      &
+                                                     + f23phy * (1.-phy2det)                       &
+                                                     + f23dia * (1.-dia2det)                       &
+                                                     + f23diz * (1.-diz2det)                       &
+                                                     + z32 * (1.-zoo2det)                          &
+                                                     + m32 * (1.-mes2det)                          &
                                                      - (z21poc + m21poc + f41poc) )
-             if (id_pocfe.ne.0)                                                                    &
              biotr(i,k,id_pocfe)= biotr(i,k,id_pocfe) + dtsb * (                                   &
                                           (1.-zooassi(i,j))*z21poc*poc_FeC(i,k)                    &
-                                         +(1.-zooassi(i,j)) * z21phy*(1.-phy_det2poc)*phy_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * z21dia*(1.-dia_det2poc)*dia_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * z21diz*(1.-diz_det2poc)*diz_FeC(i,k) &
+                                         +(1.-zooassi(i,j)) * z21phy*(1.-phy2det)*phy_FeC(i,k)     &
+                                         +(1.-zooassi(i,j)) * z21dia*(1.-dia2det)*dia_FeC(i,k)     &
+                                         +(1.-zooassi(i,j)) * z21diz*(1.-diz2det)*diz_FeC(i,k)     &
                                          +                 (1.-zooassi(i,j)) * m21poc*poc_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * m21phy*(1.-phy_det2poc)*phy_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * m21dia*(1.-dia_det2poc)*dia_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * m21diz*(1.-diz_det2poc)*diz_FeC(i,k) &
-                                         +(1.-zooassi(i,j)) * m21zoo*(1.-zoo_det2poc)*zoo_FeC(i,k) &
-                                         + f23phy * phy_FeC(i,k) * (1.-phy_det2poc)                &
-                                         + f23dia * dia_FeC(i,k) * (1.-dia_det2poc)                &
-                                         + f23diz * diz_FeC(i,k) * (1.-diz_det2poc)                &
-                                         + z32 * zoo_FeC(i,k) * (1.-zoo_det2poc)                   &
-                                         + m32 * mes_FeC(i,k) * (1.-mes_det2poc)                   &
+                                         +(1.-zooassi(i,j)) * m21phy*(1.-phy2det)*phy_FeC(i,k)     &
+                                         +(1.-zooassi(i,j)) * m21dia*(1.-dia2det)*dia_FeC(i,k)     &
+                                         +(1.-zooassi(i,j)) * m21diz*(1.-diz2det)*diz_FeC(i,k)     &
+                                         +(1.-zooassi(i,j)) * m21zoo*(1.-zoo2det)*zoo_FeC(i,k)     &
+                                         + f23phy * phy_FeC(i,k) * (1.-phy2det)                    &
+                                         + f23dia * dia_FeC(i,k) * (1.-dia2det)                    &
+                                         + f23diz * diz_FeC(i,k) * (1.-diz2det)                    &
+                                         + z32 * zoo_FeC(i,k) * (1.-zoo2det)                       &
+                                         + m32 * mes_FeC(i,k) * (1.-mes2det)                       &
                                          - (z21poc + m21poc + f41poc)*poc_FeC(i,k)                 &
                                          + (scapoc + fe2poc)*1e-3 )
-             if (id_pocsi.ne.0)                                                                    &
              biotr(i,k,id_pocsi)= biotr(i,k,id_pocsi)+dtsb * ( (z21dia+m21dia+f23dia)              &
                                                                * dia_SiC(i,k) - f41pocsi )
              
@@ -1923,7 +1911,6 @@ do n = 1, instances  !{
              if (mesprey.gt.0.0)                                                                   &
                caco3_prod = caco3_prod + f_inorg(i,j) * m32* ( biophy_min*mprefphy(i,j) / mesprey )
 
-             if (id_caco3.ne.0)                                                                    &
              biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( caco3_prod - f51 ) 
 
 
@@ -1938,13 +1925,10 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
              !!!!!!!!!!!!!!!!!!!!!!!!!
-             if (id_pchl.ne.0)                                                                     &
              biotr(i,k,id_pchl) = biotr(i,k,id_pchl) + dtsb * ( mu_pchl(i,k) - phy_chlc(i,k) *     &
                                                        ( z21phy + m21phy + f22phy + f23phy) * 12.0 )
-             if (id_dchl.ne.0)                                                                     &
              biotr(i,k,id_dchl) = biotr(i,k,id_dchl) + dtsb * ( mu_dchl(i,k) - dia_chlc(i,k) *     &
                                                        ( z21dia + m21dia + f22dia + f23dia) * 12.0 )
-             if (id_zchl.ne.0)                                                                     &
              biotr(i,k,id_zchl) = biotr(i,k,id_zchl) + dtsb * ( mu_zchl(i,k) - diz_chlc(i,k) *     &
                                                        ( z21diz + m21diz + f22diz + f23diz) * 12.0 )
 
@@ -1995,7 +1979,24 @@ do n = 1, instances  !{
              ! Silicic acid limitation of microphytoplankton
              dia_Silimit(i,j,k) = dia_Silimit(i,j,k) + dia_limsil(i,k)*dtsb/dtts
              dia_SiCupta(i,j,k) = dia_SiCupta(i,j,k) + dia_SiCupt(i,k)*dtsb/dtts
-             
+            
+             ! Phytoplankton uptake of dFe (nM dFe per second)
+             phy_dFeupt(i,j,k) = phy_dFeupt(i,j,k) + dtsb * phy_Feupt(i,k) * 1e3
+             dia_dFeupt(i,j,k) = dia_dFeupt(i,j,k) + dtsb * dia_Feupt(i,k) * 1e3
+             diz_dFeupt(i,j,k) = diz_dFeupt(i,j,k) + dtsb * diz_Feupt(i,k) * 1e3
+
+             ! Proxy for average cell/colony size of phytoplankton
+             phy_size(i,j,k) = phy_size(i,j,k) + phyxsize*dtsb/dtts
+             dia_size(i,j,k) = dia_size(i,j,k) + diaxsize*dtsb/dtts
+             diz_size(i,j,k) = diz_size(i,j,k) + dizxsize*dtsb/dtts
+
+             ! Fraction of biomass going to slow sinking detritus
+             phy_2det(i,j,k) = phy_2det(i,j,k) + phy2det*dtsb/dtts
+             dia_2det(i,j,k) = dia_2det(i,j,k) + dia2det*dtsb/dtts
+             diz_2det(i,j,k) = diz_2det(i,j,k) + diz2det*dtsb/dtts
+             zoo_2det(i,j,k) = zoo_2det(i,j,k) + zoo2det*dtsb/dtts
+             mes_2det(i,j,k) = mes_2det(i,j,k) + mes2det*dtsb/dtts
+
              ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
              if (zooprey.gt.0.0) then
                zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb *                                  &
@@ -2014,6 +2015,7 @@ do n = 1, instances  !{
 
              ! Nitrogen fixation by diazotrophs 
              diazofix(i,j,k) = diazofix(i,j,k) + dtsb * f11diz * 16./122.0 * (1.0 - diz_limnit(i,k))
+
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -2094,35 +2096,33 @@ do n = 1, instances  !{
            t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
            t_prog(ind_dic)%field(i,j,k,time%taum1) = biotr(i,k,id_dic)
-           if ( id_po4.ne.0) t_prog(ind_po4)%field(i,j,k,time%taum1) = biotr(i,k,id_po4)
-           if ( id_sil.ne.0) t_prog(ind_sil)%field(i,j,k,time%taum1) = biotr(i,k,id_sil)
-           if ( id_nh4.ne.0) t_prog(ind_nh4)%field(i,j,k,time%taum1) = biotr(i,k,id_nh4)
-           if ( id_dia.ne.0) t_prog(ind_dia)%field(i,j,k,time%taum1) = biotr(i,k,id_dia)
-           if ( id_diz.ne.0) t_prog(ind_diz)%field(i,j,k,time%taum1) = biotr(i,k,id_diz)
-           if ( id_mes.ne.0) t_prog(ind_mes)%field(i,j,k,time%taum1) = biotr(i,k,id_mes)
-           if ( id_poc.ne.0)   t_prog(ind_poc)%field(i,j,k,time%taum1) = biotr(i,k,id_poc)
-           if ( id_caco3.ne.0) t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
-           if ( id_fe.ne.0) t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
-           if (id_adic.ne.0) &
+           t_prog(ind_po4)%field(i,j,k,time%taum1) = biotr(i,k,id_po4)
+           t_prog(ind_sil)%field(i,j,k,time%taum1) = biotr(i,k,id_sil)
+           t_prog(ind_nh4)%field(i,j,k,time%taum1) = biotr(i,k,id_nh4)
+           t_prog(ind_dia)%field(i,j,k,time%taum1) = biotr(i,k,id_dia)
+           t_prog(ind_diz)%field(i,j,k,time%taum1) = biotr(i,k,id_diz)
+           t_prog(ind_mes)%field(i,j,k,time%taum1) = biotr(i,k,id_mes)
+           t_prog(ind_poc)%field(i,j,k,time%taum1) = biotr(i,k,id_poc)
+           t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
+           t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
+           t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl) 
+           t_prog(ind_dchl)%field(i,j,k,time%taum1) = biotr(i,k,id_dchl) 
+           t_prog(ind_zchl)%field(i,j,k,time%taum1) = biotr(i,k,id_zchl) 
+           t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe) 
+           t_prog(ind_diafe)%field(i,j,k,time%taum1) = biotr(i,k,id_diafe) 
+           t_prog(ind_dizfe)%field(i,j,k,time%taum1) = biotr(i,k,id_dizfe) 
+           t_prog(ind_diasi)%field(i,j,k,time%taum1) = biotr(i,k,id_diasi) 
+           t_prog(ind_zoofe)%field(i,j,k,time%taum1) = biotr(i,k,id_zoofe) 
+           t_prog(ind_mesfe)%field(i,j,k,time%taum1) = biotr(i,k,id_mesfe) 
+           t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe) 
+           t_prog(ind_pocfe)%field(i,j,k,time%taum1) = biotr(i,k,id_pocfe) 
+           t_prog(ind_pocsi)%field(i,j,k,time%taum1) = biotr(i,k,id_pocsi)
            t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
                                                       122./16. * (nh4_bgc_change + no3_bgc_change) &
                                                       - caco3_bgc_change 
-           if (id_alk.ne.0) &
            t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +     &  
                                                      ( -2.0 * caco3_bgc_change                     &
                                                      + nh4_bgc_change - no3_bgc_change)
-           if (id_pchl.ne.0)  t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl) 
-           if (id_dchl.ne.0)  t_prog(ind_dchl)%field(i,j,k,time%taum1) = biotr(i,k,id_dchl) 
-           if (id_zchl.ne.0)  t_prog(ind_zchl)%field(i,j,k,time%taum1) = biotr(i,k,id_zchl) 
-           if (id_phyfe.ne.0) t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe) 
-           if (id_diafe.ne.0) t_prog(ind_diafe)%field(i,j,k,time%taum1) = biotr(i,k,id_diafe) 
-           if (id_dizfe.ne.0) t_prog(ind_dizfe)%field(i,j,k,time%taum1) = biotr(i,k,id_dizfe) 
-           if (id_diasi.ne.0) t_prog(ind_diasi)%field(i,j,k,time%taum1) = biotr(i,k,id_diasi) 
-           if (id_zoofe.ne.0) t_prog(ind_zoofe)%field(i,j,k,time%taum1) = biotr(i,k,id_zoofe) 
-           if (id_mesfe.ne.0) t_prog(ind_mesfe)%field(i,j,k,time%taum1) = biotr(i,k,id_mesfe) 
-           if (id_detfe.ne.0) t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe) 
-           if (id_pocfe.ne.0) t_prog(ind_pocfe)%field(i,j,k,time%taum1) = biotr(i,k,id_pocfe) 
-           if (id_pocsi.ne.0) t_prog(ind_pocsi)%field(i,j,k,time%taum1) = biotr(i,k,id_pocsi)
          
 
 !--------------------------------------------------------------------------------------------------!
@@ -2146,6 +2146,9 @@ do n = 1, instances  !{
            nitrific(i,j,k)    = rdtts * nitrific(i,j,k)    * grid%tmask(i,j,k)
            denitrif(i,j,k)    = rdtts * denitrif(i,j,k)    * grid%tmask(i,j,k)
            diazofix(i,j,k)    = rdtts * diazofix(i,j,k)    * grid%tmask(i,j,k)
+           phy_dFeupt(i,j,k)  = rdtts * phy_dFeupt(i,j,k)  * grid%tmask(i,j,k)
+           dia_dFeupt(i,j,k)  = rdtts * dia_dFeupt(i,j,k)  * grid%tmask(i,j,k)
+           diz_dFeupt(i,j,k)  = rdtts * diz_dFeupt(i,j,k)  * grid%tmask(i,j,k)
 
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
@@ -2188,50 +2191,92 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-       ! initialise advective sinking arrays
-       adv_fb1(:,:) = 0.0
-       adv_fb2(:,:) = 0.0
-       adv_fb3(:,:) = 0.0
-       adv_fb4(:,:) = 0.0
-       adv_fb5(:,:) = 0.0
+       ! collect tracer values before sinking and find sinking rates
+       do i=isc,iec
+         do k=1,grid%nk
 
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! RASF upstream sinking of detritus and particulates !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       do k=2,grid%nk+1
+           ! Collect tracer values before we sink them 
+           biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_poc) = max(0.0,t_prog(ind_poc)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_pocfe) = max(0.0,t_prog(ind_pocfe)%field(i,j,k,Time%taum1))
+           biotr(i,k,id_pocsi) = max(0.0,t_prog(ind_pocsi)%field(i,j,k,Time%taum1))
+
+           ! Sinking rate increases logarithmically with pressure (also decreased very shallow)
+           wdet(i,j,k) = wdetbio(i,j) * max(0.1, min(2.0, 0.5*LOG10(grid%zt(k)/4 + 1.0) + 0.1))
+
+         enddo
+       enddo
+
+       ! Initialise deposition arrays
+       biodetsed(:) = 0.0
+       biodetfesed(:) = 0.0
+       biodetsised(:) = 0.0
+
+       ! start timesplitting
+       do tn = 1,ts_npzd !{
+
+         ! initialise advective sinking arrays
+         adv_fb1(:,:) = 0.0
+         adv_fb2(:,:) = 0.0
+         adv_fb3(:,:) = 0.0
+         adv_fb4(:,:) = 0.0
+         adv_fb5(:,:) = 0.0
+  
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! RASF upstream sinking of detritus and particulates !
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          do i=isc,iec
-           adv_fb1(i,k) = wdetbio(i,j) * biotr(i,k-1,id_det)
-           adv_fb2(i,k) = wdetbio(i,j) * biotr(i,k-1,id_detfe)
-           adv_fb3(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_poc)
-           adv_fb4(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocfe)
-           adv_fb5(i,k) = wdetbio(i,j)*10 * biotr(i,k-1,id_pocsi)
+           do k=2,grid%nk+1
+             adv_fb1(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_det))
+             adv_fb2(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_detfe))
+             adv_fb3(i,k) = wdet(i,j,k-1)*10 * max(0.0,biotr(i,k-1,id_poc))
+             adv_fb4(i,k) = wdet(i,j,k-1)*10 * max(0.0,biotr(i,k-1,id_pocfe))
+             adv_fb5(i,k) = wdet(i,j,k-1)*10 * max(0.0,biotr(i,k-1,id_pocsi))
+           enddo  ! k
          enddo  ! i
-       enddo  ! k
 
-       ! Deposit tracer to sediment as tracer sinks through base of column
-       do i = isc,iec 
-         k = grid%kmt(i,j)
-         if (k.gt.0) then 
-           biotic(n)%det_sed_depst(i,j) = adv_fb1(i,k+1) + adv_fb3(i,k+1)
-           biotic(n)%detfe_sed_depst(i,j) = adv_fb2(i,k+1) + adv_fb4(i,k+1)
-           biotic(n)%detsi_sed_depst(i,j) = adv_fb5(i,k+1)
-         endif  ! k.gt.0
-       enddo  ! i
+         ! Deposit tracer to sediment as tracer sinks through base of column
+         !    accounting for burial and denitrification in csiro_bgc.F90
+         do i = isc,iec 
+           k = grid%kmt(i,j)
+           if (k.gt.0) then 
+             biodetsed(i) = biodetsed(i) + adv_fb1(i,k+1) + adv_fb3(i,k+1)
+             biodetfesed(i) = biodetfesed(i) + adv_fb2(i,k+1) + adv_fb4(i,k+1)
+             biodetsised(i) = biodetsised(i) + adv_fb5(i,k+1)
+           endif  ! k.gt.0
+         enddo  ! i
 
        do k =1,grid%nk  !{
          do i =isc,iec  !{
-           t_prog(ind_det)%field(i,j,k,time%taum1) = t_prog(ind_det)%field(i,j,k,time%taum1) +     &
-               grid%tmask(i,j,k) * dtts * (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
-           t_prog(ind_detfe)%field(i,j,k,time%taum1) = t_prog(ind_detfe)%field(i,j,k,time%taum1) + &
-               grid%tmask(i,j,k) * dtts * (-adv_fb2(i,k+1) + adv_fb2(i,k))/Thickness%dzt(i,j,k)
-           t_prog(ind_poc)%field(i,j,k,time%taum1) = t_prog(ind_poc)%field(i,j,k,time%taum1) +     &
-               grid%tmask(i,j,k) * dtts * (-adv_fb3(i,k+1) + adv_fb3(i,k))/Thickness%dzt(i,j,k)
-           t_prog(ind_pocfe)%field(i,j,k,time%taum1) = t_prog(ind_pocfe)%field(i,j,k,time%taum1) + &
-               grid%tmask(i,j,k) * dtts * (-adv_fb4(i,k+1) + adv_fb4(i,k))/Thickness%dzt(i,j,k)
-           t_prog(ind_pocsi)%field(i,j,k,time%taum1) = t_prog(ind_pocsi)%field(i,j,k,time%taum1) + &
-               grid%tmask(i,j,k) * dtts * (-adv_fb5(i,k+1) + adv_fb5(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_det) = biotr(i,k,id_det) + grid%tmask(i,j,k) * dtsb *                    &
+                                 (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_detfe) = biotr(i,k,id_detfe) + grid%tmask(i,j,k) * dtsb *                &
+                                 (-adv_fb2(i,k+1) + adv_fb2(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_poc) = biotr(i,k,id_poc) + grid%tmask(i,j,k) * dtsb *                    &
+                                 (-adv_fb3(i,k+1) + adv_fb3(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_pocfe) = biotr(i,k,id_pocfe) + grid%tmask(i,j,k) * dtsb *                &
+                                 (-adv_fb4(i,k+1) + adv_fb4(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_pocsi) = biotr(i,k,id_pocsi) + grid%tmask(i,j,k) * dtsb *                &
+                                 (-adv_fb5(i,k+1) + adv_fb5(i,k))/Thickness%dzt(i,j,k)
          enddo  !} i
        enddo  !} k
+
+       enddo !} tn
+
+       ! Update the actual tracer values and deposit material to sediments after the timesplitting
+       do i = isc,iec !{
+         do k = 1,grid%nk !{
+           t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
+           t_prog(ind_poc)%field(i,j,k,time%taum1) = biotr(i,k,id_poc)
+           t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe)
+           t_prog(ind_pocfe)%field(i,j,k,time%taum1) = biotr(i,k,id_pocfe)
+           t_prog(ind_pocsi)%field(i,j,k,time%taum1) = biotr(i,k,id_pocsi)
+         enddo !}
+         biotic(n)%det_sed_depst(i,j) = biodetsed(i)
+         biotic(n)%detfe_sed_depst(i,j) = biodetfesed(i)
+         biotic(n)%detsi_sed_depst(i,j) = biodetsised(i)
+       enddo !}
 
 
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2239,29 +2284,26 @@ do n = 1, instances  !{
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        adv_fb1(:,:) = 0.0
 
-       if (id_caco3.ne.0) then
-         do k=2,grid%nk+1
-           do i=isc,iec
-             adv_fb1(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
-           enddo
+       do k=2,grid%nk+1
+         do i=isc,iec
+           adv_fb1(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
          enddo
+       enddo
 
-         ! Deposit tracer to sediment as tracer sinks through base of column
-         do i = isc, iec 
-           k = grid%kmt(i,j)
-           if (k .gt. 0) then 
-             biotic(n)%caco3_sed_depst(i,j) = adv_fb1(i,k+1)
-           endif ! k .gt. 0
-         enddo ! i
+       ! Deposit tracer to sediment as tracer sinks through base of column
+       do i = isc, iec 
+         k = grid%kmt(i,j)
+         if (k .gt. 0) then 
+           biotic(n)%caco3_sed_depst(i,j) = adv_fb1(i,k+1)
+         endif ! k .gt. 0
+       enddo ! i
 
-         do k =1,grid%nk  !{
-           do i =isc,iec  !{
-             t_prog(ind_caco3)%field(i,j,k,time%taum1)=t_prog(ind_caco3)%field(i,j,k,time%taum1) + &
-                 grid%tmask(i,j,k) * dtts * (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
-           enddo  ! i
-         enddo  ! k
-
-       endif  ! end loop for caco3
+       do k =1,grid%nk  !{
+         do i =isc,iec  !{
+           t_prog(ind_caco3)%field(i,j,k,time%taum1)=t_prog(ind_caco3)%field(i,j,k,time%taum1) + &
+               grid%tmask(i,j,k) * dtts * (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
+         enddo  ! i
+       enddo  ! k
 
   enddo  !} j
 

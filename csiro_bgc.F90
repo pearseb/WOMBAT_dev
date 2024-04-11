@@ -310,9 +310,14 @@ integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_wpoc100 = -1
 integer                                 :: id_wdet = -1
-integer                                 :: id_wpoc = -1
-integer                                 :: id_phyxsize = -1
-integer                                 :: id_diaxsize = -1
+integer                                 :: id_phy_size = -1
+integer                                 :: id_dia_size = -1
+integer                                 :: id_diz_size = -1
+integer                                 :: id_phy_2det = -1
+integer                                 :: id_dia_2det = -1
+integer                                 :: id_diz_2det = -1
+integer                                 :: id_zoo_2det = -1
+integer                                 :: id_mes_2det = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_chlorophyll = -1
 integer                                 :: id_phy_parlimit = -1
@@ -335,6 +340,8 @@ integer                                 :: id_nitrific = -1
 integer                                 :: id_denitrif = -1
 integer                                 :: id_diazofix = -1
 integer                                 :: id_phy_dFeupt = -1
+integer                                 :: id_dia_dFeupt = -1
+integer                                 :: id_diz_dFeupt = -1
 integer                                 :: id_npp1 = -1
 integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
@@ -424,9 +431,10 @@ real, allocatable, dimension(:,:) :: adic_intmld,dic_intmld,o2_intmld,no3_intmld
 real, allocatable, dimension(:,:) :: adic_int100,dic_int100,o2_int100,no3_int100,fe_int100,phy_int100,det_int100
 real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
-real, allocatable, dimension(:,:,:) :: radbio3d, phyxsize, diaxsize
+real, allocatable, dimension(:,:,:) :: radbio3d, phy_size, dia_size, diz_size, phy_2det, dia_2det, diz_2det,     &
+                                       zoo_2det, mes_2det
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
-real, allocatable, dimension(:,:,:) :: wdet, wpoc
+real, allocatable, dimension(:,:,:) :: wdet
 real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
@@ -435,7 +443,7 @@ real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, 
                                        phy_Nlimit, dia_Nlimit, diz_Nlimit,                         &
                                        phy_Plimit, dia_Plimit, diz_Plimit,                         &
                                        dia_Silimit, dia_SiCupta, nitrific, denitrif, diazofix,     &
-                                       phy_dFeupt
+                                       phy_dFeupt, dia_dFeupt, diz_dFeupt
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross, mprod_gross
 real, allocatable, dimension(:) :: ray
@@ -709,9 +717,14 @@ allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
 allocate( wdet(isc:iec,jsc:jec,nk) )
-allocate( wpoc(isc:iec,jsc:jec,nk) )
-allocate( phyxsize(isc:iec,jsc:jec,nk) )
-allocate( diaxsize(isc:iec,jsc:jec,nk) )
+allocate( phy_size(isc:iec,jsc:jec,nk) )
+allocate( dia_size(isc:iec,jsc:jec,nk) )
+allocate( diz_size(isc:iec,jsc:jec,nk) )
+allocate( phy_2det(isc:iec,jsc:jec,nk) )
+allocate( dia_2det(isc:iec,jsc:jec,nk) )
+allocate( diz_2det(isc:iec,jsc:jec,nk) )
+allocate( zoo_2det(isc:iec,jsc:jec,nk) )
+allocate( mes_2det(isc:iec,jsc:jec,nk) )
 allocate( npp2d(isc:iec,jsc:jec) )
 allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( nsp3d(isc:iec,jsc:jec,nk) )
@@ -741,6 +754,8 @@ allocate( nitrific(isc:iec,jsc:jec,nk) )
 allocate( denitrif(isc:iec,jsc:jec,nk) )
 allocate( diazofix(isc:iec,jsc:jec,nk) )
 allocate( phy_dFeupt(isc:iec,jsc:jec,nk) )
+allocate( dia_dFeupt(isc:iec,jsc:jec,nk) )
+allocate( diz_dFeupt(isc:iec,jsc:jec,nk) )
 
 allocate (tmp(isd:ied,jsd:jed) )
 allocate ( tracer_sources(0:nk) )
@@ -1047,19 +1062,19 @@ logical  :: used
          ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
          T_prog(ind_dic)%btf(i,j) = -rho0 * biotic(n)%det_sed_remin(i,j)                             &
                                     -rho0 * biotic(n)%caco3_sed_remin(i,j)
-         if (id_adic.ne.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
-         if (id_po4.ne.0)  T_prog(ind_po4)%btf(i,j)  = -rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
-         if (id_nh4.ne.0)  T_prog(ind_nh4)%btf(i,j)  = -rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
-         if (id_o2.ne.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
+         if (id_adic.gt.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
+         if (id_po4.gt.0)  T_prog(ind_po4)%btf(i,j)  = -rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
+         if (id_nh4.gt.0)  T_prog(ind_nh4)%btf(i,j)  = -rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
+         if (id_o2.gt.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
                                                        (1.-denfac) * 172./122.
-         if (id_fe.ne.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
-         if (id_sil.ne.0)  T_prog(ind_sil)%btf(i,j)  = -rho0 * biotic(n)%detsi_sed_remin(i,j)
-         if (id_no3.ne.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
-         if (id_alk.ne.0 .and. id_nh4.ne.0) &
+         if (id_fe.gt.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
+         if (id_sil.gt.0)  T_prog(ind_sil)%btf(i,j)  = -rho0 * biotic(n)%detsi_sed_remin(i,j)
+         if (id_no3.gt.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
+         if (id_alk.gt.0 .and. id_nh4.gt.0) &
            T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
                                                    + T_prog(ind_nh4)%btf(i,j)                        &
                                                    - T_prog(ind_no3)%btf(i,j)
-         if (id_alk.ne.0 .and. id_nh4.eq.0) &
+         if (id_alk.gt.0 .and. id_nh4.gt.0) &
            T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
                                                    - T_prog(ind_no3)%btf(i,j)
 
@@ -1364,7 +1379,7 @@ call time_interp_external(rivdop_id, time%model_time, rivdop_t)
 call time_interp_external(rivdoc_id, time%model_time, rivdoc_t)
 call time_interp_external(rivdsi_id, time%model_time, rivdsi_t)
 
-if (id_adic .ne. 0) then
+if (id_adic .gt. 0) then
 ! The atmospheric co2 value for the anthropogenic+natural carbon tracer
 ! is either read from a file or a value from the access atmospheric model, 
 ! as determined by the flag use_access_co2.  mac, may13.  
@@ -1443,7 +1458,7 @@ do n = 1, instances  !{
   enddo
 enddo  !} n
 
-if (id_adic .ne. 0) then
+if (id_adic .gt. 0) then
  do n = 1, instances  !{
   do j = jsc, jec
    do i = isc, iec
@@ -1467,10 +1482,10 @@ do n = 1, instances  !{
   enddo  !} j 
 
 ! ocmip2+co2cal expects tracers in mol/m3 !!!!
-  if (id_dic.ne.0) then
+  if (id_dic.gt.0) then
     biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,1,time%taum1)*0
-    if (id_no3.ne.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,1,time%taum1)/16.*1e-3
-    if (id_po4.ne.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3
+    if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,1,time%taum1)/16.*1e-3
+    if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3
 
     call ocmip2_co2calc(isd, jsd, &
        isc, iec, jsc, jec,                     &
@@ -1488,7 +1503,7 @@ do n = 1, instances  !{
        pco2surf = biotic(n)%pco2surf(isc:iec,jsc:jec),            &
        scale= 1.0/1024.5 )
 
-    if (id_adic .ne. 0) then ! calculate CO2 flux including anthropogenic CO2
+    if (id_adic .gt. 0) then ! calculate CO2 flux including anthropogenic CO2
       call ocmip2_co2calc(isd, jsd,                     &
        isc, iec, jsc, jec,                    &
        grid%tmask(isd:ied,jsd:jed,1),                           &
@@ -1585,7 +1600,7 @@ enddo  !} j
 
 total_co2_flux = 0.0
 
-if (id_dic.ne.0) then
+if (id_dic.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{ 
@@ -1615,7 +1630,7 @@ endif
 
 total_aco2_flux = 0.0 
 
-if (id_adic.ne.0) then
+if (id_adic.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
@@ -1662,7 +1677,7 @@ if (id_total_aco2_flux .gt. 0) then
 endif
 
 
-if (id_o2.ne.0) then
+if (id_o2.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
@@ -1676,7 +1691,7 @@ endif
 
 !rjm: Do atmospheric iron input
 ! for Fe units of nmol/m3, Fe input must be in nmol/m2/s
-if (id_fe.ne.0) then
+if (id_fe.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
@@ -1692,16 +1707,16 @@ endif
       do i = isc, iec  !{
         ! River input should be in mmol/m2/s
         !  rho0 = 1035.0  (must be needed for the flux calculation)
-        if (id_nh4.ne.0) then
+        if (id_nh4.gt.0) then
           t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdon_t(i,j)
           t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
         else
           t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
         endif
-        if (id_po4.ne.0) then
+        if (id_po4.gt.0) then
           t_prog(ind_po4)%stf(i,j) =  rho0 * rivdip_t(i,j)
         endif
-        if (id_sil.ne.0) then
+        if (id_sil.gt.0) then
           t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
         endif
         t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
@@ -1711,7 +1726,7 @@ endif
   enddo  !} n
 
 !ice-to-ocean flux of algae
-if (id_phy.ne.0) then
+if (id_phy.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
@@ -1721,7 +1736,7 @@ if (id_phy.ne.0) then
   enddo  !} n
 endif
 !ice-to-ocean flux of nitrate
-if (id_no3.ne.0) then
+if (id_no3.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
@@ -2548,7 +2563,8 @@ if (id_wdet100 .gt. 0) then
 endif
 !poc export at 100 m
 if (id_wpoc100 .gt. 0) then
-  wpoc100(:,:) = wdetbio(isc:iec,jsc:jec)*10*t_prog(ind_poc)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  wpoc100(:,:) = wdet(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1)) * 10 *                      &
+                 t_prog(ind_poc)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
   used = send_data(id_wpoc100, wpoc100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
@@ -2557,21 +2573,39 @@ if (id_wdet .gt. 0) then
   used = send_data(id_wdet, wdet(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-!poc export
-if (id_wpoc .gt. 0) then
-  do k = 1,grid%nk !{
-    wpoc(:,:,k) = wdetbio(isc:iec,jsc:jec)*10 * t_prog(ind_poc)%field(isc:iec,jsc:jec,k,time%taum1)
-  enddo
-  used = send_data(id_wpoc, wpoc(isc:iec,jsc:jec,:),          &
-         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
 !phytoplankton size proxy 
-if (id_phyxsize .gt. 0) then
-  used = send_data(id_phyxsize, phyxsize(isc:iec,jsc:jec,:),          &
+if (id_phy_size .gt. 0) then
+  used = send_data(id_phy_size, phy_size(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-if (id_diaxsize .gt. 0) then
-  used = send_data(id_diaxsize, diaxsize(isc:iec,jsc:jec,:),          &
+if (id_dia_size .gt. 0) then
+  used = send_data(id_dia_size, dia_size(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diz_size .gt. 0) then
+  used = send_data(id_diz_size, diz_size(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+
+! ecosystem biomass to slow detritus fraction 
+if (id_phy_2det .gt. 0) then
+  used = send_data(id_phy_2det, phy_2det(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_dia_2det .gt. 0) then
+  used = send_data(id_dia_2det, dia_2det(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diz_2det .gt. 0) then
+  used = send_data(id_diz_2det, diz_2det(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoo_2det .gt. 0) then
+  used = send_data(id_zoo_2det, zoo_2det(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_mes_2det .gt. 0) then
+  used = send_data(id_mes_2det, mes_2det(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2663,6 +2697,14 @@ endif
 ! Phytoplankton Fe uptake rate (nM dFe per sec)
 if (id_phy_dFeupt .gt. 0) then
   used = send_data(id_phy_dFeupt, phy_dFeupt(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_dia_dFeupt .gt. 0) then
+  used = send_data(id_dia_dFeupt, dia_dFeupt(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_diz_dFeupt .gt. 0) then
+  used = send_data(id_diz_dFeupt, diz_dFeupt(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
@@ -2995,7 +3037,7 @@ if (gasx_from_file) then
 endif
 
 !RASF I think the ifdafs are redundant
-if (id_adic .ne. 0 .and. .not. use_access_co2) then
+if (id_adic .gt. 0 .and. .not. use_access_co2) then
  aco2_id = init_external_field(aco2_file,                    &
                                       aco2_name,              &
                                       domain = Domain%domain2d)
@@ -3417,16 +3459,36 @@ id_wdet = register_diag_field('ocean_model','wdet', &
      grid%tracer_axes(1:3),Time%model_time, 'detritus sinking rate', &
      'm/s',missing_value = -1.0e+10)
 
-id_wpoc = register_diag_field('ocean_model','wpoc', &
-     grid%tracer_axes(1:3),Time%model_time, 'POC export (poc*sinking rate)', &
-     'mmolC/m^2/s',missing_value = -1.0e+10)
-
-id_phyxsize = register_diag_field('ocean_model','phyxsize', &
+id_phy_size = register_diag_field('ocean_model','phy_size', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton size proxy', &
      ' ',missing_value = -1.0e+10)
 
-id_diaxsize = register_diag_field('ocean_model','diaxsize', &
+id_dia_size = register_diag_field('ocean_model','dia_size', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton size proxy', &
+     ' ',missing_value = -1.0e+10)
+
+id_diz_size = register_diag_field('ocean_model','diz_size', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph size proxy', &
+     ' ',missing_value = -1.0e+10)
+
+id_phy_2det = register_diag_field('ocean_model','phy_2det', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton --> Slow detritus', &
+     ' ',missing_value = -1.0e+10)
+
+id_dia_2det = register_diag_field('ocean_model','dia_2det', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton --> Slow detritus', &
+     ' ',missing_value = -1.0e+10)
+
+id_diz_2det = register_diag_field('ocean_model','diz_2det', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph --> Slow detritus', &
+     ' ',missing_value = -1.0e+10)
+
+id_zoo_2det = register_diag_field('ocean_model','zoo_2det', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microzooplankton --> Slow detritus', &
+     ' ',missing_value = -1.0e+10)
+
+id_mes_2det = register_diag_field('ocean_model','mes_2det', &
+     grid%tracer_axes(1:3),Time%model_time, 'Mesozooplankton --> Slow detritus', &
      ' ',missing_value = -1.0e+10)
 
 id_npp3d = register_diag_field('ocean_model','npp3d', &
@@ -3539,6 +3601,14 @@ id_diazofix = register_diag_field('ocean_model','diazofix', &
 
 id_phy_dFeupt = register_diag_field('ocean_model','phy_dFeupt', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton dFe uptake', &
+     'nM dFe per s ',missing_value = -1.0e+10)
+
+id_dia_dFeupt = register_diag_field('ocean_model','dia_dFeupt', &
+     grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton dFe uptake', &
+     'nM dFe per s ',missing_value = -1.0e+10)
+
+id_diz_dFeupt = register_diag_field('ocean_model','diz_dFeupt', &
+     grid%tracer_axes(1:3),Time%model_time, 'Diazotroph dFe uptake', &
      'nM dFe per s ',missing_value = -1.0e+10)
 
 id_caco3_sediment = register_diag_field('ocean_model','caco3_sediment', &
@@ -3864,10 +3934,10 @@ enddo  !} n
 
 do n = 1, instances  !{
  biotic(n)%sal_global=34.6
- if (id_dic.ne.0) biotic(n)%bgc_global(id_dic)=1966.
- if (id_adic.ne.0) biotic(n)%bgc_global(id_adic)=1966.
- if (id_alk.ne.0) biotic(n)%bgc_global(id_alk)=2303.
- if (id_no3.ne.0) biotic(n)%bgc_global(id_no3)=4.67
+ if (id_dic.gt.0) biotic(n)%bgc_global(id_dic)=1966.
+ if (id_adic.gt.0) biotic(n)%bgc_global(id_adic)=1966.
+ if (id_alk.gt.0) biotic(n)%bgc_global(id_alk)=2303.
+ if (id_no3.gt.0) biotic(n)%bgc_global(id_no3)=4.67
 enddo
   
 write(stdout(),*)
@@ -3973,7 +4043,7 @@ do n = 1, instances  !{
 
 ! rjm bottom Fe fix
 ! mac aug10, only apply this fix when the water is <= 200 m deep.  
- if (id_fe.ne.0) then
+ if (id_fe.gt.0) then
     do j = jsc, jec  !{
       do i = isc, iec  !{
          if (grid%kmt(i,j) .gt. 0) then
