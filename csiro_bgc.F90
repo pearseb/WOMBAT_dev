@@ -320,6 +320,8 @@ integer                                 :: id_zoo_2det = -1
 integer                                 :: id_mes_2det = -1
 integer                                 :: id_zeuphot = -1
 integer                                 :: id_chlorophyll = -1
+integer                                 :: id_phy_KN = -1
+integer                                 :: id_phy_KFe = -1
 integer                                 :: id_phy_parlimit = -1
 integer                                 :: id_dia_parlimit = -1
 integer                                 :: id_diz_parlimit = -1
@@ -439,6 +441,7 @@ real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
                                        zoo_grazpres, mes_grazpres,                                 &
+                                       phy_KN, phy_KFe,                                            &
                                        phy_Felimit, dia_Felimit, diz_Felimit,                      & 
                                        phy_Nlimit, dia_Nlimit, diz_Nlimit,                         &
                                        phy_Plimit, dia_Plimit, diz_Plimit,                         &
@@ -568,6 +571,8 @@ integer                                 :: mesqmor_id
 real, allocatable, dimension(:,:)       :: mesqmor
 integer                                 :: zooexcr_id
 real, allocatable, dimension(:,:)       :: zooexcr
+integer                                 :: zookz_id
+real, allocatable, dimension(:,:)       :: zookz
 integer                                 :: detlrem_id
 real, allocatable, dimension(:,:)       :: detlrem
 integer                                 :: caco3rem_id
@@ -578,6 +583,8 @@ integer                                 :: caco3rem_sed_id
 real, allocatable, dimension(:,:)       :: caco3rem_sed
 integer                                 :: wdetbio_id
 real, allocatable, dimension(:,:)       :: wdetbio
+integer                                 :: wdetmax_id
+real, allocatable, dimension(:,:)       :: wdetmax
 integer                                 :: wcaco3_id
 real, allocatable, dimension(:,:)       :: wcaco3
 integer                                 :: nat_co2_id
@@ -734,6 +741,8 @@ allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( mprod_gross(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( chlorophyll(isc:iec,jsc:jec) )
+allocate( phy_KN(isc:iec,jsc:jec,nk) )
+allocate( phy_KFe(isc:iec,jsc:jec,nk) )
 allocate( phy_parlimit(isc:iec,jsc:jec,nk) )
 allocate( dia_parlimit(isc:iec,jsc:jec,nk) )
 allocate( diz_parlimit(isc:iec,jsc:jec,nk) )
@@ -896,11 +905,13 @@ allocate( mprefzoo(isd:ied,jsd:jed) )
 allocate( zooqmor(isd:ied,jsd:jed) )
 allocate( mesqmor(isd:ied,jsd:jed) )
 allocate( zooexcr(isd:ied,jsd:jed) )
+allocate( zookz(isd:ied,jsd:jed) )
 allocate( detlrem(isd:ied,jsd:jed) )
 allocate( caco3rem(isd:ied,jsd:jed) )
 allocate( detlrem_sed(isd:ied,jsd:jed) )
 allocate( caco3rem_sed(isd:ied,jsd:jed) )
 allocate( wdetbio(isd:ied,jsd:jed) )
+allocate( wdetmax(isd:ied,jsd:jed) )
 allocate( wcaco3(isd:ied,jsd:jed) )
 allocate( nat_co2(isd:ied,jsd:jed) )
 allocate( tscav_fe(isd:ied,jsd:jed) )
@@ -2609,6 +2620,16 @@ if (id_mes_2det .gt. 0) then
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
+! Half-saturation coefficients of phytoplankton
+if (id_phy_KN .gt. 0) then
+  used = send_data(id_phy_KN, phy_KN(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_phy_KFe .gt. 0) then
+  used = send_data(id_phy_KFe, phy_KFe(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+
 ! Light limitation of phytoplankton
 if (id_phy_parlimit .gt. 0) then
   used = send_data(id_phy_parlimit, phy_parlimit(isc:iec,jsc:jec,:),          &
@@ -3231,6 +3252,8 @@ mesqmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "mesqmor", domain = Domain%domain2d)
 zooexcr_id = init_external_field("INPUT/bgc_param.nc",          &
         "zooexcr", domain = Domain%domain2d)
+zookz_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zookz", domain = Domain%domain2d)
 detlrem_id = init_external_field("INPUT/bgc_param.nc",          &
         "detlrem", domain = Domain%domain2d)
 caco3rem_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3241,6 +3264,8 @@ caco3rem_sed_id = init_external_field("INPUT/bgc_param.nc",          &
         "caco3rem_sed", domain = Domain%domain2d)
 wdetbio_id = init_external_field("INPUT/bgc_param.nc",          &
         "wdetbio", domain = Domain%domain2d)
+wdetmax_id = init_external_field("INPUT/bgc_param.nc",          &
+        "wdetmax", domain = Domain%domain2d)
 wcaco3_id = init_external_field("INPUT/bgc_param.nc",          &
         "wcaco3", domain = Domain%domain2d)
 nat_co2_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3522,6 +3547,14 @@ id_zprod_gross = register_diag_field('ocean_model','zprod_gross', &
 id_mprod_gross = register_diag_field('ocean_model','mprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross MES production', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_phy_KN = register_diag_field('ocean_model','phy_KN', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton N half-saturation', &
+     'mmolN/m^3',missing_value = -1.0e+10)
+
+id_phy_KFe = register_diag_field('ocean_model','phy_KFe', &
+     grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton dFe half-saturation', &
+     'umol dFe/m^3',missing_value = -1.0e+10)
 
 id_phy_parlimit = register_diag_field('ocean_model','phy_parlimit', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton light limitation', &
