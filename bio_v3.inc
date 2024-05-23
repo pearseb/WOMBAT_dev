@@ -171,8 +171,8 @@ real :: biotr(isc:iec,grid%nk,ntr_bmax) ! Biogeochemical tracer array
 real :: phy_limnut                      ! Nanophytoplankton limitation by all nutrients   || 0 == full limitation
 real :: phy_conc1                       ! Nanophytoplankton biomass exceeding bloom threshold
 real :: phy_conc2                       ! Nanophytoplankton biomass (but maximum == bloom threshold)
-real :: phy_k_nit                       ! Nanophytoplankton half-saturation coefficient for dissolved inorganic nitrogen uptake
-real :: phy_k_fer                       ! Nanophytoplankton half-saturation coefficient for dissolved iron uptake
+real :: phy_k_nit(isc:iec,grid%nk)      ! Nanophytoplankton half-saturation coefficient for dissolved inorganic nitrogen uptake
+real :: phy_k_fer(isc:iec,grid%nk)      ! Nanophytoplankton half-saturation coefficient for dissolved iron uptake
 real :: phy_limnit(isc:iec,grid%nk)     ! Nanophytoplankton limitation by nitrogen
 real :: phy_limfe(isc:iec,grid%nk)      ! Nanophytoplankton limitation by iron
 
@@ -182,6 +182,7 @@ real :: phy_limfe(isc:iec,grid%nk)      ! Nanophytoplankton limitation by iron
 !!! --------------------------------- !!!
 ! ------------------------------------- !
 real :: phy_slmor                       ! Scaler [0-1] to depress linear nanophytoplankton mortality in nutrient-limited regimes
+real :: zoo_slmor                       ! Scaler [0-1] to depress linear zoooplankton respiration low zooplankton regimes
 
 ! ---------------------------- !
 !!! ------------------------ !!!
@@ -397,8 +398,10 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(zprefdet_id, time%model_time, zprefdet) !Zooplankton preference for Det
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
   call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
+  call time_interp_external(zookz_id, time%model_time, zookz)       !Zooplankton half-saturation for respiration losses
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
-  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Sinking rate of slow detritus
+  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler to sinking rate of detritus
+  call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
@@ -501,6 +504,8 @@ do n = 1, instances  !{
   phy_Felimit(:,:,:) = 0.0
   phy_Nlimit(:,:,:) = 0.0
   phy_Plimit(:,:,:) = 0.0
+  phy_KFe(:,:,:) = 0.0
+  phy_KN(:,:,:) = 0.0
   zoo_grazpres(:,:,:) = 0.0
   phy_dFeupt(:,:,:) = 0.0
 
@@ -772,6 +777,8 @@ do n = 1, instances  !{
          mu_phy(:,:) = 0.0        ! phytoplankton realised growth rate (light limited)
          phy_chl_lpar(:,:) = 0.0  ! light limitation of chlorophyll production by phytoplankton
          mu_pchl(:,:) = 0.0       ! Growth of chlorophyll in phytoplankton
+         phy_k_nit(:,:) = phykn(i,j)     ! Phytoplankton nitrogen half-saturation coef
+         phy_k_fer(:,:) = phykf(i,j)     ! Phytoplankton iron half-saturation coef
          phy_limnit(:,:) = 1.0    ! Phytoplankton nitrogen limitation
          phy_limfe(:,:) = 1.0     ! Phytoplankton iron limitation
 
@@ -888,18 +895,21 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              ! Calculate the variable half-saturation Ks (change with population biomass)
-             phy_conc1 = max(0.0, biophy - phybiot(i,j))  ! phybiot is threshold of phyto biomass in µM
-             phy_conc2 = biophy - phy_conc1
-             phy_k_nit = max( phykn(i,j),                                                          &
-                              ( phy_conc2 * phykn(i,j) + phy_conc1 * 3.0 * phykn(i,j) )            &
-                               / ( biophy + epsi ) )
-             phy_k_fer = max( phykf(i,j),                                                          &
-                              ( phy_conc2 * phykf(i,j) + phy_conc1 * 3.0 * phykf(i,j) )            &
-                              / ( biophy + epsi ) )
+             !phy_conc1 = max(0.0, biophy - phybiot(i,j))  ! phybiot is threshold of phyto biomass in µM
+             !phy_conc2 = biophy - phy_conc1
+             !phy_k_nit(i,k) = max( phykn(i,j),                                                     &
+             !                 ( phy_conc2 * phykn(i,j) + phy_conc1 * 3.0 * phykn(i,j) )            &
+             !                  / ( biophy + epsi ) )
+             !phy_k_fer(i,k) = max( phykf(i,j),                                                     &
+             !                 ( phy_conc2 * phykf(i,j) + phy_conc1 * 3.0 * phykf(i,j) )            &
+             !                 / ( biophy + epsi ) )
+             ! Allometric scaling of 0.37 originates from Wickman et al. (2024) Science
+             phy_k_nit(i,k) = phykn(i,j) * max(0.1, biophy**(0.37))
+             phy_k_fer(i,k) = phykf(i,j) * max(0.1, biophy**(0.37))
 
 
              ! Nitrogen (NO3)
-             phy_limnit(i,k) = biono3 / ( biono3 + phy_k_nit + epsi )
+             phy_limnit(i,k) = biono3 / ( biono3 + phy_k_nit(i,k) + epsi )
 
 
              ! Iron
@@ -981,7 +991,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.8] - Phytoplankton uptake of Fe (nmol Fe / m3)                                     !
+!     Step [11.8] - Phytoplankton uptake of Fe (nmol Fe / m3)                                      !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -997,7 +1007,8 @@ do n = 1, instances  !{
                phy_Feupt_downreg = max(0.0, (1.0 - biophyfe/phy_maxQFe) /                          &
                                             abs(1.05 - biophyfe/phy_maxQFe) )
                phy_Feupt(i,k) = biophy * mumax_phy(i,k) * phymaxqf(i,j) *                          &
-                                biofe / (biofe + phy_k_fer) * phy_Feupt_downreg * phy_Feupt_upreg
+                                biofe / (biofe + phy_k_fer(i,k)) *                                 &
+                                phy_Feupt_downreg * phy_Feupt_upreg
              endif
 
 
@@ -1006,7 +1017,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.9] - Temperature dependence of heterotrophy / respiration                          !
+!     Step [11.9] - Temperature dependence of heterotrophy / respiration                           !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1044,9 +1055,11 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-             ! Depress mortality in nutrient limited regime (i.e., investment in cell maintainence)
-             phy_slmor = MIN(1.0, MAX(0.0,                                                         &
-                         min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
+             !! Depress mortality in nutrient limited regime (i.e., investment in cell maintainence)
+             !phy_slmor = MIN(1.0, MAX(0.0,                                                         &
+             !            min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
+             phy_slmor = 1.0
+             zoo_slmor = biozoo / (biozoo + zookz(i,j))
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1075,7 +1088,7 @@ do n = 1, instances  !{
              ! MORTALITY
              f22phy = phylmor(i,j) * fbc * phy_slmor * biophy               * biomask(i,k)         ! PHY --> DIC
              f23phy = phyqmor(i,j) * biophy * biophy                        * biomask(i,k)         ! PHY --> DET
-             z31 = zooexcr(i,j) * biozoo * fbc                              * biomask(i,k)         ! ZOO --> DIC
+             z31 = zooexcr(i,j) * fbc * zoo_slmor * biozoo                  * biomask(i,k)         ! ZOO --> DIC
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
@@ -1100,14 +1113,16 @@ do n = 1, instances  !{
              ! oxygen equation !
              !!!!!!!!!!!!!!!!!!!
              biotr(i,k,id_o2)   = biotr(i,k,id_o2)  - biomask(i,k) * 172./122. * dtsb * (          &
-                                                      f41det + z31 + f22phy - f11phy )
+                                                      f41det + z31 + f22phy - f11phy +             & 
+                                                      (1.-zooassi(i,j))*0.75*(z21det+z21phy) )
 
 
              !!!!!!!!!!!!!!!!!!!!
              ! nitrate equation !
              !!!!!!!!!!!!!!!!!!!!
              biotr(i,k,id_no3)  = biotr(i,k,id_no3) + dtsb * 16./122. * (                          &
-                                                             f41det + z31 + f22phy - f11phy ) 
+                                                             f41det + z31 + f22phy - f11phy +      &
+                                                             (1.-zooassi(i,j))*0.75*(z21det+z21phy) ) 
 
 
              !!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1115,8 +1130,10 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!!!!!!!!!!!!
              biotr(i,k,id_fe)   = biotr(i,k,id_fe)  + dtsb * (f41det * det_FeC(i,k) +              &
                                                               z31 * zoo_FeC(i,k) +                 &
+                                                       (1.-zooassi(i,j))*0.75*z21det*det_FeC(i,k) + &
+                                                       (1.-zooassi(i,j))*0.75*z21phy*phy_FeC(i,k) + &
                                                               f22phy * phy_FeC(i,k) -              &
-                                                              phy_Feupt(i,k)) * 1e3                &
+                                                              phy_Feupt(i,k) ) * 1e3               &
                                                     - dtsb * (precip + scaven + feloss + fe2det)
 
              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1143,10 +1160,10 @@ do n = 1, instances  !{
              !!!!!!!!!!!!
              ! Detritus !
              !!!!!!!!!!!!
-             biotr(i,k,id_det)  = biotr(i,k,id_det) + dtsb * ( (1.-zooassi(i,j)) *(z21det+z21phy)  &
+             biotr(i,k,id_det)  = biotr(i,k,id_det) + dtsb * ( (1.-zooassi(i,j))*0.25*(z21det+z21phy) &
                                                               + f23phy + z32 - z21det - f41det ) 
-             biotr(i,k,id_detfe)= biotr(i,k,id_detfe)+dtsb * ((1.-zooassi(i,j))*z21det*det_FeC(i,k)&
-                                                             +(1.-zooassi(i,j))*z21phy*phy_FeC(i,k)&
+             biotr(i,k,id_detfe)= biotr(i,k,id_detfe)+dtsb * ((1.-zooassi(i,j))*0.25*z21det*det_FeC(i,k)&
+                                                             +(1.-zooassi(i,j))*0.25*z21phy*phy_FeC(i,k)&
                                                              + f23phy * phy_FeC(i,k)               &
                                                              + z32 * zoo_FeC(i,k)                  &
                                                              - (z21det + f41det)*det_FeC(i,k)      &
@@ -1156,7 +1173,7 @@ do n = 1, instances  !{
              ! CaCO3 equation !
              !!!!!!!!!!!!!!!!!!
              biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (                                &
-                                   (1.-zooassi(i,j))*z21phy + f23phy + z32 ) * f_inorg(i,j) - f51)
+                                 (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 ) * f_inorg(i,j) - f51)
   
 
              !!!!!!!!!!!!!!!!
@@ -1164,8 +1181,9 @@ do n = 1, instances  !{
              !!!!!!!!!!!!!!!!
              biotr(i,k,id_dic)  = biotr(i,k,id_dic) + dtsb * ( f41det + f51                        &
                                                               + z31 + f22phy                       & 
+                                                            + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
                                                               - f11phy                             &
-                                      - ( (1.-zooassi(i,j))*z21phy + f23phy + z32 )*f_inorg(i,j) )
+                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*f_inorg(i,j) )
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
@@ -1200,8 +1218,10 @@ do n = 1, instances  !{
              ! Light limitation of phytoplankton
              phy_parlimit(i,j,k) = phy_parlimit(i,j,k) + phy_lpar(i,k)*dtsb/dtts
              ! Iron limitation of phytoplankton
+             phy_KFe(i,j,k) = phy_KFe(i,j,k) + phy_k_fer(i,k)*dtsb/dtts
              phy_Felimit(i,j,k) = phy_Felimit(i,j,k) + phy_limfe(i,k)*dtsb/dtts
              ! Nitrogen limitation of phytoplankton
+             phy_KN(i,j,k) = phy_KN(i,j,k) + phy_k_nit(i,k)*dtsb/dtts
              phy_Nlimit(i,j,k) = phy_Nlimit(i,j,k) + phy_limnit(i,k)*dtsb/dtts
 
              ! Proxy for average cell/colony size of phytoplankton
@@ -1360,10 +1380,10 @@ do n = 1, instances  !{
        ! collect tracer values before sinking and find sinking rates
        do i=isc,iec
 
-         ! Find sinking rate as a function of average phytoplankton community size in euphotic zone
-         wdet(i,j,:) = wdetbio(i,j) * max(1.0, min(3.0,                                            &
-                       SUM(phy_size(i,j,1:keuphot(i)) * Thickness%dzt(i,j,1:keuphot(i)), dim=1)    &
-                       / SUM(Thickness%dzt(i,j,1:keuphot(i)), dim=1) ))
+         ! Find sinking rate as a function of phytoplankton size at the surface
+         !wdet(i,j,:) = wdetbio(i,j) * max(1.0, min(3.0, phy_size(i,j,1) )) 
+         wdet(i,j,:) = wdetbio(i,j) *                                                              &
+                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.43)
 
          do k=1,grid%nk
 
@@ -1371,8 +1391,9 @@ do n = 1, instances  !{
            biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
            biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
 
-           ! Sinking rate increases logarithmically with pressure (also decreased very shallow)
-           wdet(i,j,k) = wdet(i,j,k) * max(0.1, min(2.0, 0.5*LOG10(grid%zt(k)/4 + 1.0) + 0.1))
+           ! Sinking rate increases linearly with pressure (also decreased at very shallow depths)
+           ! ... so that we approximate the power-law decrease in POC concentration with depth
+           wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) )
 
            !if (i.eq.170 .and. j.eq.120) then
            !  print*, " "

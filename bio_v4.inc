@@ -605,7 +605,8 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(mesqmor_id, time%model_time, mesqmor)   !Mesozooplankton quadratic mortality
   call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
-  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Sinking rate of slow detritus
+  call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler on sinking rate of detritus
+  call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
