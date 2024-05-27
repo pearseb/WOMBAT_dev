@@ -569,8 +569,8 @@ integer                                 :: zooqmor_id
 real, allocatable, dimension(:,:)       :: zooqmor
 integer                                 :: mesqmor_id
 real, allocatable, dimension(:,:)       :: mesqmor
-integer                                 :: zooexcr_id
-real, allocatable, dimension(:,:)       :: zooexcr
+integer                                 :: zooresp_id
+real, allocatable, dimension(:,:)       :: zooresp
 integer                                 :: zookz_id
 real, allocatable, dimension(:,:)       :: zookz
 integer                                 :: detlrem_id
@@ -589,10 +589,6 @@ integer                                 :: wcaco3_id
 real, allocatable, dimension(:,:)       :: wcaco3
 integer                                 :: nat_co2_id
 real, allocatable, dimension(:,:)       :: nat_co2
-integer                                 :: tscav_fe_id
-real, allocatable, dimension(:,:)       :: tscav_fe
-integer                                 :: fe_bkgnd_id
-real, allocatable, dimension(:,:)       :: fe_bkgnd
 integer                                 :: f_inorg_id
 real, allocatable, dimension(:,:)       :: f_inorg
 integer                                 :: knitrif_id
@@ -724,9 +720,6 @@ allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
 allocate( wdet(isc:iec,jsc:jec,nk) )
-allocate( phy_size(isc:iec,jsc:jec,nk) )
-allocate( dia_size(isc:iec,jsc:jec,nk) )
-allocate( diz_size(isc:iec,jsc:jec,nk) )
 allocate( phy_2det(isc:iec,jsc:jec,nk) )
 allocate( dia_2det(isc:iec,jsc:jec,nk) )
 allocate( diz_2det(isc:iec,jsc:jec,nk) )
@@ -904,7 +897,7 @@ allocate( mprefpoc(isd:ied,jsd:jed) )
 allocate( mprefzoo(isd:ied,jsd:jed) )
 allocate( zooqmor(isd:ied,jsd:jed) )
 allocate( mesqmor(isd:ied,jsd:jed) )
-allocate( zooexcr(isd:ied,jsd:jed) )
+allocate( zooresp(isd:ied,jsd:jed) )
 allocate( zookz(isd:ied,jsd:jed) )
 allocate( detlrem(isd:ied,jsd:jed) )
 allocate( caco3rem(isd:ied,jsd:jed) )
@@ -914,8 +907,6 @@ allocate( wdetbio(isd:ied,jsd:jed) )
 allocate( wdetmax(isd:ied,jsd:jed) )
 allocate( wcaco3(isd:ied,jsd:jed) )
 allocate( nat_co2(isd:ied,jsd:jed) )
-allocate( tscav_fe(isd:ied,jsd:jed) )
-allocate( fe_bkgnd(isd:ied,jsd:jed) )
 allocate( f_inorg(isd:ied,jsd:jed) )
 allocate( knitrif(isd:ied,jsd:jed) )
 allocate( kdenitr(isd:ied,jsd:jed) )
@@ -2584,19 +2575,6 @@ if (id_wdet .gt. 0) then
   used = send_data(id_wdet, wdet(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-!phytoplankton size proxy 
-if (id_phy_size .gt. 0) then
-  used = send_data(id_phy_size, phy_size(isc:iec,jsc:jec,:),          &
-         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_dia_size .gt. 0) then
-  used = send_data(id_dia_size, dia_size(isc:iec,jsc:jec,:),          &
-         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_diz_size .gt. 0) then
-  used = send_data(id_diz_size, diz_size(isc:iec,jsc:jec,:),          &
-         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
 
 ! ecosystem biomass to slow detritus fraction 
 if (id_phy_2det .gt. 0) then
@@ -3250,8 +3228,8 @@ zooqmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "zooqmor", domain = Domain%domain2d)
 mesqmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "mesqmor", domain = Domain%domain2d)
-zooexcr_id = init_external_field("INPUT/bgc_param.nc",          &
-        "zooexcr", domain = Domain%domain2d)
+zooresp_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zooresp", domain = Domain%domain2d)
 zookz_id = init_external_field("INPUT/bgc_param.nc",          &
         "zookz", domain = Domain%domain2d)
 detlrem_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -3270,10 +3248,6 @@ wcaco3_id = init_external_field("INPUT/bgc_param.nc",          &
         "wcaco3", domain = Domain%domain2d)
 nat_co2_id = init_external_field("INPUT/bgc_param.nc",          &
         "nat_co2", domain = Domain%domain2d)
-tscav_fe_id = init_external_field("INPUT/bgc_param.nc",          &
-        "tscav_fe", domain = Domain%domain2d)
-fe_bkgnd_id = init_external_field("INPUT/bgc_param.nc",          &
-        "fe_bkgnd", domain = Domain%domain2d)
 f_inorg_id = init_external_field("INPUT/bgc_param.nc",          &
         "f_inorg", domain = Domain%domain2d)
 knitrif_id = init_external_field("INPUT/bgc_param.nc",          &

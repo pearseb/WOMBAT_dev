@@ -603,14 +603,12 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(mprefzoo_id, time%model_time, mprefzoo) !Mesozooplankton preference for Zooplankton
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
   call time_interp_external(mesqmor_id, time%model_time, mesqmor)   !Mesozooplankton quadratic mortality
-  call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
+  call time_interp_external(zooresp_id, time%model_time, zooresp)   !Zooplankton respiration rate
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler on sinking rate of detritus
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
-  call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
-  call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
   call time_interp_external(knitrif_id, time%model_time, knitrif)   !Rate of nitrification (NH4-->NO3)
   call time_interp_external(kdenitr_id, time%model_time, kdenitr)   !Rate of denitrification (NO3-->N2)
@@ -1670,9 +1668,9 @@ do n = 1, instances  !{
              f23phy = phyqmor(i,j) * biophy * biophy                        * biomask(i,k)         ! PHY --> DET & POC
              f23dia = phyqmor(i,j) * biodia * biodia                        * biomask(i,k)         ! DIA --> DET & POC
              f23diz = phyqmor(i,j) * biodiz * biodiz                        * biomask(i,k)         ! DIZ --> DET & POC
-             z31 = zooexcr(i,j) * biozoo * fbc                              * biomask(i,k)         ! ZOO --> DIC
+             z31 = zooresp(i,j) * biozoo * fbc                              * biomask(i,k)         ! ZOO --> DIC
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET & POC
-             m31 = zooexcr(i,j) * biomes * fbc                              * biomask(i,k)         ! MES --> DIC
+             m31 = zooresp(i,j) * biomes * fbc                              * biomask(i,k)         ! MES --> DIC
              m32 = mesqmor(i,j) * biomes*biomes                             * biomask(i,k)         ! MES --> DET & POC
 
              ! REMINERALISATION

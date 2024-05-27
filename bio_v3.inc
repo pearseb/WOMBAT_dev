@@ -283,7 +283,6 @@ real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
 !!! Detrital sinking !!!
 !!! ---------------- !!!
 ! -------------------- !
-real :: phyxsize                        ! Proxy for average cell size of phytoplankton community
 real :: biodetsed(isc:iec)              ! Temporary array for rate of accumulation in sediments 
 real :: biodetfesed(isc:iec)            ! Temporary array for rate of accumulation in sediments
 real :: adv_fb1(isc:iec,1:grid%nk+1)    ! Sinking of detritus (carbon)
@@ -397,15 +396,13 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(zprefphy_id, time%model_time, zprefphy) !Zooplankton preference for phytoplankton
   call time_interp_external(zprefdet_id, time%model_time, zprefdet) !Zooplankton preference for Det
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
-  call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
+  call time_interp_external(zooresp_id, time%model_time, zooresp)   !Zooplankton respiration rate
   call time_interp_external(zookz_id, time%model_time, zookz)       !Zooplankton half-saturation for respiration losses
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler to sinking rate of detritus
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
-  call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
-  call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
   call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
   call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
@@ -895,17 +892,9 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              ! Calculate the variable half-saturation Ks (change with population biomass)
-             !phy_conc1 = max(0.0, biophy - phybiot(i,j))  ! phybiot is threshold of phyto biomass in µM
-             !phy_conc2 = biophy - phy_conc1
-             !phy_k_nit(i,k) = max( phykn(i,j),                                                     &
-             !                 ( phy_conc2 * phykn(i,j) + phy_conc1 * 3.0 * phykn(i,j) )            &
-             !                  / ( biophy + epsi ) )
-             !phy_k_fer(i,k) = max( phykf(i,j),                                                     &
-             !                 ( phy_conc2 * phykf(i,j) + phy_conc1 * 3.0 * phykf(i,j) )            &
-             !                 / ( biophy + epsi ) )
              ! Allometric scaling of 0.37 originates from Wickman et al. (2024) Science
-             phy_k_nit(i,k) = phykn(i,j) * max(0.1, biophy**(0.37))
-             phy_k_fer(i,k) = phykf(i,j) * max(0.1, biophy**(0.37))
+             phy_k_nit(i,k) = phykn(i,j) * max(phybiot(i,j), biophy)**(0.37)
+             phy_k_fer(i,k) = phykf(i,j) * max(phybiot(i,j), biophy)**(0.37)
 
 
              ! Nitrogen (NO3)
@@ -1088,7 +1077,7 @@ do n = 1, instances  !{
              ! MORTALITY
              f22phy = phylmor(i,j) * fbc * phy_slmor * biophy               * biomask(i,k)         ! PHY --> DIC
              f23phy = phyqmor(i,j) * biophy * biophy                        * biomask(i,k)         ! PHY --> DET
-             z31 = zooexcr(i,j) * fbc * zoo_slmor * biozoo                  * biomask(i,k)         ! ZOO --> DIC
+             z31 = zooresp(i,j) * fbc * zoo_slmor * biozoo                  * biomask(i,k)         ! ZOO --> DIC
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
@@ -1153,9 +1142,6 @@ do n = 1, instances  !{
                                                                             z21det*det_FeC(i,k)) - &
                                                               (z31+z32)*zoo_FeC(i,k) )
 
-
-             phyxsize = max(1.0, ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) )     &
-                                / (biophy + epsi) )
 
              !!!!!!!!!!!!
              ! Detritus !
@@ -1223,9 +1209,6 @@ do n = 1, instances  !{
              ! Nitrogen limitation of phytoplankton
              phy_KN(i,j,k) = phy_KN(i,j,k) + phy_k_nit(i,k)*dtsb/dtts
              phy_Nlimit(i,j,k) = phy_Nlimit(i,j,k) + phy_limnit(i,k)*dtsb/dtts
-
-             ! Proxy for average cell/colony size of phytoplankton
-             phy_size(i,j,k) = phy_size(i,j,k) + phyxsize*dtsb/dtts
 
              ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
              if (zooprey.gt.0.0) then
@@ -1381,9 +1364,8 @@ do n = 1, instances  !{
        do i=isc,iec
 
          ! Find sinking rate as a function of phytoplankton size at the surface
-         !wdet(i,j,:) = wdetbio(i,j) * max(1.0, min(3.0, phy_size(i,j,1) )) 
          wdet(i,j,:) = wdetbio(i,j) *                                                              &
-                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.43)
+                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
 
          do k=1,grid%nk
 
