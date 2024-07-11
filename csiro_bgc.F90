@@ -1721,7 +1721,10 @@ endif
         if (id_sil.gt.0) then
           t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
         endif
-        t_prog(ind_dic)%stf(i,j) =  rho0 * rivdic_t(i,j)
+        t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * rivdic_t(i,j)
+        if (id_adic.gt.0) then
+          t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * rivdic_t(i,j)
+        endif
         t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
       enddo  !} i
     enddo  !} j
