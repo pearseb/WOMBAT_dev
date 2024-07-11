@@ -1058,7 +1058,11 @@ do n = 1, instances  !{
              !! Depress mortality in nutrient limited regime (i.e., investment in cell maintainence)
              !phy_slmor = MIN(1.0, MAX(0.0,                                                         &
              !            min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
-             phy_slmor = 1.0
+             if (biophy.gt.0.001) then
+                phy_slmor = 1.0
+             else
+                phy_slmor = 0.0
+             endif
              zoo_slmor = biozoo / (biozoo + zookz(i,j))
 
 
