@@ -186,7 +186,8 @@ type biotic_type  !{
 ! arrays for air-sea fluxes
   real                                      :: sal_global
   real, allocatable, dimension(:)           :: bgc_global
-  real, allocatable, dimension(:,:)         :: htotal
+  real, allocatable, dimension(:,:)         :: ahtotal
+  real, allocatable, dimension(:,:,:)       :: htotal
   real, allocatable, dimension(:,:)         :: alpha
   real, allocatable, dimension(:,:)         :: csat
   real, allocatable, dimension(:,:)         :: csat_csurf
@@ -218,6 +219,9 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: sio2
   real, allocatable, dimension(:,:)         :: po4
   real, allocatable, dimension(:,:,:)       :: vstf
+  real, allocatable, dimension(:,:,:)       :: co3
+  real, allocatable, dimension(:,:,:)       :: omega_ara
+  real, allocatable, dimension(:,:,:)       :: omega_cal
 end type biotic_type  !}
 
 !----------------------------------------------------------------------
@@ -357,6 +361,10 @@ integer                                 :: id_o2_sat = -1
 integer                                 :: id_sc_o2  = -1
 integer                                 :: id_pco2 = -1, id_paco2 = -1
 integer                                 :: id_co2_sat = -1, id_aco2_sat = -1
+integer                                 :: id_htotal = -1
+integer                                 :: id_co3 = -1
+integer                                 :: id_omega_ara = -1
+integer                                 :: id_omega_cal = -1
 integer                                 :: id_caco3_sed_remin, id_det_sed_remin, id_detfe_sed_remin
 integer                                 :: id_caco3_sed_depst, id_det_sed_depst, id_detfe_sed_depst
 integer                                 :: id_caco3_sed_bury, id_det_sed_bury, id_detfe_sed_bury
@@ -809,7 +817,11 @@ do n = 1, instances  !{
 !  ntr_bgc = biotic(n)%ntr_bgc
 !  allocate( biotic(n)%ind_bgc(1:ntr_bgc) )
 
-  allocate( biotic(n)%htotal(isd:ied,jsd:jed) )
+  allocate( biotic(n)%ahtotal(isd:ied,jsd:jed) )
+  allocate( biotic(n)%htotal(isd:ied,jsd:jed,nk) )
+  allocate( biotic(n)%co3(isd:ied,jsd:jed,nk) )
+  allocate( biotic(n)%omega_ara(isd:ied,jsd:jed,nk) )
+  allocate( biotic(n)%omega_cal(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%alpha(isd:ied,jsd:jed) )
   allocate( biotic(n)%csat(isd:ied,jsd:jed) )
   allocate( biotic(n)%csat_csurf(isd:ied,jsd:jed) )
@@ -928,7 +940,11 @@ allocate( kcoag2_dfe(isd:ied,jsd:jed) )
 !       initialize some arrays
 
 do n = 1, instances  !{
- biotic(n)%htotal(:,:)  = 1.e-8
+  biotic(n)%ahtotal(:,:)  = 1.e-8
+  biotic(n)%htotal(:,:,:)  = 1.e-8
+  biotic(n)%co3(:,:,:)  = 0.0
+  biotic(n)%omega_ara(:,:,:)  = 0.0
+  biotic(n)%omega_cal(:,:,:)  = 0.0
   biotic(n)%sio2(:,:) = 35. *1e-3
   biotic(n)%bgc_global(:) = 0.  ! this will make vstf zero
   biotic(n)%sal_global = 35.
@@ -1416,7 +1432,7 @@ if ((.not. use_waterflux) .or. (salt_restore_as_salt_flux)) then  !{
   ntr_bgc = biotic(n)%ntr_bgc
     do nn=1,ntr_bgc
      ind_trc =  biotic(n)%ind_bgc(nn)
-     t_prog(ind_trc)%stf(:,:) = 0     
+     t_prog(ind_trc)%stf(:,:) = 0.0
     enddo
  enddo
 endif
@@ -1494,46 +1510,83 @@ do n = 1, instances  !{
 
 ! ocmip2+co2cal expects tracers in mol/m3 !!!!
   if (id_dic.gt.0) then
-    biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,1,time%taum1)*0
-    if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,1,time%taum1)/16.*1e-3
-    if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3
 
-    call ocmip2_co2calc(isd, jsd, &
-       isc, iec, jsc, jec,                     &
-       grid%tmask(isd:ied,jsd:jed,1),                           &
-       t_prog(indtemp)%field(isd:ied,jsd:jed,1,time%taum1),     &
-       t_prog(indsal)%field(isd:ied,jsd:jed,1,time%taum1),     &
-       t_prog(ind_dic)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3,&
-       t_prog(ind_alk)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3,&
-       biotic(n)%po4(isd:ied,jsd:jed),&
-       biotic(n)%sio2(isd:ied,jsd:jed),                       &
-       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec), &
-       biotic(n)%htotal(isc:iec,jsc:jec),                      &
-       biotic(n)%csurf(isc:iec,jsc:jec),                    &
-       alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                   &            
-       pco2surf = biotic(n)%pco2surf(isc:iec,jsc:jec),            &
+    ! Do surface fields first (requires more output for computing gas exchange)
+    k = 1
+
+    biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
+    if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,k,time%taum1)/16.*1e-3
+    if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3
+
+    call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, grid%zt(k),              &
+       grid%tmask(isd:ied,jsd:jed,k),                                          &
+       t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
+       t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
+       t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+       t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+       biotic(n)%po4(isd:ied,jsd:jed),                                         &
+       biotic(n)%sio2(isd:ied,jsd:jed),                                        &
+       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+       biotic(n)%htotal(isc:iec,jsc:jec,k),                                    &
+       biotic(n)%csurf(isc:iec,jsc:jec),                                       &
+       alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                                &            
+       pco2surf = biotic(n)%pco2surf(isc:iec,jsc:jec),                         &
+       co3_ion = biotic(n)%co3(isc:iec,jsc:jec,k),                             &
+       omega_ara = biotic(n)%omega_ara(isc:iec,jsc:jec,k),                     &
+       omega_cal = biotic(n)%omega_cal(isc:iec,jsc:jec,k),                     &
        scale= 1.0/1024.5 )
 
+    ! Retrieve pH, CO3 ion concentration and omega staturation states of calcite and aragonite through depth
+    do k = 2,grid%nk !{
+
+      biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
+      if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,k,time%taum1)/16.*1e-3
+      if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3
+
+    call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, grid%zt(k),              &
+       grid%tmask(isd:ied,jsd:jed,k),                                          &
+       t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
+       t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
+       t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+       t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+       biotic(n)%po4(isd:ied,jsd:jed),                                         &
+       biotic(n)%sio2(isd:ied,jsd:jed),                                        &
+       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+       biotic(n)%htotal(isc:iec,jsc:jec,k),                                    &
+       co3_ion = biotic(n)%co3(isc:iec,jsc:jec,k),                             &
+       omega_ara = biotic(n)%omega_ara(isc:iec,jsc:jec,k),                     &
+       omega_cal = biotic(n)%omega_cal(isc:iec,jsc:jec,k),                     &
+       scale= 1.0/1024.5 )
+
+    enddo !} k
+
     if (id_adic .gt. 0) then ! calculate CO2 flux including anthropogenic CO2
-      call ocmip2_co2calc(isd, jsd,                     &
-       isc, iec, jsc, jec,                    &
-       grid%tmask(isd:ied,jsd:jed,1),                           &
-       t_prog(indtemp)%field(isd:ied,jsd:jed,1,time%taum1),     &
-       t_prog(indsal)%field(isd:ied,jsd:jed,1,time%taum1),     &
-       t_prog(ind_adic)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3,&
-       t_prog(ind_alk)%field(isd:ied,jsd:jed,1,time%taum1)*1e-3,&
-       biotic(n)%po4(isd:ied,jsd:jed),&
-       biotic(n)%sio2(isd:ied,jsd:jed),                       &
-       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec), &
-       biotic(n)%htotal(isc:iec,jsc:jec),                      &
-       biotic(n)%acsurf(isc:iec,jsc:jec),                    &
-       alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                   &            
-       pco2surf = biotic(n)%paco2surf(isc:iec,jsc:jec),           &
-       scale = 1.0/1024.5 )
+
+      k = 1
+
+      biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
+      if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,k,time%taum1)/16.*1e-3
+      if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3
+
+      call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, grid%zt(k),              &
+         grid%tmask(isd:ied,jsd:jed,k),                                          &
+         t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
+         t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
+         t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+         t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+         biotic(n)%po4(isd:ied,jsd:jed),                                         &
+         biotic(n)%sio2(isd:ied,jsd:jed),                                        &
+         htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+         biotic(n)%ahtotal(isc:iec,jsc:jec),                                     &
+         biotic(n)%acsurf(isc:iec,jsc:jec),                                      &
+         alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                                &            
+         pco2surf = biotic(n)%paco2surf(isc:iec,jsc:jec),                        &
+         scale= 1.0/1024.5 )
+
     endif  ! no adic
+
   endif  ! no dic
 enddo  !} n 
-
 
 !---------------------------------------------------------------------
 !  Compute the oxygen saturation concentration at 1 atm total
@@ -1754,7 +1807,7 @@ if (id_no3.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
-        t_prog(ind_no3)%stf(i,j) = iof_nit(i,j)
+        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + iof_nit(i,j)
       enddo  !} i
     enddo  !} j
   enddo  !} n
@@ -2528,6 +2581,22 @@ endif
 if (id_aco2_sat .gt. 0) then
   used = send_data(id_aco2_sat, biotic(1)%csat_acsurf(isc:iec,jsc:jec),   &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_htotal .gt. 0) then
+  used = send_data(id_htotal, biotic(1)%htotal(isc:iec,jsc:jec,:),            &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_co3 .gt. 0) then
+  used = send_data(id_co3, biotic(1)%co3(isc:iec,jsc:jec,:),            &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_omega_ara .gt. 0) then
+  used = send_data(id_omega_ara, biotic(1)%omega_ara(isc:iec,jsc:jec,:),      &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_omega_cal .gt. 0) then
+  used = send_data(id_omega_cal, biotic(1)%omega_cal(isc:iec,jsc:jec,:),      &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
 if (id_sc_o2 .gt. 0) then
@@ -3357,6 +3426,23 @@ id_aco2_sat = register_diag_field('ocean_model',                  &
      'aco2_saturation', grid%tracer_axes(1:2),                    &
      Time%model_time, 'CO2 saturation inc. anthropogenic', 'mmol/m^3',            &
      missing_value = -1.0e+10)
+id_htotal = register_diag_field('ocean_model',                  &
+     'htotal', grid%tracer_axes(1:3),                           &
+     Time%model_time, 'H+ ion concentration', 'mol/L'           &
+     ,missing_value = -1.0e+10)
+id_co3 = register_diag_field('ocean_model',                     &
+     'co3', grid%tracer_axes(1:3),                              &
+     Time%model_time, 'Carbonate ion concentration', 'mmol/m^3' &
+     ,missing_value = -1.0e+10)
+id_omega_ara = register_diag_field('ocean_model',               &
+     'omega_ara', grid%tracer_axes(1:3),                        &
+     Time%model_time, 'Aragonite saturation state', ' '         &
+     ,missing_value = -1.0e+10)
+id_omega_cal = register_diag_field('ocean_model',               &
+     'omega_cal', grid%tracer_axes(1:3),                        &
+     Time%model_time, 'Calcite saturation state', ' '           &
+     ,missing_value = -1.0e+10)
+
 
 id_sc_o2 = register_diag_field('ocean_model',                   &
      'sc_o2', grid%tracer_axes(1:2),                            &
