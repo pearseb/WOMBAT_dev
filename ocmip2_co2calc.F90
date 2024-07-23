@@ -233,9 +233,10 @@ end subroutine  ocmip2_co2_alpha
 !       to convert from mol/m^3 to mol/kg.
 !
 ! </DESCRIPTION>
-subroutine ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, mask, t, s,   &
-     dic_in, ta_in, pt_in, sit_in, htotallo, htotalhi, htotal,                  &
-     co2star, co3_ion, alpha, pCO2surf, k1_out, k2_out, invtk_out, scale)
+subroutine ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, zt, mask, t, s,   &
+     dic_in, ta_in, pt_in, sit_in, htotallo, htotalhi, htotal,            &
+     co2star, co3_ion, alpha, pCO2surf, k1_out, k2_out, invtk_out,        &
+     omega_ara, omega_cal, scale)
 
 real, parameter :: permeg = 1.e-6
 real, parameter :: xacc = 1.0e-10
@@ -246,6 +247,7 @@ integer, intent(in)                                     :: isc
 integer, intent(in)                                     :: iec
 integer, intent(in)                                     :: jsc
 integer, intent(in)                                     :: jec
+real, intent(in)                                        :: zt
 real, dimension(isd:,jsd:), intent(in)                  :: mask
 real, dimension(isd:,jsd:), intent(in)                  :: t
 real, dimension(isd:,jsd:), intent(in)                  :: s
@@ -263,6 +265,8 @@ real, dimension(isc:,jsc:), intent(out), optional       :: pCO2surf
 real, dimension(isc:,jsc:), intent(out), optional       :: invtk_out
 real, dimension(isc:,jsc:), intent(out), optional       :: k1_out
 real, dimension(isc:,jsc:), intent(out), optional       :: k2_out
+real, dimension(isc:,jsc:), intent(out), optional       :: omega_ara 
+real, dimension(isc:,jsc:), intent(out), optional       :: omega_cal
 real, intent(in), optional                              :: scale
 
 integer :: i
@@ -302,7 +306,19 @@ real    :: st
 real    :: ft
 real    :: htotal2
 real    :: co2star_internal
+real    :: calcium
+real    :: Kspa
+real    :: Kspc
+real    :: prb
 real    :: scale_factor
+real, dimension(12) :: a0, a1, a2, b0, b1, b2
+DATA a0 /-25.5,    -15.82,      -29.48,    -20.02,     -18.03,   -9.78,     -48.76,    -45.96,    -14.51,    -23.12,    -26.57,    -29.48/
+DATA a1 /0.1271,   -0.0219,     0.1622,    0.1119,     0.0466,   -0.0090,   0.5304,    0.5304,    0.1211,    0.1758,    0.2020,    0.1622/
+DATA a2 /0.0,      0.0,         -2.608e-3, -1.409e-3,  0.316e-3, -0.942e-3, 0.0,       0.0,       -0.321e-3, -2.647e-3, -3.042e-3, -2.6080e-3/
+DATA b0 /-3.08e-3, 1.13e-3,     -2.84e-3,  -5.13e-3,   -4.53e-3, -3.91e-3,  -11.76e-3, -11.76e-3, -2.67e-3,  -5.15e-3,  -4.08e-3,  -2.84e-3/
+DATA b1 /0.0877e-3, -0.1475e-3, 0.0,        0.0794e-3, 0.09e-3,  0.054e-3,  0.3692e-3, 0.3692e-3, 0.0427e-3, 0.09e-3,   0.0714e-3, 0.0/
+DATA b2 /12*0.0/
+
 
 !       set the scale factor for unit conversion
 if (present(scale)) then
@@ -339,6 +355,7 @@ do j = jsc, jec
       s15       = sqrts ** 3
       scl       = s(i,j) / 1.80655
       logf_of_s = log(1.0 - 0.001005 * s(i,j))
+      prb       = zt / 10.0
 
       ! k0 from Weiss 1974
 
@@ -437,6 +454,18 @@ do j = jsc, jec
         invtk_out(i,j)  = invtk
       endif
 
+      if (present(omega_ara)) then
+        Kspa = 10.0**(-171.945 - 0.077993*tk + 2903.293/tk + 71.595*LOG10(tk)                       &
+                      + (-0.068393 + 0.0017276*tk + 88.135/tk)*sqrts -0.10018*s(i,j) + 0.0059415*s15 )
+      endif
+      if (present(omega_cal)) then
+        Kspc = 10.0**(-171.9065 - 0.077993*tk + 2839.319/tk + 71.595*LOG10(tk)                      &
+                      + (-0.77712 + 0.0028426*tk + 178.34/tk)*sqrts -0.07711*s(i,j) + 0.0041249*s15 )
+      endif
+
+      !!! Pressure corrections to the above constants !!! (Pearse J. Buchanan, July 2024)
+      !k1 = k1 
+
       ! Possibly convert input in mol/m^3 -> mol/kg 
       sit = sit_in(i,j) * scale_factor
       ta  = ta_in(i,j)  * scale_factor
@@ -480,12 +509,18 @@ do j = jsc, jec
       !            mol/kg within this routine 
       !
       htotal2 = htotal(i,j) * htotal(i,j)
-      co2star_internal = dic * htotal2 / (htotal2 + k1 * (htotal(i,j) + k2)) / scale_factor
+      co2star_internal = dic * htotal2 / (htotal2 + k1 * (htotal(i,j) + k2)) / scale_factor  !(mol/m^3)
       if (present(co2star)) then
         co2star(i,j) = co2star_internal
       endif
       if (present(co3_ion)) then
-        co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2
+        co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2 * 1e3  ! (mmol/m^3)
+        ! Calculate aragonite and calcite saturation states (Pearse J. Buchanan, July 2024)
+        if (present(omega_ara) .or. present(omega_cal)) then
+          calcium = (0.02128/40.078)*s(i,j)/1.80655
+          if (present(omega_ara)) omega_ara(i,j) = (calcium * co3_ion(i,j)*1e-3*scale_factor) / Kspa
+          if (present(omega_cal)) omega_cal(i,j) = (calcium * co3_ion(i,j)*1e-3*scale_factor) / Kspc
+        endif
       endif
       !ph = -log10(htotal(i,j))
 
@@ -517,6 +552,9 @@ do j = jsc, jec
       if (present(co2star)) then
         co2star(i,j) = 0.0
       endif
+      if (present(co3_ion)) then
+        co3_ion(i,j) = 0.0
+      endif
       if (present(k1_out)) then
         k1_out(i,j) = 0.0
       endif
@@ -531,6 +569,12 @@ do j = jsc, jec
       endif
       if (present(pco2surf)) then
         pCO2surf(i,j) = 0.0
+      endif
+      if (present(omega_ara)) then
+        omega_ara(i,j) =0.0
+      endif
+      if (present(omega_cal)) then
+        omega_cal(i,j) =0.0
       endif
 
     endif
