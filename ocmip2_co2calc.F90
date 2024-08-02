@@ -271,6 +271,7 @@ real, intent(in), optional                              :: scale
 
 integer :: i
 integer :: j
+integer :: ipc
 real    :: log100
 real    :: pt
 real    :: sit
@@ -311,6 +312,9 @@ real    :: Kspa
 real    :: Kspc
 real    :: prb
 real    :: scale_factor
+real    :: R
+real    :: total2free_0p, total2free, ks_0p, kf_0p, free2SWS, total2SWS, SWS2total, free2SWS_0p, total2SWS_0p
+real, dimension(12) :: deltav, deltak, lnkpok0
 real, dimension(12) :: a0, a1, a2, b0, b1, b2
 DATA a0 /-25.5,    -15.82,      -29.48,    -20.02,     -18.03,   -9.78,     -48.76,    -45.96,    -14.51,    -23.12,    -26.57,    -29.48/
 DATA a1 /0.1271,   -0.0219,     0.1622,    0.1119,     0.0466,   -0.0090,   0.5304,    0.5304,    0.1211,    0.1758,    0.2020,    0.1622/
@@ -318,7 +322,6 @@ DATA a2 /0.0,      0.0,         -2.608e-3, -1.409e-3,  0.316e-3, -0.942e-3, 0.0,
 DATA b0 /-3.08e-3, 1.13e-3,     -2.84e-3,  -5.13e-3,   -4.53e-3, -3.91e-3,  -11.76e-3, -11.76e-3, -2.67e-3,  -5.15e-3,  -4.08e-3,  -2.84e-3/
 DATA b1 /0.0877e-3, -0.1475e-3, 0.0,        0.0794e-3, 0.09e-3,  0.054e-3,  0.3692e-3, 0.3692e-3, 0.0427e-3, 0.09e-3,   0.0714e-3, 0.0/
 DATA b2 /12*0.0/
-
 
 !       set the scale factor for unit conversion
 if (present(scale)) then
@@ -337,6 +340,7 @@ endif
 !
 ! Derive simple terms used more than once
 log100 = log(100.0)
+R = 83.14472
 do j = jsc, jec
   do i = isc, iec
 
@@ -441,6 +445,81 @@ do j = jsc, jec
       ! Riley (1965)
       ft = 0.000067 / 18.9984 * scl
 
+      if (present(omega_ara)) then
+        Kspa = 10.0**(-171.945 - 0.077993*tk + 2903.293/tk + 71.595*LOG10(tk)                       &
+                      + (-0.068393 + 0.0017276*tk + 88.135/tk)*sqrts -0.10018*s(i,j) + 0.0059415*s15 )
+      endif
+      if (present(omega_cal)) then
+        Kspc = 10.0**(-171.9065 - 0.077993*tk + 2839.319/tk + 71.595*LOG10(tk)                      &
+                      + (-0.77712 + 0.0028426*tk + 178.34/tk)*sqrts -0.07711*s(i,j) + 0.0041249*s15 )
+      endif
+
+
+      !!! ------------------------------------------- !!! 
+      !!! Pressure corrections to the above constants !!! (Pearse J. Buchanan, July 2024)
+      !!! ------------------------------------------- !!!      (copied from mocsy)
+
+      do ipc=1,12
+        deltav(ipc)  = a0(ipc) + a1(ipc)*t(i,j) + a2(ipc)*t(i,j)*t(i,j)
+        deltak(ipc)  = b0(ipc) + b1(ipc)*t(i,j) + b2(ipc)*t(i,j)*t(i,j)
+        lnkpok0(ipc) = ( -deltav(ipc) + (0.5*deltak(ipc) * prb) )*prb/(R*tk)
+      enddo
+
+      ! Conversion factor total -> free scale at pressure zero
+      total2free_0p  = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
+      ks_0p = ks*1
+      ks = ks * EXP(lnkpok0(5))
+      ! Conversion factor total -> free scale
+      total2free     = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
+      
+      kf_0p = kf * total2free_0p
+      kf    = kf_0p * EXP(lnkpok0(6))
+      kf    = kf / total2free
+
+      ! Convert between seawater and total hydrogen (pH) scales
+      free2SWS  = 1.0 + st/ks + ft/(kf*total2free)  ! using Kf on free scale
+      total2SWS = total2free * free2SWS             ! KSWS = Ktotal*total2SWS
+      SWS2total = 1.0 / total2SWS
+      ! Conversion at pressure zero
+      free2SWS_0p  = 1.0 + st/ks_0p + ft/(kf_0p)    ! using Kf on free scale
+      total2SWS_0p = total2free_0p * free2SWS_0p    ! KSWS = Ktotal*total2SWS
+
+      ! Convert from Total to Seawater scale before pressure correction
+      ! Must change to SEAWATER scale: Kb
+      kb = kb*total2SWS_0p
+
+      ! Already on SEAWATER scale: K1p, K2p, K3p, Kb, Ksi, Kw
+     
+      ! Other contants (keep on another scale):
+      !    - K0         (independent of pH scale, already pressure corrected)
+      !    - Ks         (already on Free scale;   already pressure corrected)
+      !    - Kf         (already on Total scale;  already pressure corrected)
+      !    - Kspc, Kspa (independent of pH scale; pressure-corrected below)
+
+      ! Perform actual pressure correction (on seawater scale)
+      k1 = k1*EXP(lnkpok0(1))
+      k2 = k2*EXP(lnkpok0(2))
+      kb = kb*EXP(lnkpok0(3))
+      kw = kw*EXP(lnkpok0(4))
+      Kspc = Kspc*EXP(lnkpok0(7))
+      Kspa = Kspa*EXP(lnkpok0(8))
+      k1p = k1p*EXP(lnkpok0(9))
+      k2p = k2p*EXP(lnkpok0(10))
+      k3p = k3p*EXP(lnkpok0(11))
+      ksi = ksi*EXP(lnkpok0(12))
+
+      ! Convert back to original total scale:
+      k1  = k1 *SWS2total
+      k2  = k2 *SWS2total
+      k1p = k1p*SWS2total
+      k2p = k2p*SWS2total
+      k3p = k3p*SWS2total
+      kb  = kb *SWS2total
+      ksi = ksi*SWS2total
+      kw  = kw *SWS2total
+
+      !!! ------------------------------------------- !!! 
+
       ! set some stuff to pass back, if requested
       if (present(k1_out)) then
         k1_out(i,j) = k1
@@ -454,17 +533,6 @@ do j = jsc, jec
         invtk_out(i,j)  = invtk
       endif
 
-      if (present(omega_ara)) then
-        Kspa = 10.0**(-171.945 - 0.077993*tk + 2903.293/tk + 71.595*LOG10(tk)                       &
-                      + (-0.068393 + 0.0017276*tk + 88.135/tk)*sqrts -0.10018*s(i,j) + 0.0059415*s15 )
-      endif
-      if (present(omega_cal)) then
-        Kspc = 10.0**(-171.9065 - 0.077993*tk + 2839.319/tk + 71.595*LOG10(tk)                      &
-                      + (-0.77712 + 0.0028426*tk + 178.34/tk)*sqrts -0.07711*s(i,j) + 0.0041249*s15 )
-      endif
-
-      !!! Pressure corrections to the above constants !!! (Pearse J. Buchanan, July 2024)
-      !k1 = k1 
 
       ! Possibly convert input in mol/m^3 -> mol/kg 
       sit = sit_in(i,j) * scale_factor
