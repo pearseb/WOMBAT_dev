@@ -1087,30 +1087,38 @@ logical  :: used
          
          ! Remineralisation of sediments to supply nutrient fields.  
          ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
-         T_prog(ind_dic)%btf(i,j) = -rho0 * biotic(n)%det_sed_remin(i,j)                             &
-                                    -rho0 * biotic(n)%caco3_sed_remin(i,j)
+         T_prog(ind_dic)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)                       &
+                                    -1.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)
          if (id_adic.gt.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
-         if (id_po4.gt.0)  T_prog(ind_po4)%btf(i,j)  = -rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
-         if (id_nh4.gt.0)  T_prog(ind_nh4)%btf(i,j)  = -rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
+         if (id_po4.gt.0)  T_prog(ind_po4)%btf(i,j)  = -1.0 * rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
+         if (id_nh4.gt.0)  T_prog(ind_nh4)%btf(i,j)  = -1.0 * rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
          if (id_o2.gt.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
                                                        (1.-denfac) * 172./122.
-         if (id_fe.gt.0)   T_prog(ind_fe)%btf(i,j)   = -rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! Fe in nM
-         if (id_sil.gt.0)  T_prog(ind_sil)%btf(i,j)  = -rho0 * biotic(n)%detsi_sed_remin(i,j)
-         if (id_no3.gt.0)  T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
-         if (id_alk.gt.0 .and. id_nh4.gt.0) &
-           T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
-                                                   + T_prog(ind_nh4)%btf(i,j)                        &
-                                                   - T_prog(ind_no3)%btf(i,j)
-         if (id_alk.gt.0 .and. id_nh4.gt.0) &
-           T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
-                                                   - T_prog(ind_no3)%btf(i,j)
-
+         if (id_fe.gt.0)   T_prog(ind_fe)%btf(i,j)   = -1.0 * rho0 * biotic(n)%detfe_sed_remin(i,j)*1e3 ! dFe in nM
+         if (id_sil.gt.0)  T_prog(ind_sil)%btf(i,j)  = -1.0 * rho0 * biotic(n)%detsi_sed_remin(i,j)
+         if (id_no3.gt.0) then
+           if (id_nh4.gt.0) then
+             T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j)
+           else
+             T_prog(ind_no3)%btf(i,j)  = rho0 * biotic(n)%det_sed_denit(i,j) +                       &
+                                         -1.0 * rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
+           endif
+         endif
+         if (id_alk.gt.0) then
+           if (id_nh4.gt.0) then
+             T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                &
+                                                     + T_prog(ind_nh4)%btf(i,j)                      &
+                                                     - T_prog(ind_no3)%btf(i,j)
+           else
+             T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
+                                                     - T_prog(ind_no3)%btf(i,j)
+           endif
+         endif
 
        endif !} k > 0
      enddo  !} i
    enddo  !} j
  enddo  !} n
- 
  
 
  ! send rate of remineralisation of sediment tracers to output. mac, nov12.
@@ -2991,7 +2999,7 @@ do n = 1, instances  !{
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
  endif
  
- ! rate of permanent burial (loss) of tracers within sediment
+ ! rate of permanent burial (loss) of tracers that hit sediment (fraction of deposition)
  if (id_caco3_sed_bury .gt. 0) then
     used = send_data(id_caco3_sed_bury, biotic(n)%caco3_sed_bury(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
