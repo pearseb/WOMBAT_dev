@@ -1073,7 +1073,7 @@ logical  :: used
          biotic(n)%caco3_sed_bury(i,j) = biotic(n)%caco3_sed_depst(i,j) * burfac
 
          ! Denitrification (proportion of organic carbon that is consumed by denitrifiers)
-         !  Metamodel of Middelburg et al. 2006 
+         !  Metamodel of Middelburg et al. 1996 
          !  ( based on organic carbon flux, but affects organic carbon pool )
          orgflx = biotic(n)%det_sed_depst(i,j) * 86400.0*1e3/1e4    ! umol C cm-2 d-1
          orgflx = log10( max(1e-3, orgflx) )
@@ -1081,10 +1081,10 @@ logical  :: used
          zno3   = log10( max(1.0, t_prog(ind_no3)%field(i,j,k,time%taum1)) )
          zdep   = log10( grid%zw(k) ) 
          denfac = -2.2567 - 1.185 * orgflx - 0.221 * orgflx**2 - 0.3995 * zno3 * zoxy              &    
-                  + 1.25 * zno3 + 0.04721 * zoxy - 0.0996 * zdep + 0.4256 * orgflx * zoxy 
-         denfac = 10**(denfac) * 10**(zno3) / ( 10**(zno3) + 5.0 ) 
+                  + 2.00 * zno3 + 0.04721 * zoxy - 0.0996 * zdep + 0.4256 * orgflx * zoxy 
+         denfac = min(0.75, (10**(denfac) * 10**(zno3) / (10**(zno3) + 1.0)) )
          biotic(n)%det_sed_denit(i,j) = biotic(n)%det_sed_remin(i,j) * denfac * 94.4/122.0
-         
+
          ! Remineralisation of sediments to supply nutrient fields.  
          ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
          T_prog(ind_dic)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)                       &
@@ -1250,20 +1250,20 @@ do n = 1, instances  !{
        '(/'' Total NO3  = '',es19.12,'' Gmol N'')')     &
        total_no3 * 1.0e-12
   write (stdout(),                                              &
-       '(/'' Total PHY  = '',es19.12,'' Gmol N'')')         &
+       '(/'' Total PHY  = '',es19.12,'' Gmol C'')')         &
        total_phy * 1.0e-12
   write (stdout(),                                              &
        '(/'' Total O2  = '',es19.12,'' Gmol O2'')')          &
        total_o2 * 1.0e-12
   write (stdout(),                                              &
-       '(/'' Total ZOO  = '',es19.12,'' Gmol N'')')         &
+       '(/'' Total ZOO  = '',es19.12,'' Gmol C'')')         &
        total_zoo * 1.0e-12
   write (stdout(),                                              &
-       '(/'' Total DET  = '',es19.12,'' Gmol N'')')     &
+       '(/'' Total DET  = '',es19.12,'' Gmol C'')')     &
        total_det * 1.0e-12
   write (stdout(),                                              &
        '(/'' Total N  = '',es19.12,'' Gmol N'')') &
-       (total_no3+total_phy+total_zoo+total_det) * 1.0e-12
+       (total_no3+(total_phy+total_zoo+total_det)*16.0/122.0) * 1.0e-12
 
 !
 !  Write out extra restart file(s)
@@ -1315,7 +1315,7 @@ logical, intent(in) :: use_waterflux, salt_restore_as_salt_flux
 real, intent(in), dimension(isd:ied,jsd:jed), optional          :: atm_co2
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: co2flux
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: sfc_co2
-
+real, dimension(isd:ied,jsd:jed)                                :: totdenit
 real :: total_co2_flux, total_aco2_flux
 logical :: used
 
@@ -1580,7 +1580,7 @@ do n = 1, instances  !{
          grid%tmask(isd:ied,jsd:jed,k),                                          &
          t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
          t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
-         t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
+         t_prog(ind_adic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
          t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
          biotic(n)%po4(isd:ied,jsd:jed),                                         &
          biotic(n)%sio2(isd:ied,jsd:jed),                                        &
@@ -1774,31 +1774,56 @@ if (id_fe.gt.0) then
 endif
 
 !pjb: Do river inputs
-  do n = 1, instances  !{
-    do j = jsc, jec  !{
-      do i = isc, iec  !{
-        ! River input should be in mmol/m2/s
-        !  rho0 = 1035.0  (must be needed for the flux calculation)
-        if (id_nh4.gt.0) then
-          t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdon_t(i,j)
-          t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
-        else
-          t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
-        endif
-        if (id_po4.gt.0) then
-          t_prog(ind_po4)%stf(i,j) =  rho0 * rivdip_t(i,j)
-        endif
-        if (id_sil.gt.0) then
-          t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
-        endif
-        t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * rivdic_t(i,j)
-        if (id_adic.gt.0) then
-          t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * rivdic_t(i,j)
-        endif
-        t_prog(ind_alk)%stf(i,j) =  rho0 * rivdic_t(i,j)
-      enddo  !} i
-    enddo  !} j
-  enddo  !} n
+do n = 1, instances  !{
+  do j = jsc, jec  !{
+    do i = isc, iec  !{
+      ! River input should be in mmol/m2/s
+      !  rho0 = 1035.0  (must be needed for the flux calculation)
+      if (id_nh4.gt.0) then
+        t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdon_t(i,j)
+        t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
+      else
+        t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
+      endif
+      if (id_po4.gt.0) then
+        t_prog(ind_po4)%stf(i,j) =  rho0 * rivdip_t(i,j)
+      endif
+      if (id_sil.gt.0) then
+        t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
+      endif
+      t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+      if (id_adic.gt.0) then
+        t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+      endif
+      t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+      !! dFe flux from rivers (ratio of carbon input (5.3e-4) and then converted to umol m-2 s-1)
+      !if (id_fe.gt.0) then
+      !  t_prog(ind_fe)%stf(i,j) = t_prog(ind_fe)%stf(i,j) +                                        &
+      !                            rho0 * (rivdic_t(i,j)+rivdoc_t(i,j)) * 5.3e-6 * 1e3 
+      !endif
+    enddo  !} i
+  enddo  !} j
+enddo  !} n
+
+
+!pjb: Do proxy nitrogen fixation (redistribute loss of NO3 from sediment denitrification)
+!pjb: This is done tile-by-tile, so that the redistribution is not perfectly even across the entire ocean
+!pjb: If a region (i.e. tile) has more sedimentary denitrification, then more N fix happens in that tile 
+do n = 1, instances  !{
+  totdenit(:,:) = 0.0
+  do j = jsc, jec  !{
+    do i = isc, iec  !{
+      totdenit(i,j) = biotic(n)%det_sed_denit(i,j) * grid%dat(i,j) * grid%tmask(i,j,1)
+    enddo  !} i
+  enddo  !} j
+  do j = jsc, jec  !{
+    do i = isc, iec  !{
+      if (grid%tmask(i,j,1).gt.0.0) then
+        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + sum(totdenit) / sum(grid%dat) * rho0
+      endif
+    enddo  !} i
+  enddo  !} j
+enddo  !} n
 
 !ice-to-ocean flux of algae
 if (id_phy.gt.0) then
@@ -4184,6 +4209,8 @@ do n = 1, instances  !{
             enddo
             k = grid%kmt(i,j)
             if (grid%zw(k) .le. 200) &
+!               t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= min(0.7,                  &
+!                                          t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1))
                t_prog(biotic(n)%ind_bgc(id_fe))%field(i,j,k,time%taup1)= 0.999
          endif
       enddo  !} i

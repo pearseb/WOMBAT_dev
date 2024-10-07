@@ -442,8 +442,8 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
                               Dens%rho(isd:ied,jsd:jed,:,Time%tau),                                &
                               Dens%pressure_at_depth(isd:ied,jsd:jed,:), mld)
 
-!  write (stdout(),*) ' AO-NPZD model will do ',ts_npzd,' time steps'
-!  write (stdout(),*) ' time step in NPZD model will be ',  dtts/ts_npzd,'sec.'  
+  !write (stdout(),*) ' AO-NPZD model will do ',ts_npzd,' time steps'
+  !write (stdout(),*) ' time step in NPZD model will be ',  dtts/ts_npzd,'sec.'  
 
 !
 !
@@ -661,7 +661,7 @@ do n = 1, instances  !{
            ! Light available for phytoplankton
            if (swflx(i,j).gt.0.0) then
              par_tot(i,k) =        par_rgb(i,k,1) +        par_rgb(i,k,2) +        par_rgb(i,k,3)
-             par_phy(i,k) = 1.85 * par_rgb(i,k,1) + 0.68 * par_rgb(i,k,2) + 0.46 * par_rgb(i,k,3)
+             par_phy(i,k) = 1.00 * par_rgb(i,k,1) + 1.00 * par_rgb(i,k,2) + 1.00 * par_rgb(i,k,3)
            else
              par_tot(i,k) = 0.0
              par_phy(i,k) = 0.0
@@ -1384,10 +1384,12 @@ do n = 1, instances  !{
        ! collect tracer values before sinking and find sinking rates
        do i=isc,iec
 
-         ! Find sinking rate as a function of phytoplankton size at the surface
-         !wdet(i,j,:) = wdetbio(i,j) * max(1.0, min(3.0, phy_size(i,j,1) )) 
+         ! Find sinking rate as a function of phytoplankton size at the surface and reduce at coasts
          wdet(i,j,:) = wdetbio(i,j) *                                                              &
-                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.43)
+                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
+         !k = grid%kmt(i,j)
+         !wdet(i,j,:) = wdetbio(i,j) * grid%zt(k) / (grid%zt(k) + 100.0) *                           &
+         !              max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
 
          do k=1,grid%nk
 
@@ -1438,8 +1440,8 @@ do n = 1, instances  !{
          do i = isc,iec
            k = grid%kmt(i,j)
            if (k.gt.0) then
-             biodetsed(i) = biodetsed(i) + adv_fb1(i,k+1)
-             biodetfesed(i) = biodetfesed(i) + adv_fb2(i,k+1)
+             biodetsed(i) = biodetsed(i) + adv_fb1(i,k+1) * dtsb
+             biodetfesed(i) = biodetfesed(i) + adv_fb2(i,k+1) * dtsb
            endif  ! k.gt.0
          enddo  ! i
 
@@ -1461,8 +1463,9 @@ do n = 1, instances  !{
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
            t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe)
          enddo !}
-         biotic(n)%det_sed_depst(i,j) = biodetsed(i)
-         biotic(n)%detfe_sed_depst(i,j) = biodetfesed(i)
+         !!! det_sed_depst must be in units of per second
+         biotic(n)%det_sed_depst(i,j) = biodetsed(i) / dtts
+         biotic(n)%detfe_sed_depst(i,j) = biodetfesed(i) / dtts
        enddo !}
 
        ! Make sure we pass this zero array of sediment silicate deposition to subroutine "csiro_bgc_bbc"
