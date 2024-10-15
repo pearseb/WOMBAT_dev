@@ -1795,7 +1795,7 @@ do n = 1, instances  !{
       if (id_adic.gt.0) then
         t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
       endif
-      t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+      t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)-rivdoc_t(i,j)-rivdin_t(i,j)-rivdon_t(i,j))
       !! dFe flux from rivers (ratio of carbon input (5.3e-4) and then converted to umol m-2 s-1)
       !if (id_fe.gt.0) then
       !  t_prog(ind_fe)%stf(i,j) = t_prog(ind_fe)%stf(i,j) +                                        &
