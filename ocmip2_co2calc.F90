@@ -236,7 +236,7 @@ end subroutine  ocmip2_co2_alpha
 subroutine ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, zt, mask, t, s,   &
      dic_in, ta_in, pt_in, sit_in, htotallo, htotalhi, htotal,            &
      co2star, co3_ion, alpha, pCO2surf, k1_out, k2_out, invtk_out,        &
-     omega_ara, omega_cal, hfree, scale)
+     omega_ara, omega_cal, hfree, hco3_ion, scale)
 
 real, parameter :: permeg = 1.e-6
 real, parameter :: xacc = 1.0e-10
@@ -260,6 +260,7 @@ real, dimension(isc:,jsc:), intent(in)                  :: htotalhi
 real, dimension(isc:,jsc:), intent(inout)               :: htotal
 real, dimension(isc:,jsc:), intent(out), optional       :: co2star
 real, dimension(isc:,jsc:), intent(out), optional       :: co3_ion
+real, dimension(isc:,jsc:), intent(out), optional       :: hco3_ion
 real, dimension(isc:,jsc:), intent(out), optional       :: alpha
 real, dimension(isc:,jsc:), intent(out), optional       :: pCO2surf
 real, dimension(isc:,jsc:), intent(out), optional       :: invtk_out
@@ -585,6 +586,9 @@ do j = jsc, jec
       if (present(co2star)) then
         co2star(i,j) = co2star_internal
       endif
+      if (present(hco3_ion)) then
+        hco3_ion(i,j) = co2star_internal * k1 / htotal(i,j) * 1e3 ! (mmol/m^3)
+      endif
       if (present(co3_ion)) then
         co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2 * 1e3  ! (mmol/m^3)
         ! Calculate aragonite and calcite saturation states (Pearse J. Buchanan, July 2024)
@@ -626,6 +630,9 @@ do j = jsc, jec
       endif
       if (present(co3_ion)) then
         co3_ion(i,j) = 0.0
+      endif
+      if (present(hco3_ion)) then
+        hco3_ion(i,j) = 0.0
       endif
       if (present(k1_out)) then
         k1_out(i,j) = 0.0

@@ -220,6 +220,7 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: po4
   real, allocatable, dimension(:,:,:)       :: vstf
   real, allocatable, dimension(:,:,:)       :: co3
+  real, allocatable, dimension(:,:,:)       :: hco3
   real, allocatable, dimension(:,:,:)       :: omega_ara
   real, allocatable, dimension(:,:,:)       :: omega_cal
   real, allocatable, dimension(:,:,:)       :: hfree
@@ -364,6 +365,7 @@ integer                                 :: id_pco2 = -1, id_paco2 = -1
 integer                                 :: id_co2_sat = -1, id_aco2_sat = -1
 integer                                 :: id_htotal = -1
 integer                                 :: id_co3 = -1
+integer                                 :: id_hco3 = -1
 integer                                 :: id_omega_ara = -1
 integer                                 :: id_omega_cal = -1
 integer                                 :: id_hfree = -1
@@ -822,6 +824,7 @@ do n = 1, instances  !{
   allocate( biotic(n)%ahtotal(isd:ied,jsd:jed) )
   allocate( biotic(n)%htotal(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%co3(isd:ied,jsd:jed,nk) )
+  allocate( biotic(n)%hco3(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%omega_ara(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%omega_cal(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%hfree(isd:ied,jsd:jed,nk) )
@@ -946,6 +949,7 @@ do n = 1, instances  !{
   biotic(n)%ahtotal(:,:)  = 1.e-8
   biotic(n)%htotal(:,:,:)  = 1.e-8
   biotic(n)%co3(:,:,:)  = 0.0
+  biotic(n)%hco3(:,:,:)  = 0.0
   biotic(n)%omega_ara(:,:,:)  = 0.0
   biotic(n)%omega_cal(:,:,:)  = 0.0
   biotic(n)%hfree(:,:,:)  = 0.0
@@ -1547,9 +1551,10 @@ do n = 1, instances  !{
        omega_ara = biotic(n)%omega_ara(isc:iec,jsc:jec,k),                     &
        omega_cal = biotic(n)%omega_cal(isc:iec,jsc:jec,k),                     &
        hfree = biotic(n)%hfree(isc:iec,jsc:jec,k),                             &
+       hco3_ion = biotic(n)%hco3(isc:iec,jsc:jec,k),                           &
        scale= 1.0/1024.5 )
 
-    ! Retrieve pH, CO3 ion concentration and omega staturation states of calcite and aragonite through depth
+    ! Retrieve pH, HCO3, CO3 ion concentration and omega staturation states of calcite and aragonite through depth
     do k = 2,grid%nk !{
 
       biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
@@ -1570,6 +1575,7 @@ do n = 1, instances  !{
        omega_ara = biotic(n)%omega_ara(isc:iec,jsc:jec,k),                     &
        omega_cal = biotic(n)%omega_cal(isc:iec,jsc:jec,k),                     &
        hfree = biotic(n)%hfree(isc:iec,jsc:jec,k),                             &
+       hco3_ion = biotic(n)%hco3(isc:iec,jsc:jec,k),                           &
        scale= 1.0/1024.5 )
 
     enddo !} k
@@ -2629,6 +2635,10 @@ if (id_co3 .gt. 0) then
   used = send_data(id_co3, biotic(1)%co3(isc:iec,jsc:jec,:),            &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_hco3 .gt. 0) then
+  used = send_data(id_hco3, biotic(1)%hco3(isc:iec,jsc:jec,:),            &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 if (id_omega_ara .gt. 0) then
   used = send_data(id_omega_ara, biotic(1)%omega_ara(isc:iec,jsc:jec,:),      &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
@@ -3476,6 +3486,10 @@ id_htotal = register_diag_field('ocean_model',                  &
 id_co3 = register_diag_field('ocean_model',                     &
      'co3', grid%tracer_axes(1:3),                              &
      Time%model_time, 'Carbonate ion concentration', 'mmol/m^3' &
+     ,missing_value = -1.0e+10)
+id_hco3 = register_diag_field('ocean_model',                     &
+     'hco3', grid%tracer_axes(1:3),                              &
+     Time%model_time, 'Bicarbonate ion concentration', 'mmol/m^3' &
      ,missing_value = -1.0e+10)
 id_omega_ara = register_diag_field('ocean_model',               &
      'omega_ara', grid%tracer_axes(1:3),                        &
