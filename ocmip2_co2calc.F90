@@ -236,7 +236,7 @@ end subroutine  ocmip2_co2_alpha
 subroutine ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, zt, mask, t, s,   &
      dic_in, ta_in, pt_in, sit_in, htotallo, htotalhi, htotal,            &
      co2star, co3_ion, alpha, pCO2surf, k1_out, k2_out, invtk_out,        &
-     omega_ara, omega_cal, scale)
+     omega_ara, omega_cal, hfree, scale)
 
 real, parameter :: permeg = 1.e-6
 real, parameter :: xacc = 1.0e-10
@@ -267,6 +267,7 @@ real, dimension(isc:,jsc:), intent(out), optional       :: k1_out
 real, dimension(isc:,jsc:), intent(out), optional       :: k2_out
 real, dimension(isc:,jsc:), intent(out), optional       :: omega_ara 
 real, dimension(isc:,jsc:), intent(out), optional       :: omega_cal
+real, dimension(isc:,jsc:), intent(out), optional       :: hfree 
 real, intent(in), optional                              :: scale
 
 integer :: i
@@ -570,6 +571,9 @@ do j = jsc, jec
            dic, ta, pt, sit, k1, k2, k1p, k2p, k3p,     &
            bt, ft, st, kb, kw, kf, ks, ksi, xacc)
 
+      if (present(hfree)) then
+        hfree(i,j) = htotal(i,j) * total2free 
+      endif
       ! Calculate [CO2*] as defined in DOE Methods Handbook 1994 Ver.2, 
       ! ORNL/CDIAC-74, Dickson and Goyet, eds. (Ch 2 p 10, Eq A.49)
       ! Convert units of output arguments
@@ -643,6 +647,9 @@ do j = jsc, jec
       endif
       if (present(omega_cal)) then
         omega_cal(i,j) =0.0
+      endif
+      if (present(hfree)) then
+        hfree(i,j) =0.0
       endif
 
     endif
