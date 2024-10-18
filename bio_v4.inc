@@ -603,7 +603,7 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(mprefzoo_id, time%model_time, mprefzoo) !Mesozooplankton preference for Zooplankton
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
   call time_interp_external(mesqmor_id, time%model_time, mesqmor)   !Mesozooplankton quadratic mortality
-  call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
+  call time_interp_external(zooresp_id, time%model_time, zooresp)   !Zooplankton excretion rate
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler on sinking rate of detritus
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
@@ -1670,9 +1670,9 @@ do n = 1, instances  !{
              f23phy = phyqmor(i,j) * biophy * biophy                        * biomask(i,k)         ! PHY --> DET & POC
              f23dia = phyqmor(i,j) * biodia * biodia                        * biomask(i,k)         ! DIA --> DET & POC
              f23diz = phyqmor(i,j) * biodiz * biodiz                        * biomask(i,k)         ! DIZ --> DET & POC
-             z31 = zooexcr(i,j) * biozoo * fbc                              * biomask(i,k)         ! ZOO --> DIC
+             z31 = zooresp(i,j) * biozoo * fbc                              * biomask(i,k)         ! ZOO --> DIC
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET & POC
-             m31 = zooexcr(i,j) * biomes * fbc                              * biomask(i,k)         ! MES --> DIC
+             m31 = zooresp(i,j) * biomes * fbc                              * biomask(i,k)         ! MES --> DIC
              m32 = mesqmor(i,j) * biomes*biomes                             * biomask(i,k)         ! MES --> DET & POC
 
              ! REMINERALISATION

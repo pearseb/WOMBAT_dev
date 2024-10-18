@@ -577,8 +577,8 @@ integer                                 :: zooqmor_id
 real, allocatable, dimension(:,:)       :: zooqmor
 integer                                 :: mesqmor_id
 real, allocatable, dimension(:,:)       :: mesqmor
-integer                                 :: zooexcr_id
-real, allocatable, dimension(:,:)       :: zooexcr
+integer                                 :: zooresp_id
+real, allocatable, dimension(:,:)       :: zooresp
 integer                                 :: zookz_id
 real, allocatable, dimension(:,:)       :: zookz
 integer                                 :: detlrem_id
@@ -916,7 +916,7 @@ allocate( mprefpoc(isd:ied,jsd:jed) )
 allocate( mprefzoo(isd:ied,jsd:jed) )
 allocate( zooqmor(isd:ied,jsd:jed) )
 allocate( mesqmor(isd:ied,jsd:jed) )
-allocate( zooexcr(isd:ied,jsd:jed) )
+allocate( zooresp(isd:ied,jsd:jed) )
 allocate( zookz(isd:ied,jsd:jed) )
 allocate( detlrem(isd:ied,jsd:jed) )
 allocate( caco3rem(isd:ied,jsd:jed) )
@@ -3355,8 +3355,8 @@ zooqmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "zooqmor", domain = Domain%domain2d)
 mesqmor_id = init_external_field("INPUT/bgc_param.nc",          &
         "mesqmor", domain = Domain%domain2d)
-zooexcr_id = init_external_field("INPUT/bgc_param.nc",          &
-        "zooexcr", domain = Domain%domain2d)
+zooresp_id = init_external_field("INPUT/bgc_param.nc",          &
+        "zooresp", domain = Domain%domain2d)
 zookz_id = init_external_field("INPUT/bgc_param.nc",          &
         "zookz", domain = Domain%domain2d)
 detlrem_id = init_external_field("INPUT/bgc_param.nc",          &

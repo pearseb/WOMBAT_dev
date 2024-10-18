@@ -397,7 +397,7 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(zprefphy_id, time%model_time, zprefphy) !Zooplankton preference for phytoplankton
   call time_interp_external(zprefdet_id, time%model_time, zprefdet) !Zooplankton preference for Det
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
-  call time_interp_external(zooexcr_id, time%model_time, zooexcr)   !Zooplankton excretion rate
+  call time_interp_external(zooresp_id, time%model_time, zooresp)   !Zooplankton excretion rate
   call time_interp_external(zookz_id, time%model_time, zookz)       !Zooplankton half-saturation for respiration losses
   call time_interp_external(detlrem_id, time%model_time, detlrem)   !Detritus remineralisation rate
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler to sinking rate of detritus
@@ -1092,7 +1092,7 @@ do n = 1, instances  !{
              ! MORTALITY
              f22phy = phylmor(i,j) * fbc * phy_slmor * biophy               * biomask(i,k)         ! PHY --> DIC
              f23phy = phyqmor(i,j) * biophy * biophy                        * biomask(i,k)         ! PHY --> DET
-             z31 = zooexcr(i,j) * fbc * zoo_slmor * biozoo                  * biomask(i,k)         ! ZOO --> DIC
+             z31 = zooresp(i,j) * fbc * zoo_slmor * biozoo                  * biomask(i,k)         ! ZOO --> DIC
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
