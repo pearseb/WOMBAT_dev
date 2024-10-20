@@ -843,7 +843,6 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
              !!! THINGS NEEDING TO BE DONE:
              !!!   - Variable ligand concentration rather than constant?
-             !!!   - Variable pH value (currently set to constant 7.9)
              !!!
 
              ! 1. Determine equilibrium fractionation of total dFe into Fe` and L-Fe
@@ -862,6 +861,7 @@ do n = 1, instances  !{
              fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
+             if (biotic(n)%hfree(i,j,k).gt.0.0) hp = -LOG10(biotic(n)%hfree(i,j,k))
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
              precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 

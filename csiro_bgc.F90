@@ -2503,8 +2503,7 @@ end subroutine csiro_bgc_init  !}
 subroutine csiro_bgc_source(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, grid, time, dtts, Thickness, Dens, swflx, sw_frac_zt)  !{
 
 use field_manager_mod,        only: fm_get_index
-use time_manager_mod, only: days_in_year, days_in_month,        &
-     get_date, set_date
+use time_manager_mod, only: days_in_year, days_in_month, get_date, set_date
 
 !-----------------------------------------------------------------------
 !     arguments
