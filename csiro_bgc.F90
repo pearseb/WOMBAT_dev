@@ -316,6 +316,9 @@ integer                                 :: id_radbio3d = -1
 integer                                 :: id_wdet100 = -1
 integer                                 :: id_wpoc100 = -1
 integer                                 :: id_wdet = -1
+integer                                 :: id_wpic = -1
+integer                                 :: id_pic2poc = -1
+integer                                 :: id_caco3dis = -1
 integer                                 :: id_phy_size = -1
 integer                                 :: id_dia_size = -1
 integer                                 :: id_diz_size = -1
@@ -448,7 +451,7 @@ real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d, phy_size, dia_size, diz_size, phy_2det, dia_2det, diz_2det,     &
                                        zoo_2det, mes_2det
 real, allocatable, dimension(:,:) :: wdet100, wpoc100
-real, allocatable, dimension(:,:,:) :: wdet
+real, allocatable, dimension(:,:,:) :: wdet, wpic, pic2poc, caco3dis
 real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
@@ -736,6 +739,9 @@ allocate( radbio3d(isc:iec,jsc:jec,nk) )
 allocate( wdet100(isc:iec,jsc:jec) )
 allocate( wpoc100(isc:iec,jsc:jec) )
 allocate( wdet(isc:iec,jsc:jec,nk) )
+allocate( wpic(isc:iec,jsc:jec,nk) )
+allocate( pic2poc(isc:iec,jsc:jec,nk) )
+allocate( caco3dis(isc:iec,jsc:jec,nk) )
 allocate( phy_size(isc:iec,jsc:jec,nk) )
 allocate( dia_size(isc:iec,jsc:jec,nk) )
 allocate( diz_size(isc:iec,jsc:jec,nk) )
@@ -2703,9 +2709,24 @@ if (id_wpoc100 .gt. 0) then
   used = send_data(id_wpoc100, wpoc100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
-!det export  
+!det sinking rate
 if (id_wdet .gt. 0) then
   used = send_data(id_wdet, wdet(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+!pic sinking rate  
+if (id_wpic .gt. 0) then
+  used = send_data(id_wpic, wpic(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+!pic:poc ratio  
+if (id_pic2poc .gt. 0) then
+  used = send_data(id_pic2poc, pic2poc(isc:iec,jsc:jec,:),          &
+         time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+!CaCO3 dissolution rate  
+if (id_caco3dis .gt. 0) then
+  used = send_data(id_caco3dis, caco3dis(isc:iec,jsc:jec,:),          &
          time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 !phytoplankton size proxy 
@@ -3631,6 +3652,18 @@ id_wpoc100 = register_diag_field('ocean_model','wpoc100', &
 id_wdet = register_diag_field('ocean_model','wdet', &
      grid%tracer_axes(1:3),Time%model_time, 'detritus sinking rate', &
      'm/s',missing_value = -1.0e+10)
+
+id_wpic = register_diag_field('ocean_model','wpic', &
+     grid%tracer_axes(1:3),Time%model_time, 'CaCO3 sinking rate', &
+     'm/s',missing_value = -1.0e+10)
+
+id_pic2poc = register_diag_field('ocean_model','pic2poc', &
+     grid%tracer_axes(1:3),Time%model_time, 'PIC to POC ratio', &
+     '[0-1]',missing_value = -1.0e+10)
+
+id_caco3dis = register_diag_field('ocean_model','caco3dis', &
+     grid%tracer_axes(1:3),Time%model_time, 'CaCO3 dissolution rate', &
+     '/s',missing_value = -1.0e+10)
 
 id_phy_size = register_diag_field('ocean_model','phy_size', &
      grid%tracer_axes(1:3),Time%model_time, 'Nanophytoplankton size proxy', &

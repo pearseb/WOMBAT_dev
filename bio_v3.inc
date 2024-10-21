@@ -53,10 +53,11 @@ subroutine bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 !       11.9  Temperature dependence of heterotrophy / respiration
 !       11.10 Grazing functions 
 !       11.11 Mortality scalers
-!       11.12 Collect major source and sink terms for tendency equations
-!       11.13 Apply sources and sinks to tendency equations 
-!       11.14 Collect key diagnostics
-!       11.15 Check for conservation of mass by ecosystem component
+!       11.11 CaCO3 calculations
+!       11.13 Collect major source and sink terms for tendency equations
+!       11.14 Apply sources and sinks to tendency equations 
+!       11.15 Collect key diagnostics
+!       11.16 Check for conservation of mass by ecosystem component
 !
 !               [ END do loop over t, k and i indices ]
 !
@@ -277,6 +278,15 @@ real :: phy_FeC(isc:iec,grid%nk)        ! Nanophytoplankton Fe:C ratio
 real :: zoo_FeC(isc:iec,grid%nk)        ! Microzooplankton Fe:C ratio
 real :: det_FeC(isc:iec,grid%nk)        ! Slow-sinking detritus Fe:C ratio
 real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
+
+! ---------------------- !
+!!! ------------------ !!!
+!!! CaCO3 calculations !!!
+!!! ------------------ !!!
+! ---------------------- !
+real :: diss_cal                        ! Dissolution of CaCO3 due to calcite undersaturation
+real :: diss_ara                        ! Dissolution of CaCO3 due to aragonite undersaturation
+real :: diss_det                        ! Dissolution of CaCO3 due to POC remineralisation (particle microenvironment)
 
 ! -------------------- !
 !!! ---------------- !!!
@@ -500,6 +510,9 @@ do n = 1, instances  !{
   zeuphot(:,:) = 10.0       ! minimum euphotic zone depth is 20 metres
   chlorophyll(:,:) = 0.0    ! total surface chlorophyll
   wdet(:,:,:) = 0.0         ! sinking rate of detritus
+  wpic(:,:,:) = 0.0         ! sinking rate of PIC
+  pic2poc(:,:,:) = 0.0      ! ratio of PIC to POC
+  caco3dis(:,:,:) = 0.0     ! dissolution rate of CaCO3
   phy_parlimit(:,:,:) = 0.0
   phy_Felimit(:,:,:) = 0.0
   phy_Nlimit(:,:,:) = 0.0
@@ -861,7 +874,7 @@ do n = 1, instances  !{
              fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
-             if (biotic(n)%hfree(i,j,k).gt.0.0) hp = -LOG10(biotic(n)%hfree(i,j,k))
+             if (biotic(n)%htotal(i,j,k).gt.0.0) hp = -LOG10(biotic(n)%htotal(i,j,k))
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
              precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
@@ -1056,7 +1069,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              !! Depress mortality in nutrient limited regime (i.e., investment in cell maintainence)
-             !phy_slmor = MIN(1.0, MAX(0.0,                                                         &
+             !phy_slmor = MIN(1.0, MAX(0.0,                                                        &
              !            min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
              if (biophy.gt.0.001) then
                 phy_slmor = 1.0
@@ -1070,7 +1083,31 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.12] - Collect major source and sink terms for tendency equations                    !
+!     Step [11.12] - CaCO3 calculations                                                            !
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+             ! PIC:POC ratio is a function of the substrate:inhibitor ratio, which is the HCO3-
+             ! to free H+ ions ratio (mol/umol), following Lehmann & Bach (2024).
+             pic2poc(i,j,k) = (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e6 + epsi)
+
+             ! The sinking rate of PIC is affected by the PIC:POC ratio following Back et al. 2016
+             wpic(i,j,k) = wcaco3(i,j) + 20.0 * pic2poc(i,j,k) 
+
+             ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
+             ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
+             diss_cal = (0.153 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
+             diss_ara = (0.009 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
+             diss_det = (0.455 * biodet * fbc * detlrem(i,j))
+             caco3dis(i,j,k) = caco3rem(i,j) + diss_cal + diss_ara + diss_det 
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!     Step [11.13] - Collect major source and sink terms for tendency equations                    !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1107,7 +1144,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.13] - Apply sources and sinks to tendency equations                                 !
+!     Step [11.14] - Apply sources and sinks to tendency equations                                 !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1157,9 +1194,9 @@ do n = 1, instances  !{
                                                                             z21det*det_FeC(i,k)) - &
                                                               (z31+z32)*zoo_FeC(i,k) )
 
-
              phyxsize = max(1.0, ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) )     &
-                                / (biophy + epsi) )
+                                  / (biophy + epsi) )
+
 
              !!!!!!!!!!!!
              ! Detritus !
@@ -1201,7 +1238,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.14] - Collect key diagnostics                                                       !
+!     Step [11.15] - Collect key diagnostics                                                       !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1243,7 +1280,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.15] - Check for conservation of mass by ecosystem component                         !
+!     Step [11.16] - Check for conservation of mass by ecosystem component                         !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
