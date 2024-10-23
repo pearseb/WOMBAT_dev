@@ -602,6 +602,8 @@ integer                                 :: wdetmax_id
 real, allocatable, dimension(:,:)       :: wdetmax
 integer                                 :: wcaco3_id
 real, allocatable, dimension(:,:)       :: wcaco3
+integer                                 :: wcaco3max_id
+real, allocatable, dimension(:,:)       :: wcaco3max
 integer                                 :: nat_co2_id
 real, allocatable, dimension(:,:)       :: nat_co2
 integer                                 :: tscav_fe_id
@@ -937,6 +939,7 @@ allocate( caco3rem_sed(isd:ied,jsd:jed) )
 allocate( wdetbio(isd:ied,jsd:jed) )
 allocate( wdetmax(isd:ied,jsd:jed) )
 allocate( wcaco3(isd:ied,jsd:jed) )
+allocate( wcaco3max(isd:ied,jsd:jed) )
 allocate( nat_co2(isd:ied,jsd:jed) )
 allocate( tscav_fe(isd:ied,jsd:jed) )
 allocate( fe_bkgnd(isd:ied,jsd:jed) )
@@ -3413,6 +3416,8 @@ wdetmax_id = init_external_field("INPUT/bgc_param.nc",          &
         "wdetmax", domain = Domain%domain2d)
 wcaco3_id = init_external_field("INPUT/bgc_param.nc",          &
         "wcaco3", domain = Domain%domain2d)
+wcaco3max_id = init_external_field("INPUT/bgc_param.nc",          &
+        "wcaco3max", domain = Domain%domain2d)
 nat_co2_id = init_external_field("INPUT/bgc_param.nc",          &
         "nat_co2", domain = Domain%domain2d)
 tscav_fe_id = init_external_field("INPUT/bgc_param.nc",          &

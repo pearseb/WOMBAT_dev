@@ -414,6 +414,7 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
+  call time_interp_external(wcaco3max_id, time%model_time, wcaco3max) !Maximum sinking rate of CaCO3
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
   call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
@@ -1090,17 +1091,21 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              ! PIC:POC ratio is a function of the substrate:inhibitor ratio, which is the HCO3-
-             ! to free H+ ions ratio (mol/umol), following Lehmann & Bach (2024).
-             pic2poc(i,j,k) = (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e6 + epsi)
+             ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
+             ! We also add a T-dependent function to scale down CaCO3 production in waters colder
+             ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
+             pic2poc(i,j,k) = 10**(-3.0451 + 4.3098 * &
+                              (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e9 + epsi)) &
+                              * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0))
 
              ! The sinking rate of PIC is affected by the PIC:POC ratio following Back et al. 2016
-             wpic(i,j,k) = wcaco3(i,j) + 20.0 * pic2poc(i,j,k) 
+             wpic(i,j,k) = wcaco3(i,j) + 20.0/86400.0 * pic2poc(i,j,k) 
 
              ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
              ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
              diss_cal = (0.153 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
              diss_ara = (0.009 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
-             diss_det = (0.455 * biodet * fbc * detlrem(i,j))
+             diss_det = (0.200 * biodet * fbc * detlrem(i,j))
              caco3dis(i,j,k) = caco3rem(i,j) + diss_cal + diss_ara + diss_det 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1137,7 +1142,8 @@ do n = 1, instances  !{
              if (grid%zw(k) .ge. 180) then
                f41det = f41det * 0.5   ! reduce decay below 180m
              endif
-             f51 = caco3rem(i,j) * biocaco3                                 * biomask(i,k)
+             !f51 = caco3rem(i,j) * biocaco3                                 * biomask(i,k)
+             f51 = caco3dis(i,j,k) * biocaco3                               * biomask(i,k)
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1214,7 +1220,7 @@ do n = 1, instances  !{
              ! CaCO3 equation !
              !!!!!!!!!!!!!!!!!!
              biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (                                &
-                                 (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 ) * f_inorg(i,j) - f51)
+                                 (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32) * pic2poc(i,j,k)-f51)
   
 
              !!!!!!!!!!!!!!!!
@@ -1224,7 +1230,7 @@ do n = 1, instances  !{
                                                               + z31 + f22phy                       & 
                                                             + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
                                                               - f11phy                             &
-                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*f_inorg(i,j) )
+                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*pic2poc(i,j,k) )
 
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
@@ -1437,6 +1443,7 @@ do n = 1, instances  !{
            ! Sinking rate increases linearly with pressure (also decreased at very shallow depths)
            ! ... so that we approximate the power-law decrease in POC concentration with depth
            wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) )
+           wpic(i,j,k) = wpic(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wcaco3max(i,j)-wpic(i,j,k)) )
 
            !if (i.eq.170 .and. j.eq.120) then
            !  print*, " "
@@ -1515,7 +1522,7 @@ do n = 1, instances  !{
 
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
+           adv_fb1(i,k) = wpic(i,j,k-1) * biotr(i,k-1,id_caco3)
          enddo
        enddo
 
