@@ -511,7 +511,6 @@ do n = 1, instances  !{
   zeuphot(:,:) = 10.0       ! minimum euphotic zone depth is 20 metres
   chlorophyll(:,:) = 0.0    ! total surface chlorophyll
   wdet(:,:,:) = 0.0         ! sinking rate of detritus
-  wpic(:,:,:) = 0.0         ! sinking rate of PIC
   pic2poc(:,:,:) = 0.0      ! ratio of PIC to POC
   caco3dis(:,:,:) = 0.0     ! dissolution rate of CaCO3
   phy_parlimit(:,:,:) = 0.0
@@ -861,7 +860,7 @@ do n = 1, instances  !{
 
              ! 1. Determine equilibrium fractionation of total dFe into Fe` and L-Fe
              ligand = 0.7  ! nM ligand concentration
-             fe_keq = 10**( 17.27 - 1565.7 / ztemk ) * 1e-9
+             fe_keq = 10**( 17.27 - 1565.7 / ztemk ) * 1e-9  !!! as it gets colder, Fe is more soluble
              fe_III = ( -( 1. + fe_keq * ligand - fe_keq * biofe )                                 &
                         + SQRT( ( 1. + fe_keq * ligand - fe_keq * biofe )**2                       &
                                 + 4. * biofe * fe_keq) ) / ( 2. * fe_keq + epsi )
@@ -875,18 +874,19 @@ do n = 1, instances  !{
              fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
-             if (biotic(n)%htotal(i,j,k).gt.0.0) hp = -LOG10(biotic(n)%htotal(i,j,k))
+             if (biotic(n)%ahtotal(i,j,k).gt.0.0) hp = biotic(n)%ahtotal(i,j,k) * 1.0
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
              precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
              ! 3. Scavenging of Fe` (Fe` --> DET)
              partic = (biodet + biocaco3)
-             scaven = fe_III * (3e-8 + kscav_dfe(i,j) * partic) / 86400.0
+             scaven = fe_III * (3e-5 + kscav_dfe(i,j) * partic) / 86400.0
              scadet = scaven * biodet / (partic+epsi)
 
              ! 4. Increased loss of Fe in near-coastal environments
-             zval = min(1.0, 1000.0 / (grid%zt(grid%kmt(i,j))+1) )
-             feloss = 1e-4 / 86400.0 * zval * biofe
+             !zval = min(1.0, 100.0 / (grid%zt(grid%kmt(i,j))+1) )
+             !feloss = 1e-4 / 86400.0 * zval * biofe
+             feloss = 0.0
 
              ! 5. Coagulation of colloidal Fe (nM) into small and large particles (uM)
              fe_col = fe_lig * 0.5
@@ -1094,18 +1094,15 @@ do n = 1, instances  !{
              ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
              ! We also add a T-dependent function to scale down CaCO3 production in waters colder
              ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
-             pic2poc(i,j,k) = 10**(-3.0451 + 4.3098 * &
-                              (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e9 + epsi)) &
-                              * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0))
-
-             ! The sinking rate of PIC is affected by the PIC:POC ratio following Back et al. 2016
-             wpic(i,j,k) = wcaco3(i,j) + 20.0/86400.0 * pic2poc(i,j,k) 
+             pic2poc(i,j,k) = (f_inorg(i,j) + 10**(-3.0451 + 4.3098 * &
+                              (biotic(n)%ahco3(i,j,k)*1e-3) / (biotic(n)%ahfree(i,j,k)*1e9 + epsi)) &
+                              ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0))
 
              ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
              ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
-             diss_cal = (0.153 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
-             diss_ara = (0.009 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
-             diss_det = (0.200 * biodet * fbc * detlrem(i,j))
+             diss_cal = (0.153 * max(0.0, 1.0 - biotic(n)%aomega_cal(i,j,k))**2.2) / 86400.0
+             diss_ara = (0.009 * max(0.0, 1.0 - biotic(n)%aomega_ara(i,j,k))**1.5) / 86400.0
+             diss_det = (0.400 * biodet * fbc * detlrem(i,j))
              caco3dis(i,j,k) = caco3rem(i,j) + diss_cal + diss_ara + diss_det 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1430,9 +1427,6 @@ do n = 1, instances  !{
          ! Find sinking rate as a function of phytoplankton size at the surface and reduce at coasts
          wdet(i,j,:) = wdetbio(i,j) *                                                              &
                        max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
-         !k = grid%kmt(i,j)
-         !wdet(i,j,:) = wdetbio(i,j) * grid%zt(k) / (grid%zt(k) + 100.0) *                           &
-         !              max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
 
          do k=1,grid%nk
 
@@ -1440,10 +1434,10 @@ do n = 1, instances  !{
            biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
            biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
 
-           ! Sinking rate increases linearly with pressure (also decreased at very shallow depths)
+           ! Sinking rate increases linearly with pressure, and as PIC:POC ratio increases (Bach et al., 2016)
            ! ... so that we approximate the power-law decrease in POC concentration with depth
-           wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) )
-           wpic(i,j,k) = wpic(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wcaco3max(i,j)-wpic(i,j,k)) )
+           wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) ) &
+                         + 30.0/86400.0 * pic2poc(i,j,k) 
 
            !if (i.eq.170 .and. j.eq.120) then
            !  print*, " "
@@ -1522,7 +1516,7 @@ do n = 1, instances  !{
 
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wpic(i,j,k-1) * biotr(i,k-1,id_caco3)
+           adv_fb1(i,k) = wdet(i,j,k-1) * biotr(i,k-1,id_caco3)
          enddo
        enddo
 

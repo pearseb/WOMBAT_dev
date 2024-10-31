@@ -247,7 +247,7 @@ integer, intent(in)                                     :: isc
 integer, intent(in)                                     :: iec
 integer, intent(in)                                     :: jsc
 integer, intent(in)                                     :: jec
-real, intent(in)                                        :: zt
+real, dimension(isd:,jsd:), intent(in)                  :: zt
 real, dimension(isd:,jsd:), intent(in)                  :: mask
 real, dimension(isd:,jsd:), intent(in)                  :: t
 real, dimension(isd:,jsd:), intent(in)                  :: s
@@ -361,7 +361,7 @@ do j = jsc, jec
       s15       = sqrts ** 3
       scl       = s(i,j) / 1.80655
       logf_of_s = log(1.0 - 0.001005 * s(i,j))
-      prb       = zt / 10.0
+      prb       = zt(i,j) / 10.0
 
       ! k0 from Weiss 1974
 
@@ -835,6 +835,13 @@ b2 = b*b
 db = 2.0*x + k1
 
 !     fn = hco3+co3+borate+oh+hpo4+2*po4+silicate+hfree+hso4+hf+h3po4-ta
+!print*, "b",b
+!print*, "kb", kb
+!print*, "x", x
+!print*, "a", a
+!print*, "ksi", ksi
+!print*, "c", c
+
 fn = k1*x*dic/b + 2.0*dic*k12/b + bt/(1.0 + x/kb) + kw/x +              &
      pt*k12p*x/a + 2.0*pt*k123p/a + sit/(1.0 + x/ksi) -                 &
      x/c - st/ (1.0 + ks/x/c) - ft/(1.0 + kf/x) -                       &
