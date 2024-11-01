@@ -1094,15 +1094,15 @@ do n = 1, instances  !{
              ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
              ! We also add a T-dependent function to scale down CaCO3 production in waters colder
              ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
-             pic2poc(i,j,k) = (f_inorg(i,j) + 10**(-3.0451 + 4.3098 * &
+             pic2poc(i,j,k) = min(0.2, (f_inorg(i,j) + 10**(-3.0 + 4.31 * &
                               (biotic(n)%ahco3(i,j,k)*1e-3) / (biotic(n)%ahfree(i,j,k)*1e9 + epsi)) &
-                              ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0))
+                              ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0)))
 
              ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
              ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
-             diss_cal = (0.153 * max(0.0, 1.0 - biotic(n)%aomega_cal(i,j,k))**2.2) / 86400.0
-             diss_ara = (0.009 * max(0.0, 1.0 - biotic(n)%aomega_ara(i,j,k))**1.5) / 86400.0
-             diss_det = (0.400 * biodet * fbc * detlrem(i,j))
+             diss_cal = (0.253 * max(0.0, 1.0 - biotic(n)%aomega_cal(i,j,k))**2.2) / 86400.0
+             diss_ara = (0.090 * max(0.0, 1.0 - biotic(n)%aomega_ara(i,j,k))**1.5) / 86400.0
+             diss_det = (0.500 * biodet * fbc * detlrem(i,j))
              caco3dis(i,j,k) = caco3rem(i,j) + diss_cal + diss_ara + diss_det 
 
 !--------------------------------------------------------------------------------------------------!
@@ -1135,10 +1135,10 @@ do n = 1, instances  !{
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
-             f41det = detlrem(i,j) * biodet * fbc                           * biomask(i,k)         ! DET --> DIC
-             if (grid%zw(k) .ge. 180) then
-               f41det = f41det * 0.5   ! reduce decay below 180m
-             endif
+             f41det = detlrem(i,j) * biodet**1.5 * fbc                      * biomask(i,k)         ! DET --> DIC
+             !if (grid%zw(k) .ge. 180) then
+             !  f41det = f41det * 0.5   ! reduce decay below 180m
+             !endif
              !f51 = caco3rem(i,j) * biocaco3                                 * biomask(i,k)
              f51 = caco3dis(i,j,k) * biocaco3                               * biomask(i,k)
 
@@ -1426,7 +1426,8 @@ do n = 1, instances  !{
 
          ! Find sinking rate as a function of phytoplankton size at the surface and reduce at coasts
          wdet(i,j,:) = wdetbio(i,j) *                                                              &
-                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
+                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)    &
+                       + 30.0/86400.0 * pic2poc(i,j,k) 
 
          do k=1,grid%nk
 
@@ -1436,8 +1437,7 @@ do n = 1, instances  !{
 
            ! Sinking rate increases linearly with pressure, and as PIC:POC ratio increases (Bach et al., 2016)
            ! ... so that we approximate the power-law decrease in POC concentration with depth
-           wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) ) &
-                         + 30.0/86400.0 * pic2poc(i,j,k) 
+           wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) )
 
            !if (i.eq.170 .and. j.eq.120) then
            !  print*, " "

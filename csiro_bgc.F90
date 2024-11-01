@@ -237,6 +237,7 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: hfree_sed
   real, allocatable, dimension(:,:)         :: htotal_sed
   real, allocatable, dimension(:,:,:)       :: aco3
+  real, allocatable, dimension(:,:)         :: aco3_sed
   real, allocatable, dimension(:,:,:)       :: ahco3
   real, allocatable, dimension(:,:,:)       :: aomega_ara
   real, allocatable, dimension(:,:,:)       :: aomega_cal
@@ -398,6 +399,7 @@ integer                                 :: id_hfree_sed = -1
 integer                                 :: id_ahtotal = -1
 integer                                 :: id_ahtotal_sed = -1
 integer                                 :: id_aco3 = -1
+integer                                 :: id_aco3_sed = -1
 integer                                 :: id_ahco3 = -1
 integer                                 :: id_aomega_ara = -1
 integer                                 :: id_aomega_cal = -1
@@ -880,6 +882,7 @@ do n = 1, instances  !{
   allocate( biotic(n)%ahtotal(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%ahtotal_sed(isd:ied,jsd:jed) )
   allocate( biotic(n)%aco3(isd:ied,jsd:jed,nk) )
+  allocate( biotic(n)%aco3_sed(isd:ied,jsd:jed) )
   allocate( biotic(n)%ahco3(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%aomega_ara(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%aomega_cal(isd:ied,jsd:jed,nk) )
@@ -1025,6 +1028,7 @@ do n = 1, instances  !{
   biotic(n)%ahtotal(:,:,:) = 1.e-8
   biotic(n)%ahtotal_sed(:,:) = 1.e-8
   biotic(n)%aco3(:,:,:) = 0.0
+  biotic(n)%aco3_sed(:,:) = 0.0
   biotic(n)%ahco3(:,:,:) = 0.0
   biotic(n)%aomega_ara(:,:,:) = 0.0
   biotic(n)%aomega_cal(:,:,:) = 0.0
@@ -1156,9 +1160,11 @@ logical  :: used
          biotic(n)%detsi_sed_remin(i,j) = detlrem_sed(i,j)*fbc*biotic(n)%detsi_sediment(i,j)
 
          ! Do new CaCO3 sedimentary remineralisation
-         !  We recalculate omega of calcite by adding detrital carbon to bottom water DIC
-         biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j) !* &
-!                                          (1.0 - biotic(n)%aomega_cal_sed(i,j))**(4.5)
+         !  - We recalculate omega of calcite at the sediment interface by adding detrital carbon 
+         !    to bottom water DIC (see csiro_bgc.F90)
+         !  - We also consider the kink in dissolution rates at Omega > 0.9
+         biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j) * &
+                                          max(0.1, (1.0 - biotic(n)%aomega_cal_sed(i,j)))**(4.5)
 
          ! Burial of incoming flux (permanent loss of tracer)
          !  Metamodel of Dunne et al. 2007
@@ -1632,16 +1638,16 @@ do n = 1, instances  !{
        t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
        biotic(n)%po4(isd:ied,jsd:jed),                                         &
        biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-       htotallo(isd:ied,jsd:jed), htotalhi(isd:ied,jsd:jed),                   &
-       biotic(n)%htotal(isd:ied,jsd:jed,k),                                    &
-       biotic(n)%csurf(isd:ied,jsd:jed),                                       &
-       alpha=biotic(n)%alpha(isd:ied,jsd:jed) ,                                &            
-       pco2surf = biotic(n)%pco2surf(isd:ied,jsd:jed),                         &
-       co3_ion = biotic(n)%co3(isd:ied,jsd:jed,k),                             &
-       omega_ara = biotic(n)%omega_ara(isd:ied,jsd:jed,k),                     &
-       omega_cal = biotic(n)%omega_cal(isd:ied,jsd:jed,k),                     &
-       hfree = biotic(n)%hfree(isd:ied,jsd:jed,k),                             &
-       hco3_ion = biotic(n)%hco3(isd:ied,jsd:jed,k),                           &
+       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+       biotic(n)%htotal(isc:iec,jsc:jec,k),                                    &
+       biotic(n)%csurf(isc:iec,jsc:jec),                                       &
+       alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                                &            
+       pco2surf = biotic(n)%pco2surf(isc:iec,jsc:jec),                         &
+       co3_ion = biotic(n)%co3(isc:iec,jsc:jec,k),                             &
+       omega_ara = biotic(n)%omega_ara(isc:iec,jsc:jec,k),                     &
+       omega_cal = biotic(n)%omega_cal(isc:iec,jsc:jec,k),                     &
+       hfree = biotic(n)%hfree(isc:iec,jsc:jec,k),                             &
+       hco3_ion = biotic(n)%hco3(isc:iec,jsc:jec,k),                           &
        scale= 1.0/1024.5 )
 
     ! Retrieve pH, HCO3, CO3 ion concentration and omega staturation states of calcite and aragonite through depth
@@ -1671,51 +1677,41 @@ do n = 1, instances  !{
 
     enddo !} k
 
-    ! Get bottom conditions: mask, PO4, temp, salt, DIC, Alk
+    ! Get bottom conditions: mask, PO4, temp, salt, DIC, Alk, H+ ion
     do i = isd,ied
       do j = jsd,jed
         k = grid%kmt(i,j)
-        biotic(n)%seddept(i,j) = grid%zt(k)
-        biotic(n)%sedmask(i,j) = grid%tmask(i,j,k)
-        biotic(n)%po4(i,j) = t_prog(ind_dic)%field(i,j,k,time%taum1)*0.0
-        if (id_no3.gt.0) biotic(n)%po4(i,j) = t_prog(ind_no3)%field(i,j,k,time%taum1)/16.
-        if (id_po4.gt.0) biotic(n)%po4(i,j) = t_prog(ind_po4)%field(i,j,k,time%taum1)
-        biotic(n)%sedtemp(i,j) = t_prog(indtemp)%field(i,j,k,time%taum1)
-        biotic(n)%sedsalt(i,j) = t_prog(indsal)%field(i,j,k,time%taum1)
-        biotic(n)%seddic(i,j) = t_prog(ind_dic)%field(i,j,k,time%taum1)
-        biotic(n)%sedalk(i,j) = t_prog(ind_alk)%field(i,j,k,time%taum1)
-        biotic(n)%htotal_sed(i,j) = biotic(n)%htotal(i,j,k)*0+1e-8  
+        if (k.gt.0) then
+          biotic(n)%seddept(i,j) = grid%zt(k)
+          biotic(n)%sedmask(i,j) = grid%tmask(i,j,k)
+          biotic(n)%po4(i,j) = t_prog(ind_dic)%field(i,j,k,time%taum1)*0.0
+          if (id_no3.gt.0) biotic(n)%po4(i,j) = t_prog(ind_no3)%field(i,j,k,time%taum1)/16.
+          if (id_po4.gt.0) biotic(n)%po4(i,j) = t_prog(ind_po4)%field(i,j,k,time%taum1)
+          biotic(n)%sedtemp(i,j) = t_prog(indtemp)%field(i,j,k,time%taum1)
+          biotic(n)%sedsalt(i,j) = t_prog(indsal)%field(i,j,k,time%taum1)
+          biotic(n)%seddic(i,j) = t_prog(ind_dic)%field(i,j,k,time%taum1)
+          biotic(n)%sedalk(i,j) = t_prog(ind_alk)%field(i,j,k,time%taum1)
+          biotic(n)%htotal_sed(i,j) = biotic(n)%htotal(i,j,k) 
+        endif
       enddo
     enddo
-    !print*, " "
-    !print*, "Printing stuff out"
-    !print*, "isc, iec, jsc, jec", isc, iec, jsc, jec
-    !print*, "isd, ied, jsd, jed", isd, ied, jsd, jed
-    !print*, "Sediment depth", biotic(n)%seddept(isd:ied,jsd:jed)
-    !print*, "Sediment mask", biotic(n)%sedmask(isd:ied,jsd:jed)
-    !print*, "Sediment temp", biotic(n)%sedtemp(isd:ied,jsd:jed)
-    !print*, "Sediment salt", biotic(n)%sedsalt(isd:ied,jsd:jed)
-    !print*, "Sediment dic", biotic(n)%seddic(isd:ied,jsd:jed)
-    !print*, "Sediment alk", biotic(n)%sedalk(isd:ied,jsd:jed)
-    !print*, "Sediment po4", biotic(n)%po4(isd:ied,jsd:jed)
-    !print*, "Sediment htotal", biotic(n)%htotal_sed(isd:ied,jsd:jed)
-    !print*, " "
-    !call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
-    !   biotic(n)%seddept(isd:ied,jsd:jed),                                     &
-    !   biotic(n)%sedmask(isd:ied,jsd:jed),                                     &
-    !   biotic(n)%sedtemp(isd:ied,jsd:jed),                                     &
-    !   biotic(n)%sedsalt(isd:ied,jsd:jed),                                     &
-    !   biotic(n)%seddic(isd:ied,jsd:jed)*1e-3,                                 &
-    !   biotic(n)%sedalk(isd:ied,jsd:jed)*1e-3,                                 &
-    !   biotic(n)%po4(isd:ied,jsd:jed)*1e-3,                                    &
-    !   biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-    !   htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
-    !   biotic(n)%htotal_sed(isc:iec,jsc:jec),                           & 
-    !   co3_ion = biotic(n)%co3_sed(isc:iec,jsc:jec),                          &
-    !   omega_cal = biotic(n)%omega_cal_sed(isc:iec,jsc:jec),                  &
-    !   hfree = biotic(n)%hfree_sed(isc:iec,jsc:jec),                          &
-    !   scale= 1.0/1024.5 )
-    ! print*, "Success with this block of the model "
+
+    call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
+       biotic(n)%seddept(isd:ied,jsd:jed),                                     &
+       biotic(n)%sedmask(isd:ied,jsd:jed),                                     &
+       biotic(n)%sedtemp(isd:ied,jsd:jed),                                     &
+       biotic(n)%sedsalt(isd:ied,jsd:jed),                                     &
+       biotic(n)%seddic(isd:ied,jsd:jed)*1e-3 + &
+       biotic(n)%det_sediment(isd:ied,jsd:jed)*1e-3,                           &
+       biotic(n)%sedalk(isd:ied,jsd:jed)*1e-3,                                 &
+       biotic(n)%po4(isd:ied,jsd:jed)*1e-3,                                    &
+       biotic(n)%sio2(isd:ied,jsd:jed),                                        &
+       htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+       biotic(n)%htotal_sed(isc:iec,jsc:jec),                                  & 
+       co3_ion = biotic(n)%co3_sed(isc:iec,jsc:jec),                          &
+       omega_cal = biotic(n)%omega_cal_sed(isc:iec,jsc:jec),                  &
+       hfree = biotic(n)%hfree_sed(isc:iec,jsc:jec),                          &
+       scale= 1.0/1024.5 )
 
     if (id_adic .gt. 0) then ! calculate CO2 flux including anthropogenic CO2
 
@@ -1773,43 +1769,40 @@ do n = 1, instances  !{
 
       enddo !} k
 
-      ! Get bottom conditions: mask, PO4, temp, salt, DIC, Alk
+      ! Get bottom conditions: mask, PO4, temp, salt, DIC, Alk, H+ ions
       do i = isd,ied
         do j = jsd,jed
           k = grid%kmt(i,j)
-          biotic(n)%seddept(i,j) = grid%zt(k)
-          biotic(n)%sedmask(i,j) = grid%tmask(i,j,k)
-          biotic(n)%po4(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)*0.0
-          if (id_no3.gt.0) biotic(n)%po4(i,j) = t_prog(ind_no3)%field(i,j,k,time%taum1)/16.
-          if (id_po4.gt.0) biotic(n)%po4(i,j) = t_prog(ind_po4)%field(i,j,k,time%taum1)
-          biotic(n)%sedtemp(i,j) = t_prog(indtemp)%field(i,j,k,time%taum1)
-          biotic(n)%sedsalt(i,j) = t_prog(indsal)%field(i,j,k,time%taum1)
-          biotic(n)%sedadic(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)
-          biotic(n)%sedalk(i,j) = t_prog(ind_alk)%field(i,j,k,time%taum1)
+          if (k.gt.0) then
+            biotic(n)%seddept(i,j) = grid%zt(k)
+            biotic(n)%sedmask(i,j) = grid%tmask(i,j,k)
+            biotic(n)%po4(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)*0.0
+            if (id_no3.gt.0) biotic(n)%po4(i,j) = t_prog(ind_no3)%field(i,j,k,time%taum1)/16.
+            if (id_po4.gt.0) biotic(n)%po4(i,j) = t_prog(ind_po4)%field(i,j,k,time%taum1)
+            biotic(n)%sedtemp(i,j) = t_prog(indtemp)%field(i,j,k,time%taum1)
+            biotic(n)%sedsalt(i,j) = t_prog(indsal)%field(i,j,k,time%taum1)
+            biotic(n)%sedadic(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)
+            biotic(n)%sedalk(i,j) = t_prog(ind_alk)%field(i,j,k,time%taum1)
+            biotic(n)%ahtotal_sed(i,j) = biotic(n)%ahtotal(i,j,k)  
+          endif
         enddo
       enddo
-      ! Get bottom conditions: H+ ions
-      do i = isc,iec
-        do j = jsc,jec
-          k = grid%kmt(i,j)
-          biotic(n)%ahtotal_sed(i,j) = biotic(n)%ahtotal(i,j,k)  
-        enddo
-      enddo
-      !call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
-      !   biotic(n)%seddept(isd:ied,jsd:jed),                                     &
-      !   biotic(n)%sedmask(isd:ied,jsd:jed),                                     &
-      !   biotic(n)%sedtemp(isd:ied,jsd:jed),                                     &
-      !   biotic(n)%sedsalt(isd:ied,jsd:jed),                                     &
-      !   biotic(n)%sedadic(isd:ied,jsd:jed)*1e-3 + &
-      !   biotic(n)%det_sediment(isd:ied,jsd:jed)*1e-3,                           &
-      !   biotic(n)%sedalk(isd:ied,jsd:jed)*1e-3,                                 &
-      !   biotic(n)%po4(isd:ied,jsd:jed)*1e-3,                                    &
-      !   biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-      !   htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
-      !   biotic(n)%ahtotal_sed(isc:iec,jsc:jec),                                 & 
-      !   omega_cal = biotic(n)%aomega_cal_sed(isc:iec,jsc:jec),                  &
-      !   hfree = biotic(n)%ahfree_sed(isc:iec,jsc:jec),                          &
-      !   scale= 1.0/1024.5 )
+      call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
+         biotic(n)%seddept(isd:ied,jsd:jed),                                     &
+         biotic(n)%sedmask(isd:ied,jsd:jed),                                     &
+         biotic(n)%sedtemp(isd:ied,jsd:jed),                                     &
+         biotic(n)%sedsalt(isd:ied,jsd:jed),                                     &
+         biotic(n)%sedadic(isd:ied,jsd:jed)*1e-3 + &
+         biotic(n)%det_sediment(isd:ied,jsd:jed)*1e-3,                           &
+         biotic(n)%sedalk(isd:ied,jsd:jed)*1e-3,                                 &
+         biotic(n)%po4(isd:ied,jsd:jed)*1e-3,                                    &
+         biotic(n)%sio2(isd:ied,jsd:jed),                                        &
+         htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
+         biotic(n)%ahtotal_sed(isc:iec,jsc:jec),                                 & 
+         co3_ion = biotic(n)%aco3_sed(isc:iec,jsc:jec),                          &
+         omega_cal = biotic(n)%aomega_cal_sed(isc:iec,jsc:jec),                  &
+         hfree = biotic(n)%ahfree_sed(isc:iec,jsc:jec),                          &
+         scale= 1.0/1024.5 )
 
     endif  ! no adic
 
@@ -2882,6 +2875,10 @@ if (id_aco3 .gt. 0) then
   used = send_data(id_aco3, biotic(1)%aco3(isc:iec,jsc:jec,:),            &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_aco3_sed .gt. 0) then
+  used = send_data(id_aco3_sed, biotic(1)%aco3_sed(isc:iec,jsc:jec),            &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
 if (id_ahco3 .gt. 0) then
   used = send_data(id_ahco3, biotic(1)%ahco3(isc:iec,jsc:jec,:),            &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
@@ -2916,7 +2913,7 @@ if (id_seddept .gt. 0) then
 endif
 if (id_sedmask .gt. 0) then
   used = send_data(id_sedmask, biotic(1)%sedmask(isc:iec,jsc:jec),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1)*0+1.0)
 endif
 if (id_sedtemp .gt. 0) then
   used = send_data(id_sedtemp, biotic(1)%sedtemp(isc:iec,jsc:jec),      &
@@ -3825,6 +3822,10 @@ id_ahtotal = register_diag_field('ocean_model',                  &
 id_aco3 = register_diag_field('ocean_model',                     &
      'aco3', grid%tracer_axes(1:3),                              &
      Time%model_time, 'Carbonate ion concentration (anthropogenic)', 'mmol/m^3' &
+     ,missing_value = -1.0e+10)
+id_aco3_sed = register_diag_field('ocean_model',                     &
+     'aco3_sed', grid%tracer_axes(1:2),                              &
+     Time%model_time, 'Carbonate ion concentration at sediment interface (anthropogenic)', 'mmol/m^3' &
      ,missing_value = -1.0e+10)
 id_ahco3 = register_diag_field('ocean_model',                     &
      'ahco3', grid%tracer_axes(1:3),                              &
