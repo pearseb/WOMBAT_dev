@@ -1135,11 +1135,7 @@ do n = 1, instances  !{
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
-             f41det = detlrem(i,j) * biodet**1.5 * fbc                      * biomask(i,k)         ! DET --> DIC
-             !if (grid%zw(k) .ge. 180) then
-             !  f41det = f41det * 0.5   ! reduce decay below 180m
-             !endif
-             !f51 = caco3rem(i,j) * biocaco3                                 * biomask(i,k)
+             f41det = detlrem(i,j) * biodet*biodet * fbc                    * biomask(i,k)         ! DET --> DIC
              f51 = caco3dis(i,j,k) * biocaco3                               * biomask(i,k)
 
 
