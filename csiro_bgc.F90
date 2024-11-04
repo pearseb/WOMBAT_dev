@@ -187,19 +187,14 @@ type biotic_type  !{
 ! arrays for air-sea fluxes
   real                                      :: sal_global
   real, allocatable, dimension(:)           :: bgc_global
-  real, allocatable, dimension(:,:,:)       :: ahtotal
   real, allocatable, dimension(:,:,:)       :: htotal
   real, allocatable, dimension(:,:)         :: alpha
   real, allocatable, dimension(:,:)         :: csat
   real, allocatable, dimension(:,:)         :: csat_csurf
-  real, allocatable, dimension(:,:)         :: csat_acsurf
   real, allocatable, dimension(:,:)         :: csurf
-  real, allocatable, dimension(:,:)         :: acsurf
   real, allocatable, dimension(:,:)         :: dpco2
   real, allocatable, dimension(:,:)         :: pco2surf
-  real, allocatable, dimension(:,:)         :: paco2surf
   real, allocatable, dimension(:,:)         :: pco2atm
-  real, allocatable, dimension(:,:)         :: paco2atm
   real, allocatable, dimension(:,:)         :: det_sediment       ! mmol(C) m-2 in DET sitting at base of column as sediment. 
   real, allocatable, dimension(:,:)         :: detfe_sediment     ! mmol(Fe) m-2 in DETFe sitting at base of column as sediment. 
   real, allocatable, dimension(:,:)         :: detsi_sediment     ! mmol(Si) m-2 in DETSi sitting at base of column as sediment. 
@@ -224,7 +219,6 @@ type biotic_type  !{
   real, allocatable, dimension(:,:)         :: sedtemp
   real, allocatable, dimension(:,:)         :: sedsalt
   real, allocatable, dimension(:,:)         :: seddic
-  real, allocatable, dimension(:,:)         :: sedadic
   real, allocatable, dimension(:,:)         :: sedalk
   real, allocatable, dimension(:,:,:)       :: vstf
   real, allocatable, dimension(:,:,:)       :: co3
@@ -236,15 +230,6 @@ type biotic_type  !{
   real, allocatable, dimension(:,:,:)       :: hfree
   real, allocatable, dimension(:,:)         :: hfree_sed
   real, allocatable, dimension(:,:)         :: htotal_sed
-  real, allocatable, dimension(:,:,:)       :: aco3
-  real, allocatable, dimension(:,:)         :: aco3_sed
-  real, allocatable, dimension(:,:,:)       :: ahco3
-  real, allocatable, dimension(:,:,:)       :: aomega_ara
-  real, allocatable, dimension(:,:,:)       :: aomega_cal
-  real, allocatable, dimension(:,:)         :: aomega_cal_sed
-  real, allocatable, dimension(:,:,:)       :: ahfree
-  real, allocatable, dimension(:,:)         :: ahfree_sed
-  real, allocatable, dimension(:,:)         :: ahtotal_sed
 end type biotic_type  !}
 
 !----------------------------------------------------------------------
@@ -260,7 +245,7 @@ integer                                 :: package_index
 
 ! set the tracer index for the various tracers
 integer :: id_po4, id_nh4, id_no3, id_fe, id_sil,                       & 
-           id_dic, id_alk, id_caco3, id_adic,                           & 
+           id_dic, id_alk, id_caco3, id_dicp, id_dicr,                  & 
            id_o2,                                                       &
            id_phy, id_dia, id_diz, id_det, id_zoo, id_poc, id_mes,      &
            id_caco3_sediment, id_det_sediment, id_detfe_sediment,       &
@@ -283,7 +268,8 @@ integer,public :: ind_poc = -1
 integer,public :: ind_zoo = -1
 integer,public :: ind_mes = -1
 integer,public :: ind_caco3 = -1
-integer,public :: ind_adic = -1
+integer,public :: ind_dicp = -1
+integer,public :: ind_dicr = -1
 integer,public :: ind_fe = -1
 integer,public :: ind_pchl = -1  ! pjb
 integer,public :: ind_dchl = -1  ! pjb
@@ -312,7 +298,7 @@ character*128                           :: atmpress_file
 character*32                            :: atmpress_name    
 real, allocatable, dimension(:,:)       :: fice_t
 integer                                 :: id_light_limit = -1
-integer                                 :: id_adic_intmld = -1
+integer                                 :: id_dicp_intmld = -1
 integer                                 :: id_dic_intmld = -1
 integer                                 :: id_o2_intmld = -1
 integer                                 :: id_no3_intmld = -1
@@ -322,7 +308,7 @@ integer                                 :: id_det_intmld = -1
 integer                                 :: id_pprod_gross_intmld = -1
 integer                                 :: id_npp_intmld = -1
 integer                                 :: id_radbio_intmld = -1
-integer                                 :: id_adic_int100 = -1
+integer                                 :: id_dicp_int100 = -1
 integer                                 :: id_dic_int100 = -1
 integer                                 :: id_o2_int100 = -1
 integer                                 :: id_no3_int100 = -1
@@ -384,8 +370,8 @@ integer                                 :: id_mprod_gross = -1
 integer                                 :: id_kw_o2  = -1
 integer                                 :: id_o2_sat = -1
 integer                                 :: id_sc_o2  = -1
-integer                                 :: id_pco2 = -1, id_paco2 = -1
-integer                                 :: id_co2_sat = -1, id_aco2_sat = -1
+integer                                 :: id_pco2 = -1
+integer                                 :: id_co2_sat = -1
 integer                                 :: id_htotal = -1
 integer                                 :: id_htotal_sed = -1
 integer                                 :: id_co3 = -1
@@ -396,39 +382,28 @@ integer                                 :: id_omega_cal = -1
 integer                                 :: id_omega_cal_sed = -1
 integer                                 :: id_hfree = -1
 integer                                 :: id_hfree_sed = -1
-integer                                 :: id_ahtotal = -1
-integer                                 :: id_ahtotal_sed = -1
-integer                                 :: id_aco3 = -1
-integer                                 :: id_aco3_sed = -1
-integer                                 :: id_ahco3 = -1
-integer                                 :: id_aomega_ara = -1
-integer                                 :: id_aomega_cal = -1
-integer                                 :: id_aomega_cal_sed = -1
-integer                                 :: id_ahfree = -1
-integer                                 :: id_ahfree_sed = -1
 integer                                 :: id_seddept = -1
 integer                                 :: id_sedmask = -1
 integer                                 :: id_sedtemp = -1
 integer                                 :: id_sedsalt = -1
 integer                                 :: id_seddic = -1
-integer                                 :: id_sedadic = -1
 integer                                 :: id_sedalk = -1
 integer                                 :: id_caco3_sed_remin, id_det_sed_remin, id_detfe_sed_remin
 integer                                 :: id_caco3_sed_depst, id_det_sed_depst, id_detfe_sed_depst
 integer                                 :: id_caco3_sed_bury, id_det_sed_bury, id_detfe_sed_bury
 integer                                 :: id_det_sed_denit
 integer                                 :: id_detsi_sed_depst, id_detsi_sed_bury, id_detsi_sed_remin
-integer                                 :: id_total_aco2_flux, id_total_co2_flux
+integer                                 :: id_total_co2_flux
 real, allocatable, dimension(:,:)       :: kw_co2 
 real, allocatable, dimension(:,:)       :: kw_o2
 real, allocatable, dimension(:,:)       :: patm_t
 integer                                 :: pistonveloc_id
-integer                                 :: aco2_id
+integer                                 :: co2_id
 integer                                 :: seaicefract_id
 character*128                           :: pistonveloc_file
 character*32                            :: pistonveloc_name
-character*128                           :: aco2_file
-character*32                            :: aco2_name
+character*128                           :: co2_file
+character*32                            :: co2_name
 real, allocatable, dimension(:,:)       :: sc_o2
 real, allocatable, dimension(:,:)       :: sc_co2
 real, allocatable, dimension(:,:)       :: o2_saturation
@@ -452,7 +427,7 @@ integer                                 :: hydrofe_id
 real, allocatable, dimension(:,:,:)     :: hydrofe_t
 
 real, allocatable, dimension(:,:)       :: xkw_t
-real, allocatable, dimension(:,:)       :: aco2
+real, allocatable, dimension(:,:)       :: co2
 real, allocatable, dimension(:,:)       :: htotalhi
 real, allocatable, dimension(:,:)       :: htotallo
 
@@ -485,8 +460,8 @@ real, allocatable, dimension(:) :: fmin_poc
 real, allocatable, dimension(:) :: fmin_pic
 real, allocatable, dimension(:,:,:) :: biotr
 real, allocatable, dimension(:,:) :: light_limit
-real, allocatable, dimension(:,:) :: adic_intmld,dic_intmld,o2_intmld,no3_intmld,fe_intmld,phy_intmld,det_intmld
-real, allocatable, dimension(:,:) :: adic_int100,dic_int100,o2_int100,no3_int100,fe_int100,phy_int100,det_int100
+real, allocatable, dimension(:,:) :: dicp_intmld,dic_intmld,o2_intmld,no3_intmld,fe_intmld,phy_intmld,det_intmld
+real, allocatable, dimension(:,:) :: dicp_int100,dic_int100,o2_int100,no3_int100,fe_int100,phy_int100,det_int100
 real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld
 real, allocatable, dimension(:,:) :: pprod_gross_int100,npp_int100,radbio_int100
 real, allocatable, dimension(:,:,:) :: radbio3d, phy_size, dia_size, diz_size, phy_2det, dia_2det, diz_2det,     &
@@ -665,6 +640,8 @@ integer                                 :: kscav_dfe_id
 real, allocatable, dimension(:,:)       :: kscav_dfe
 integer                                 :: knano_dfe_id
 real, allocatable, dimension(:,:)       :: knano_dfe
+integer                                 :: caco3_dynamics_id
+real, allocatable, dimension(:,:)       :: caco3_dynamics
 
 
 ! for extra restart file(s)
@@ -717,7 +694,7 @@ integer :: ntr_bgc
 allocate( xkw_t(isd:ied,jsd:jed) )
 allocate( patm_t(isd:ied,jsd:jed) )
 allocate( fice_t(isd:ied,jsd:jed) )
-allocate( aco2(isd:ied,jsd:jed) )
+allocate( co2(isd:ied,jsd:jed) )
 allocate( dust_t(isd:ied,jsd:jed) )
 allocate( rivdin_t(isd:ied,jsd:jed) )
 allocate( rivdip_t(isd:ied,jsd:jed) )
@@ -758,7 +735,7 @@ allocate( fmin_pic(nk) )
 allocate( ray(nk) )
 allocate( biotr(isc:iec,nk,ntr_bgc) )
 allocate( light_limit(isc:iec,jsc:jec) )
-allocate( adic_intmld(isc:iec,jsc:jec) )
+allocate( dicp_intmld(isc:iec,jsc:jec) )
 allocate( dic_intmld(isc:iec,jsc:jec) )
 allocate( o2_intmld(isc:iec,jsc:jec) )
 allocate( fe_intmld(isc:iec,jsc:jec) )
@@ -768,7 +745,7 @@ allocate( det_intmld(isc:iec,jsc:jec) )
 allocate( pprod_gross_intmld(isc:iec,jsc:jec) )
 allocate( npp_intmld(isc:iec,jsc:jec) )
 allocate( radbio_intmld(isc:iec,jsc:jec) )
-allocate( adic_int100(isc:iec,jsc:jec) )
+allocate( dicp_int100(isc:iec,jsc:jec) )
 allocate( dic_int100(isc:iec,jsc:jec) )
 allocate( o2_int100(isc:iec,jsc:jec) )
 allocate( fe_int100(isc:iec,jsc:jec) )
@@ -845,7 +822,7 @@ rivdop_t(:,:)      = 0.0
 rivdoc_t(:,:)      = 0.0
 rivdsi_t(:,:)      = 0.0
 hydrofe_t(:,:,:)   = 0.0
-aco2(:,:)          = 0.0 
+co2(:,:)          = 0.0 
 sc_co2(:,:)        = 0.0
 kw_co2(:,:)        = 0.0
 sc_o2(:,:)         = 0.0
@@ -879,27 +856,13 @@ do n = 1, instances  !{
   allocate( biotic(n)%omega_cal_sed(isd:ied,jsd:jed) )
   allocate( biotic(n)%hfree(isd:ied,jsd:jed,nk) )
   allocate( biotic(n)%hfree_sed(isd:ied,jsd:jed) )
-  allocate( biotic(n)%ahtotal(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%ahtotal_sed(isd:ied,jsd:jed) )
-  allocate( biotic(n)%aco3(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%aco3_sed(isd:ied,jsd:jed) )
-  allocate( biotic(n)%ahco3(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%aomega_ara(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%aomega_cal(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%aomega_cal_sed(isd:ied,jsd:jed) )
-  allocate( biotic(n)%ahfree(isd:ied,jsd:jed,nk) )
-  allocate( biotic(n)%ahfree_sed(isd:ied,jsd:jed) )
   allocate( biotic(n)%alpha(isd:ied,jsd:jed) )
   allocate( biotic(n)%csat(isd:ied,jsd:jed) )
   allocate( biotic(n)%csat_csurf(isd:ied,jsd:jed) )
-  allocate( biotic(n)%csat_acsurf(isd:ied,jsd:jed) )
   allocate( biotic(n)%csurf(isd:ied,jsd:jed) )
-  allocate( biotic(n)%acsurf(isd:ied,jsd:jed) )
   allocate( biotic(n)%dpco2(isd:ied,jsd:jed) )
   allocate( biotic(n)%pco2atm(isd:ied,jsd:jed) )
-  allocate( biotic(n)%paco2atm(isd:ied,jsd:jed) )
   allocate( biotic(n)%pco2surf(isd:ied,jsd:jed) )
-  allocate( biotic(n)%paco2surf(isd:ied,jsd:jed) )
   allocate( biotic(n)%caco3_sediment(isd:ied,jsd:jed) )
   allocate( biotic(n)%det_sediment(isd:ied,jsd:jed) )
   allocate( biotic(n)%detfe_sediment(isd:ied,jsd:jed) )
@@ -924,7 +887,6 @@ do n = 1, instances  !{
   allocate( biotic(n)%sedtemp(isd:ied,jsd:jed) )
   allocate( biotic(n)%sedsalt(isd:ied,jsd:jed) )
   allocate( biotic(n)%seddic(isd:ied,jsd:jed) )
-  allocate( biotic(n)%sedadic(isd:ied,jsd:jed) )
   allocate( biotic(n)%sedalk(isd:ied,jsd:jed) )
 
   ntr_bgc = biotic(n)%ntr_bgc
@@ -1010,6 +972,7 @@ allocate( knano_dfe(isd:ied,jsd:jed) )
 allocate( kscav_dfe(isd:ied,jsd:jed) )
 allocate( kcoag_dfe(isd:ied,jsd:jed) )
 allocate( kcoag2_dfe(isd:ied,jsd:jed) )
+allocate( caco3_dynamics(isd:ied,jsd:jed) )
 
 
 !       initialize some arrays
@@ -1025,16 +988,6 @@ do n = 1, instances  !{
   biotic(n)%omega_cal_sed(:,:) = 0.0
   biotic(n)%hfree(:,:,:) = 1e-8
   biotic(n)%hfree_sed(:,:) = 1e-8
-  biotic(n)%ahtotal(:,:,:) = 1.e-8
-  biotic(n)%ahtotal_sed(:,:) = 1.e-8
-  biotic(n)%aco3(:,:,:) = 0.0
-  biotic(n)%aco3_sed(:,:) = 0.0
-  biotic(n)%ahco3(:,:,:) = 0.0
-  biotic(n)%aomega_ara(:,:,:) = 0.0
-  biotic(n)%aomega_cal(:,:,:) = 0.0
-  biotic(n)%aomega_cal_sed(:,:) = 0.0
-  biotic(n)%ahfree(:,:,:) = 1e-8
-  biotic(n)%ahfree_sed(:,:) = 1e-8
   biotic(n)%sio2(:,:) = 35. *1e-3
   biotic(n)%bgc_global(:) = 0.  ! this will make vstf zero
   biotic(n)%sal_global = 35.
@@ -1049,7 +1002,6 @@ do n = 1, instances  !{
   biotic(n)%sedsalt(:,:) = 35.0
   biotic(n)%seddic(:,:) = 0.0
   biotic(n)%sedalk(:,:) = 0.0
-  biotic(n)%sedadic(:,:) = 0.0
 enddo  !} n
 
 return
@@ -1163,8 +1115,13 @@ logical  :: used
          !  - We recalculate omega of calcite at the sediment interface by adding detrital carbon 
          !    to bottom water DIC (see csiro_bgc.F90)
          !  - We also consider the kink in dissolution rates at Omega > 0.9
-         biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j) * &
-                                          max(0.1, (1.0 - biotic(n)%aomega_cal_sed(i,j)))**(4.5)
+         if (caco3_dynamics(i,j).gt.0.0) then
+           biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j) * &
+                                            max(0.1, (1.0 - biotic(n)%omega_cal_sed(i,j)))**(4.5)
+         else
+           biotic(n)%caco3_sed_remin(i,j) = caco3rem_sed(i,j)*fbc*biotic(n)%caco3_sediment(i,j) * &
+                                            max(0.1, (1.0 - 0.2081))**(4.5)
+         endif
 
          ! Burial of incoming flux (permanent loss of tracer)
          !  Metamodel of Dunne et al. 2007
@@ -1192,7 +1149,7 @@ logical  :: used
          ! NB, btf values are positive from the water column into the sediment.  mac, nov12.  
          T_prog(ind_dic)%btf(i,j) = -1.0 * rho0 * biotic(n)%det_sed_remin(i,j)                       &
                                     -1.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)
-         if (id_adic.gt.0) T_prog(ind_adic)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
+         if (id_dicr.gt.0) T_prog(ind_dicr)%btf(i,j) = T_prog(ind_dic)%btf(i,j)
          if (id_po4.gt.0)  T_prog(ind_po4)%btf(i,j)  = -1.0 * rho0 * 1./122. * biotic(n)%det_sed_remin(i,j)
          if (id_nh4.gt.0)  T_prog(ind_nh4)%btf(i,j)  = -1.0 * rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)
          if (id_o2.gt.0)   T_prog(ind_o2)%btf(i,j)   = rho0 * biotic(n)%det_sed_remin(i,j) *         &
@@ -1419,7 +1376,7 @@ real, intent(in), dimension(isd:ied,jsd:jed), optional          :: atm_co2
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: co2flux
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: sfc_co2
 real, dimension(isd:ied,jsd:jed)                                :: totdenit
-real :: total_co2_flux, total_aco2_flux
+real :: total_co2_flux
 logical :: used
 
 !-----------------------------------------------------------------------
@@ -1517,14 +1474,14 @@ call time_interp_external(rivdop_id, time%model_time, rivdop_t)
 call time_interp_external(rivdoc_id, time%model_time, rivdoc_t)
 call time_interp_external(rivdsi_id, time%model_time, rivdsi_t)
 
-if (id_adic .gt. 0) then
-! The atmospheric co2 value for the anthropogenic+natural carbon tracer
+if (id_dic .gt. 0) then
+! The atmospheric co2 value for the carbon tracer
 ! is either read from a file or a value from the access atmospheric model, 
 ! as determined by the flag use_access_co2.  mac, may13.  
  if (use_access_co2) then 
-  aco2(isc:iec,jsc:jec) = atm_co2(isc:iec,jsc:jec)
+  co2(isc:iec,jsc:jec) = atm_co2(isc:iec,jsc:jec)
  else
-  call time_interp_external(aco2_id, time%model_time, aco2)
+  call time_interp_external(co2_id, time%model_time, co2)
  endif
 endif
 if (ice_file4gasx) then
@@ -1591,20 +1548,10 @@ enddo  !} j
 do n = 1, instances  !{
   do j = jsc, jec
    do i = isc, iec
-    biotic(n)%pco2atm(i,j) = nat_co2(i,j)
+    biotic(n)%pco2atm(i,j) = co2(i,j)
    enddo
   enddo
 enddo  !} n
-
-if (id_adic .gt. 0) then
- do n = 1, instances  !{
-  do j = jsc, jec
-   do i = isc, iec
-    biotic(n)%paco2atm(i,j) = aco2(i,j)
-   enddo
-  enddo
- enddo  !} n
-endif
 
 !call init_ocmip2_co2calc(                                       &
 !     time%model_time, isc, iec, jsc, jec, 1,                    &
@@ -1713,99 +1660,6 @@ do n = 1, instances  !{
        hfree = biotic(n)%hfree_sed(isc:iec,jsc:jec),                          &
        scale= 1.0/1024.5 )
 
-    if (id_adic .gt. 0) then ! calculate CO2 flux including anthropogenic CO2
-
-      k = 1
-
-      biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
-      if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,k,time%taum1)/16.*1e-3
-      if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3
-
-      call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
-         htotallo(isd:ied,jsd:jed)*0.0+grid%zt(k),                               &
-         grid%tmask(isd:ied,jsd:jed,k),                                          &
-         t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
-         t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
-         t_prog(ind_adic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,              &
-         t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
-         biotic(n)%po4(isd:ied,jsd:jed),                                         &
-         biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-         htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
-         biotic(n)%ahtotal(isc:iec,jsc:jec,k),                                   &
-         biotic(n)%acsurf(isc:iec,jsc:jec),                                      &
-         alpha=biotic(n)%alpha(isc:iec,jsc:jec) ,                                &            
-         pco2surf = biotic(n)%paco2surf(isc:iec,jsc:jec),                        &
-         co3_ion = biotic(n)%aco3(isc:iec,jsc:jec,k),                            &
-         omega_ara = biotic(n)%aomega_ara(isc:iec,jsc:jec,k),                    &
-         omega_cal = biotic(n)%aomega_cal(isc:iec,jsc:jec,k),                    &
-         hfree = biotic(n)%ahfree(isc:iec,jsc:jec,k),                            &
-         hco3_ion = biotic(n)%ahco3(isc:iec,jsc:jec,k),                          &
-         scale= 1.0/1024.5 )
-
-      ! Retrieve pH, HCO3, CO3 ion concentration and omega staturation states of calcite and aragonite through depth
-      do k = 2,grid%nk !{
-
-        biotic(n)%po4(:,:) = t_prog(ind_dic)%field(isd:ied,jsd:jed,k,time%taum1)*0
-        if (id_no3.gt.0) biotic(n)%po4(:,:) = t_prog(ind_no3)%field(isd:ied,jsd:jed,k,time%taum1)/16.*1e-3
-        if (id_po4.gt.0) biotic(n)%po4(:,:) = t_prog(ind_po4)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3
-
-        call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
-           htotallo(isd:ied,jsd:jed)*0.0+grid%zt(k),                               &
-           grid%tmask(isd:ied,jsd:jed,k),                                          &
-           t_prog(indtemp)%field(isd:ied,jsd:jed,k,time%taum1),                    &
-           t_prog(indsal)%field(isd:ied,jsd:jed,k,time%taum1),                     &
-           t_prog(ind_adic)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,              &
-           t_prog(ind_alk)%field(isd:ied,jsd:jed,k,time%taum1)*1e-3,               &
-           biotic(n)%po4(isd:ied,jsd:jed),                                         &
-           biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-           htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
-           biotic(n)%ahtotal(isc:iec,jsc:jec,k),                                   & 
-           co3_ion = biotic(n)%aco3(isc:iec,jsc:jec,k),                            &
-           omega_ara = biotic(n)%aomega_ara(isc:iec,jsc:jec,k),                    &
-           omega_cal = biotic(n)%aomega_cal(isc:iec,jsc:jec,k),                    &
-           hfree = biotic(n)%ahfree(isc:iec,jsc:jec,k),                            &
-           hco3_ion = biotic(n)%ahco3(isc:iec,jsc:jec,k),                          &
-           scale= 1.0/1024.5 )
-
-      enddo !} k
-
-      ! Get bottom conditions: mask, PO4, temp, salt, DIC, Alk, H+ ions
-      do i = isd,ied
-        do j = jsd,jed
-          k = grid%kmt(i,j)
-          if (k.gt.0) then
-            biotic(n)%seddept(i,j) = grid%zt(k)
-            biotic(n)%sedmask(i,j) = grid%tmask(i,j,k)
-            biotic(n)%po4(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)*0.0
-            if (id_no3.gt.0) biotic(n)%po4(i,j) = t_prog(ind_no3)%field(i,j,k,time%taum1)/16.
-            if (id_po4.gt.0) biotic(n)%po4(i,j) = t_prog(ind_po4)%field(i,j,k,time%taum1)
-            biotic(n)%sedtemp(i,j) = t_prog(indtemp)%field(i,j,k,time%taum1)
-            biotic(n)%sedsalt(i,j) = t_prog(indsal)%field(i,j,k,time%taum1)
-            biotic(n)%sedadic(i,j) = t_prog(ind_adic)%field(i,j,k,time%taum1)
-            biotic(n)%sedalk(i,j) = t_prog(ind_alk)%field(i,j,k,time%taum1)
-            biotic(n)%ahtotal_sed(i,j) = biotic(n)%ahtotal(i,j,k)  
-          endif
-        enddo
-      enddo
-      call ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec,                          &
-         biotic(n)%seddept(isd:ied,jsd:jed),                                     &
-         biotic(n)%sedmask(isd:ied,jsd:jed),                                     &
-         biotic(n)%sedtemp(isd:ied,jsd:jed),                                     &
-         biotic(n)%sedsalt(isd:ied,jsd:jed),                                     &
-         biotic(n)%sedadic(isd:ied,jsd:jed)*1e-3 + &
-         biotic(n)%det_sediment(isd:ied,jsd:jed)*1e-3,                           &
-         biotic(n)%sedalk(isd:ied,jsd:jed)*1e-3,                                 &
-         biotic(n)%po4(isd:ied,jsd:jed)*1e-3,                                    &
-         biotic(n)%sio2(isd:ied,jsd:jed),                                        &
-         htotallo(isc:iec,jsc:jec), htotalhi(isc:iec,jsc:jec),                   &
-         biotic(n)%ahtotal_sed(isc:iec,jsc:jec),                                 & 
-         co3_ion = biotic(n)%aco3_sed(isc:iec,jsc:jec),                          &
-         omega_cal = biotic(n)%aomega_cal_sed(isc:iec,jsc:jec),                  &
-         hfree = biotic(n)%ahfree_sed(isc:iec,jsc:jec),                          &
-         scale= 1.0/1024.5 )
-
-    endif  ! no adic
-
   endif  ! no dic
 enddo  !} n 
 
@@ -1912,56 +1766,6 @@ if (id_total_co2_flux .gt. 0) then
  used = send_data(id_total_co2_flux,total_co2_flux,Time%model_time)
 endif
 
-
-total_aco2_flux = 0.0 
-
-if (id_adic.gt.0) then
-  do n = 1, instances  !{
-    do j = jsc, jec  !{
-      do i = isc, iec  !{
-       ! These calculations used to be done in ocmip2_co2calc in mom4p1_2007, 
-       !  but not with mom4p1_2009.  
-       ! Some extra calculations now required in csiro_bgc_sbc for co2 air-sea 
-       !  flux.   mac, apr11.  
-       ! Note, csat has been used as temporary variable, alpha is only f(T,S),
-       !  csurf had been used as a temporary variable, but now needs to be saved
-       !  for preindustrial vs anthropogenic.
-       biotic(n)%csat(i,j) = biotic(n)%paco2atm(i,j) / 1e6 * biotic(n)%alpha(i,j) * patm_t(i,j)
-       biotic(n)%csat_acsurf(i,j) = biotic(n)%csat(i,j) - biotic(n)%acsurf(i,j)
-       
-       t_prog(ind_adic)%stf(i,j) = rho0 * kw_co2(i,j) *        &
-        biotic(n)%csat_acsurf(i,j)*1e3 !convert from  mol/m^3 to mmol/m^3
-
-       total_aco2_flux = total_aco2_flux + kw_co2(i,j) *        &
-        biotic(n)%csat_acsurf(i,j) * 3.7843e-7 * grid%dat(i,j) * grid%tmask(i,j,1) ! convert from  mol/s to Pg/year (12.0*1e-15*86400*365=3.78e-7)
-! send the anthropogenic Pco2 and co2 flux into the ocean back to the atmospheric model.  mac, may13.  
-!RASF avoid using Ocean_sfc. 
-!       if(present(Ocean_sfc)) then
-!          Ocean_sfc%co2flux(i,j) = kw_co2(i,j) *        &
-!                                   biotic(n)%csat_acsurf(i,j)*0.04401 !convert from  mol/m^2/s to kg(CO2)/m^2/s, 0.04401 kg(CO2)/mole
-!          Ocean_sfc%co2(i,j) = biotic(n)%paco2surf(i,j) 
-!       endif
-      enddo  !} i
-    enddo  !} j 
-    if(present(co2flux) .and. present(sfc_co2)) then
-      do j = jsc, jec  !{
-        do i = isc, iec  !{
-          co2flux(i,j) = kw_co2(i,j) *        &
-                                   biotic(n)%csat_acsurf(i,j)*0.04401 !convert from  mol/m^2/s to kg(CO2)/m^2/s, 0.04401 kg(CO2)/mole
-          sfc_co2(i,j) = biotic(n)%paco2surf(i,j) 
-        enddo  !} i
-      enddo  !} j 
-    endif
-    
-  enddo  !} n 
-endif
-
-if (id_total_aco2_flux .gt. 0) then
- call mpp_sum(total_aco2_flux)
- used = send_data(id_total_aco2_flux,total_aco2_flux,Time%model_time)
-endif
-
-
 if (id_o2.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
@@ -2004,11 +1808,10 @@ do n = 1, instances  !{
       if (id_sil.gt.0) then
         t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
       endif
-      t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
-      if (id_adic.gt.0) then
-        t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+      if (id_dic.gt.0) then
+        t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
+        t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)-rivdoc_t(i,j)-rivdin_t(i,j)-rivdon_t(i,j))
       endif
-      t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)-rivdoc_t(i,j)-rivdin_t(i,j)-rivdon_t(i,j))
       !! dFe flux from rivers (ratio of carbon input (5.3e-4) and then converted to umol m-2 s-1)
       !if (id_fe.gt.0) then
       !  t_prog(ind_fe)%stf(i,j) = t_prog(ind_fe)%stf(i,j) +                                        &
@@ -2018,6 +1821,14 @@ do n = 1, instances  !{
   enddo  !} j
 enddo  !} n
 
+! Do surface flux of preformed DIC
+if (id_dicp.gt.0) then
+  t_prog(ind_dicp)%stf(:,:) = t_prog(ind_dic)%stf(:,:)
+endif
+! Do surface flux of remineralised DIC
+if (id_dicr.gt.0) then
+  t_prog(ind_dicr)%stf(:,:) = 0.0
+endif
 
 !pjb: Do proxy nitrogen fixation (redistribute loss of NO3 from sediment denitrification)
 !pjb: This is done tile-by-tile, so that the redistribution is not perfectly even across the entire ocean
@@ -2269,8 +2080,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('atmpress_name', 'atmpress')
   call fm_util_set_value('pistonveloc_file', 'INPUT/pistonveloc_ocmip2.nc')
   call fm_util_set_value('pistonveloc_name', 'pistonveloc')
-  call fm_util_set_value('aco2_file', 'INPUT/co2_b35_2D.nc')
-  call fm_util_set_value('aco2_name', 'co2')
+  call fm_util_set_value('co2_file', 'INPUT/co2_b35_2D.nc')
+  call fm_util_set_value('co2_name', 'co2')
   call fm_util_set_value('seaicefract_file', 'INPUT/f_ice_ocmip2.nc')
   call fm_util_set_value('seaicefract_name', 'f_ice')
   call fm_util_set_value('dust_file', 'INPUT/dust.nc')
@@ -2300,7 +2111,7 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   call fm_util_set_value('sw_thru_ice', .true.)  ! is shortwave flux modified by an ice model?
   call fm_util_set_value('gasx_from_file', .true.)! use file with gas exchange coefficients?
   call fm_util_set_value('ice_file4gasx', .true.)! use file with ice cover for gas exchange?
-! Set defaults to use the ACCESS atmospheric CO2 for the anthropogenic CO2 in the ocean if this is compiled for ACCESS-CM/ESM, otherwise to read CO2 from files provided.  mac, may13.  
+! Set defaults to use the ACCESS atmospheric CO2 for the DIC in the ocean if this is compiled for ACCESS-CM/ESM, otherwise to read CO2 from files provided.  mac, may13.  
 #if defined(ACCESS_CM) 
   call fm_util_set_value('use_access_co2', .true.)! use access model co2 values.  mac, may13.  
 #else
@@ -2308,7 +2119,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
 #endif
   call fm_util_set_value('id_po4',0)      
   call fm_util_set_value('id_dic',0)      
-  call fm_util_set_value('id_adic',0)      
+  call fm_util_set_value('id_dicp',0)      
+  call fm_util_set_value('id_dicr',0)      
   call fm_util_set_value('id_alk',0)      
   call fm_util_set_value('id_o2',0)      
   call fm_util_set_value('id_nh4',0)     !pjb
@@ -2340,8 +2152,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   atmpress_name      =  fm_util_get_string ('atmpress_name', scalar = .true.)
   pistonveloc_file   =  fm_util_get_string ('pistonveloc_file', scalar = .true.)
   pistonveloc_name   =  fm_util_get_string ('pistonveloc_name', scalar = .true.)
-  aco2_file          =  fm_util_get_string ('aco2_file', scalar = .true.)
-  aco2_name          =  fm_util_get_string ('aco2_name', scalar = .true.)
+  co2_file          =  fm_util_get_string ('co2_file', scalar = .true.)
+  co2_name          =  fm_util_get_string ('co2_name', scalar = .true.)
   seaicefract_file   =  fm_util_get_string ('seaicefract_file', scalar = .true.)
   seaicefract_name   =  fm_util_get_string ('seaicefract_name', scalar = .true.)
   dust_file   =  fm_util_get_string ('dust_file', scalar = .true.)
@@ -2374,7 +2186,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
   use_access_co2 = fm_util_get_logical ('use_access_co2', scalar = .true.)
 
   id_dic   =   fm_util_get_integer ('id_dic', scalar = .true.)
-  id_adic  =   fm_util_get_integer ('id_adic', scalar = .true.)
+  id_dicp  =   fm_util_get_integer ('id_dicp', scalar = .true.)
+  id_dicr  =   fm_util_get_integer ('id_dicr', scalar = .true.)
   id_alk   =   fm_util_get_integer ('id_alk', scalar = .true.)
   id_po4   =   fm_util_get_integer ('id_po4', scalar = .true.)
   id_o2    =   fm_util_get_integer ('id_o2', scalar = .true.)
@@ -2407,8 +2220,8 @@ call fm_util_start_namelist(package_name, '*global*', caller = caller_str, no_ov
 call fm_util_end_namelist(package_name, '*global*', caller = caller_str, check = .true.)
 
 sum_ntr = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
-          min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
-          min(1,id_o2) + min(1,id_sil) +                                      &
+          min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_dicp) +  &
+          min(1,id_dicr) + min(1,id_o2) + min(1,id_sil) +                     &
           min(1,id_phy) + min(1,id_dia) + min(1,id_diz) +                     &
           min(1,id_zoo) + min(1,id_mes) +                                     &
           min(1,id_det) + min(1,id_poc) +                                     &
@@ -2425,16 +2238,16 @@ if (mpp_pe() == mpp_root_pe() ) print*,'csiro_bgc_init: Number bgc tracers = ',s
 !-----------------------------------------------------------------------
 
 ! RASF: Use sensible names for tracers
-! For default case names will be simply adic, o2 etc
+! For default case names will be simply dic, o2 etc
 ! If we have multiple instances the names will take the form
-! adic_instancename, o2_instancename
+! dic_instancename, o2_instancename
 ! Different input files etc can be set in the field_table like for temp, salt
 
 do n = 1, instances  !{
 
   biotic(n)%ntr_bgc = min(1,id_po4) + min(1,id_nh4) + min(1,id_no3) + min(1,id_fe) +      &
-                      min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_adic) +  &
-                      min(1,id_o2) + min(1,id_sil) +                                      &
+                      min(1,id_dic) + min(1,id_alk) + min(1,id_caco3) + min(1,id_dicp) +  &
+                      min(1,id_dicr) + min(1,id_o2) + min(1,id_sil) +                     &
                       min(1,id_phy) + min(1,id_dia) + min(1,id_diz) +                     &
                       min(1,id_zoo) + min(1,id_mes) +                                     &
                       min(1,id_det) + min(1,id_poc) +                                     &
@@ -2514,8 +2327,12 @@ do n = 1, instances  !{
           bgc_trc='alk'
           min_range=0.0
           max_range=3000.0
-    else if (nn == id_adic ) then
-          bgc_trc='adic'
+    else if (nn == id_dicp ) then
+          bgc_trc='dicp'
+          min_range=-1e-5
+          max_range=3000.0
+    else if (nn == id_dicr ) then
+          bgc_trc='dicr'
           min_range=-1e-5
           max_range=3000.0
     else if (nn == id_fe ) then
@@ -2644,7 +2461,8 @@ do n = 1, instances  !{
    ind_dic = biotic(n)%ind_bgc(id_dic)
    ind_alk = biotic(n)%ind_bgc(id_alk)
    ind_caco3= biotic(n)%ind_bgc(id_caco3)
-   ind_adic = biotic(n)%ind_bgc(id_adic)
+   ind_dicp = biotic(n)%ind_bgc(id_dicp)
+   ind_dicr = biotic(n)%ind_bgc(id_dicr)
 
    ind_o2  = biotic(n)%ind_bgc(id_o2)
 
@@ -2815,16 +2633,8 @@ if (id_pco2 .gt. 0) then
   used = send_data(id_pco2, biotic(1)%pco2surf(isc:iec,jsc:jec),            &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
-if (id_paco2 .gt. 0) then
-  used = send_data(id_paco2, biotic(1)%paco2surf(isc:iec,jsc:jec),            &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
 if (id_co2_sat .gt. 0) then
   used = send_data(id_co2_sat, biotic(1)%csat_csurf(isc:iec,jsc:jec),   &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
-if (id_aco2_sat .gt. 0) then
-  used = send_data(id_aco2_sat, biotic(1)%csat_acsurf(isc:iec,jsc:jec),   &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 if (id_htotal .gt. 0) then
@@ -2867,46 +2677,6 @@ if (id_hfree_sed .gt. 0) then
   used = send_data(id_hfree_sed, biotic(1)%hfree_sed(isc:iec,jsc:jec),      &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
-if (id_ahtotal .gt. 0) then
-  used = send_data(id_ahtotal, biotic(1)%ahtotal(isc:iec,jsc:jec,:),            &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_aco3 .gt. 0) then
-  used = send_data(id_aco3, biotic(1)%aco3(isc:iec,jsc:jec,:),            &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_aco3_sed .gt. 0) then
-  used = send_data(id_aco3_sed, biotic(1)%aco3_sed(isc:iec,jsc:jec),            &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
-if (id_ahco3 .gt. 0) then
-  used = send_data(id_ahco3, biotic(1)%ahco3(isc:iec,jsc:jec,:),            &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_aomega_ara .gt. 0) then
-  used = send_data(id_aomega_ara, biotic(1)%aomega_ara(isc:iec,jsc:jec,:),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_aomega_cal .gt. 0) then
-  used = send_data(id_aomega_cal, biotic(1)%aomega_cal(isc:iec,jsc:jec,:),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_aomega_cal_sed .gt. 0) then
-  used = send_data(id_aomega_cal_sed, biotic(1)%aomega_cal_sed(isc:iec,jsc:jec),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
-if (id_ahfree .gt. 0) then
-  used = send_data(id_ahfree, biotic(1)%ahfree(isc:iec,jsc:jec,:),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
-endif
-if (id_ahtotal_sed .gt. 0) then
-  used = send_data(id_ahtotal_sed, biotic(1)%ahtotal_sed(isc:iec,jsc:jec),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
-if (id_ahfree_sed .gt. 0) then
-  used = send_data(id_ahfree_sed, biotic(1)%ahfree_sed(isc:iec,jsc:jec),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
 if (id_seddept .gt. 0) then
   used = send_data(id_seddept, biotic(1)%seddept(isc:iec,jsc:jec),      &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
@@ -2925,10 +2695,6 @@ if (id_sedsalt .gt. 0) then
 endif
 if (id_seddic .gt. 0) then
   used = send_data(id_seddic, biotic(1)%seddic(isc:iec,jsc:jec),      &
-       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
-endif
-if (id_sedadic .gt. 0) then
-  used = send_data(id_sedadic, biotic(1)%sedadic(isc:iec,jsc:jec),      &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 if (id_sedalk .gt. 0) then
@@ -3193,8 +2959,8 @@ endif
 
 ! mixed-layer-integrated quantities
 
-if (id_adic_intmld .gt. 0) then
-  used = send_data(id_adic_intmld, adic_intmld(isc:iec,jsc:jec),          &
+if (id_dicp_intmld .gt. 0) then
+  used = send_data(id_dicp_intmld, dicp_intmld(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 if (id_dic_intmld .gt. 0) then
@@ -3234,8 +3000,8 @@ if (id_radbio_intmld .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
-if (id_adic_int100 .gt. 0) then
-  used = send_data(id_adic_int100, adic_int100(isc:iec,jsc:jec),          &
+if (id_dicp_int100 .gt. 0) then
+  used = send_data(id_dicp_int100, dicp_int100(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 if (id_dic_int100 .gt. 0) then
@@ -3477,14 +3243,14 @@ if (gasx_from_file) then
 endif
 
 !RASF I think the ifdafs are redundant
-if (id_adic .gt. 0 .and. .not. use_access_co2) then
- aco2_id = init_external_field(aco2_file,                    &
-                                      aco2_name,              &
+if (id_dic .gt. 0 .and. .not. use_access_co2) then
+ co2_id = init_external_field(co2_file,                    &
+                                      co2_name,              &
                                       domain = Domain%domain2d)
- if (aco2_id .eq. 0) then  !{
+ if (co2_id .eq. 0) then  !{
    call mpp_error(FATAL, trim(error_header) //                   &
-        'Could not open aco2 file: ' //                        &
-        trim(aco2_file))
+        'Could not open co2 file: ' //                        &
+        trim(co2_file))
  endif  !}
 endif
 
@@ -3709,6 +3475,8 @@ kcoag_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
         "kcoag_dfe", domain = Domain%domain2d)
 kcoag2_dfe_id = init_external_field("INPUT/bgc_param.nc",          &
         "kcoag2_dfe", domain = Domain%domain2d)
+caco3_dynamics_id = init_external_field("INPUT/bgc_param.nc",          &
+        "caco3_dynamics", domain = Domain%domain2d)
 
 ! ---------------------------------
 !
@@ -3763,17 +3531,9 @@ id_pco2 = register_diag_field('ocean_model',                   &
      'pco2', grid%tracer_axes(1:2),                            &
      Time%model_time, 'pCO2', ' ',               &
      missing_value = -1.0e+10)
-id_paco2 = register_diag_field('ocean_model',                   &
-     'paco2', grid%tracer_axes(1:2),                            &
-     Time%model_time, 'pCO2 inc. anthropogenic', ' ',               &
-     missing_value = -1.0e+10)
 id_co2_sat = register_diag_field('ocean_model',                  &
      'co2_saturation', grid%tracer_axes(1:2),                    &
      Time%model_time, 'CO2 saturation', 'mmol/m^3',            &
-     missing_value = -1.0e+10)
-id_aco2_sat = register_diag_field('ocean_model',                  &
-     'aco2_saturation', grid%tracer_axes(1:2),                    &
-     Time%model_time, 'CO2 saturation inc. anthropogenic', 'mmol/m^3',            &
      missing_value = -1.0e+10)
 id_htotal = register_diag_field('ocean_model',                  &
      'htotal', grid%tracer_axes(1:3),                           &
@@ -3815,46 +3575,6 @@ id_htotal_sed = register_diag_field('ocean_model',               &
      'htotal_sed', grid%tracer_axes(1:2),                        &
      Time%model_time, 'H+ ion concentration at sediment interface', 'mol/L'           &
      ,missing_value = -1.0e+10)
-id_ahtotal = register_diag_field('ocean_model',                  &
-     'ahtotal', grid%tracer_axes(1:3),                           &
-     Time%model_time, 'H+ ion concentration (anthropogenic)', 'mol/L'           &
-     ,missing_value = -1.0e+10)
-id_aco3 = register_diag_field('ocean_model',                     &
-     'aco3', grid%tracer_axes(1:3),                              &
-     Time%model_time, 'Carbonate ion concentration (anthropogenic)', 'mmol/m^3' &
-     ,missing_value = -1.0e+10)
-id_aco3_sed = register_diag_field('ocean_model',                     &
-     'aco3_sed', grid%tracer_axes(1:2),                              &
-     Time%model_time, 'Carbonate ion concentration at sediment interface (anthropogenic)', 'mmol/m^3' &
-     ,missing_value = -1.0e+10)
-id_ahco3 = register_diag_field('ocean_model',                     &
-     'ahco3', grid%tracer_axes(1:3),                              &
-     Time%model_time, 'Bicarbonate ion concentration (anthropogenic)', 'mmol/m^3' &
-     ,missing_value = -1.0e+10)
-id_aomega_ara = register_diag_field('ocean_model',               &
-     'aomega_ara', grid%tracer_axes(1:3),                        &
-     Time%model_time, 'Aragonite saturation state (anthropogenic)', ' '         &
-     ,missing_value = -1.0e+10)
-id_aomega_cal = register_diag_field('ocean_model',               &
-     'aomega_cal', grid%tracer_axes(1:3),                        &
-     Time%model_time, 'Calcite saturation state (anthropogenic)', ' '           &
-     ,missing_value = -1.0e+10)
-id_aomega_cal_sed = register_diag_field('ocean_model',               &
-     'aomega_cal_sed', grid%tracer_axes(1:2),                        &
-     Time%model_time, 'Calcite saturation state at sediment interface (anthropogenic)', ' '       &
-     ,missing_value = -1.0e+10)
-id_ahfree = register_diag_field('ocean_model',               &
-     'ahfree', grid%tracer_axes(1:3),                        &
-     Time%model_time, 'H+ ion concentration (free scale) (anthropogenic)', 'mol/L'           &
-     ,missing_value = -1.0e+10)
-id_ahfree_sed = register_diag_field('ocean_model',               &
-     'ahfree_sed', grid%tracer_axes(1:2),                        &
-     Time%model_time, 'H+ ion concentration (free scale) at sediment interface', 'mol/L'           &
-     ,missing_value = -1.0e+10)
-id_ahtotal_sed = register_diag_field('ocean_model',               &
-     'ahtotal_sed', grid%tracer_axes(1:2),                        &
-     Time%model_time, 'H+ ion concentration at sediment interface', 'mol/L'           &
-     ,missing_value = -1.0e+10)
 id_seddept = register_diag_field('ocean_model',               &
      'seddept', grid%tracer_axes(1:2),                        &
      Time%model_time, 'Depth at sediment interface', 'm'           &
@@ -3874,10 +3594,6 @@ id_sedsalt = register_diag_field('ocean_model',               &
 id_seddic = register_diag_field('ocean_model',               &
      'seddic', grid%tracer_axes(1:2),                        &
      Time%model_time, 'DIC at sediment interface', 'mmol/m3'           &
-     ,missing_value = -1.0e+10)
-id_sedadic = register_diag_field('ocean_model',               &
-     'sedadic', grid%tracer_axes(1:2),                        &
-     Time%model_time, 'DIC (anthropogenic) at sediment interface', 'mmol/m3'           &
      ,missing_value = -1.0e+10)
 id_sedalk = register_diag_field('ocean_model',               &
      'sedalk', grid%tracer_axes(1:2),                        &
@@ -3903,13 +3619,13 @@ id_light_limit = register_diag_field('ocean_model','light_limit', &
      grid%tracer_axes(1:2),Time%model_time, 'Integrated light limitation of phytoplankton growth', &
      ' ',missing_value = -1.0e+10)
 
-id_adic_intmld = register_diag_field('ocean_model','adic_intmld', &
+id_dicp_intmld = register_diag_field('ocean_model','dicp_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
-     'MLD-integrated natural + anthropogenic dissolved inorganic carbon', &
+     'MLD-integrated preformed dissolved inorganic carbon', &
      'mmol/m^2',missing_value = -1.0e+10)
 id_dic_intmld = register_diag_field('ocean_model','dic_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
-     'MLD-integrated natural dissolved inorganic carbon', &
+     'MLD-integrated dissolved inorganic carbon', &
      'mmol/m^2',missing_value = -1.0e+10)     
 id_o2_intmld = register_diag_field('ocean_model','o2_intmld', &
      grid%tracer_axes(1:2),Time%model_time, &
@@ -3944,9 +3660,9 @@ id_radbio_intmld = register_diag_field('ocean_model','radbio_intmld', &
      'MLD-integrated photosynthetically active radiation for phytoplankton growth', &
      'W m-1',missing_value = -1.0e+10)     
 
-id_adic_int100 = register_diag_field('ocean_model','adic_int100', &
+id_dicp_int100 = register_diag_field('ocean_model','dicp_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
-     '100m-integrated natural + anthropogenic dissolved inorganic carbon', &
+     '100m-integrated preformed dissolved inorganic carbon', &
      'mmol/m^2',missing_value = -1.0e+10)
 id_dic_int100 = register_diag_field('ocean_model','dic_int100', &
      grid%tracer_axes(1:2),Time%model_time, &
@@ -4250,11 +3966,7 @@ id_detsi_sed_bury = register_diag_field('ocean_model','detsi_sed_bury', &
      'mmolSi/m^2/s',missing_value = -1.0e+10)
 
 id_total_co2_flux = register_diag_field('ocean_model','total_co2_flux', &
-     Time%model_time, 'Total surface flux of inorganic C (natural) into ocean', &
-     'Pg/yr',missing_value = -1.0e+30)
-
-id_total_aco2_flux = register_diag_field('ocean_model','total_aco2_flux', &
-     Time%model_time, 'Total surface flux of inorganic C (natural + anthropogenic) into ocean', &
+     Time%model_time, 'Total surface flux of CO2 into ocean', &
      'Pg/yr',missing_value = -1.0e+30)
 
 do n = 1, instances  !{
@@ -4364,16 +4076,22 @@ do n = 1, instances  !{
    name4 = 'Flux into sediment - phosphate'
   endif
   if (nn .eq. id_dic) then 
-   name1 = 'Flux into ocean - DIC, PI'
-   name2 = 'Virtual flux into ocean - DIC, PI'
-   name3 = 'Source term - DIC, PI'
-   name4 = 'Flux into sediment - DIC, PI'
+   name1 = 'Flux into ocean - DIC'
+   name2 = 'Virtual flux into ocean - DIC'
+   name3 = 'Source term - DIC'
+   name4 = 'Flux into sediment - DIC'
   endif
-  if (nn .eq. id_adic) then 
-   name1 = 'Flux into ocean - DIC, inc. anth.'
-   name2 = 'Virtual flux into ocean - DIC, inc. anth.'
-   name3 = 'Source term - DIC, inc. anth.'
-   name4 = 'Flux into sediment - DIC, inc. anth.'
+  if (nn .eq. id_dicp) then 
+   name1 = 'Flux into ocean - DICpre.'
+   name2 = 'Virtual flux into ocean - DICpre'
+   name3 = 'Source term - DICpre'
+   name4 = 'Flux into sediment - DICpre'
+  endif
+  if (nn .eq. id_dicr) then 
+   name1 = 'Flux into ocean - DICremin.'
+   name2 = 'Virtual flux into ocean - DICremin'
+   name3 = 'Source term - DICremin'
+   name4 = 'Flux into sediment - DICremin'
   endif
   if (nn .eq. id_alk) then 
    name1 = 'Flux into ocean - alkalinity'
@@ -4505,7 +4223,7 @@ enddo  !} n
 do n = 1, instances  !{
  biotic(n)%sal_global=34.6
  if (id_dic.gt.0) biotic(n)%bgc_global(id_dic)=1966.
- if (id_adic.gt.0) biotic(n)%bgc_global(id_adic)=1966.
+ if (id_dicp.gt.0) biotic(n)%bgc_global(id_dicp)=1966.
  if (id_alk.gt.0) biotic(n)%bgc_global(id_alk)=2303.
  if (id_no3.gt.0) biotic(n)%bgc_global(id_no3)=4.67
 enddo

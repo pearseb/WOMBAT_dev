@@ -696,7 +696,7 @@ do n = 1, instances  !{
   mes_2det(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
   nsp3d(:,:,:) = 0.0
-  adic_intmld(:,:) = 0.0
+  dicp_intmld(:,:) = 0.0
   dic_intmld(:,:) = 0.0
   o2_intmld(:,:) = 0.0
   no3_intmld(:,:) = 0.0
@@ -706,7 +706,7 @@ do n = 1, instances  !{
   pprod_gross_intmld(:,:) = 0.0
   npp_intmld(:,:) = 0.0
   radbio_intmld(:,:) = 0.0
-  adic_int100(:,:) = 0.0
+  dicp_int100(:,:) = 0.0
   dic_int100(:,:) = 0.0
   o2_int100(:,:) = 0.0
   no3_int100(:,:) = 0.0
@@ -760,7 +760,7 @@ do n = 1, instances  !{
   ind_dic  = biotic(n)%ind_bgc(id_dic)      ! mmol DIC / m3
   ind_alk  = biotic(n)%ind_bgc(id_alk)      ! mmol Eq / m3
   ind_caco3= biotic(n)%ind_bgc(id_caco3)    ! mmol C / m3
-  ind_adic = biotic(n)%ind_bgc(id_adic)     ! mmol DIC / m3
+  ind_dicp = biotic(n)%ind_bgc(id_dicp)     ! mmol DIC / m3
   ind_phy  = biotic(n)%ind_bgc(id_phy)      ! mmol C / m3
   ind_dia  = biotic(n)%ind_bgc(id_dia)      ! mmol C / m3
   ind_diz  = biotic(n)%ind_bgc(id_diz)      ! mmol C / m3
@@ -2118,7 +2118,7 @@ do n = 1, instances  !{
            t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe) 
            t_prog(ind_pocfe)%field(i,j,k,time%taum1) = biotr(i,k,id_pocfe) 
            t_prog(ind_pocsi)%field(i,j,k,time%taum1) = biotr(i,k,id_pocsi)
-           t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
+           t_prog(ind_dicp)%field(i,j,k,time%taum1) = t_prog(ind_dicp)%field(i,j,k,time%taum1) +   &
                                                       122./16. * (nh4_bgc_change + no3_bgc_change) &
                                                       - caco3_bgc_change 
            t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +     &  
@@ -2153,7 +2153,7 @@ do n = 1, instances  !{
 
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
-             adic_intmld(i,j)= adic_intmld(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+             dicp_intmld(i,j)= dicp_intmld(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
              dic_intmld(i,j) = dic_intmld(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
              o2_intmld(i,j)  = o2_intmld(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
              no3_intmld(i,j) = no3_intmld(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
@@ -2166,7 +2166,7 @@ do n = 1, instances  !{
              light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
            endif
            if (Grid%zw(k) .le. 100) then
-             adic_int100(i,j)= adic_int100(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+             dicp_int100(i,j)= dicp_int100(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
              dic_int100(i,j) = dic_int100(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
              o2_int100(i,j)  = o2_int100(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
              no3_int100(i,j) = no3_int100(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)

@@ -421,6 +421,7 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
   call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
   call time_interp_external(kcoag_dfe_id, time%model_time, kcoag_dfe) !Rate of dFe colloidal coagulation (dFe-->detritus)
+  call time_interp_external(caco3_dynamics_id, time%model_time, caco3_dynamics) !Dynamic CaCO3 feedbacks?
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -488,8 +489,8 @@ do n = 1, instances  !{
   phy_size(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
   nsp3d(:,:,:) = 0.0
-  adic_intmld(:,:) = 0.0
   dic_intmld(:,:) = 0.0
+  dicp_intmld(:,:) = 0.0
   o2_intmld(:,:) = 0.0
   no3_intmld(:,:) = 0.0
   fe_intmld(:,:) = 0.0
@@ -498,7 +499,7 @@ do n = 1, instances  !{
   pprod_gross_intmld(:,:) = 0.0
   npp_intmld(:,:) = 0.0
   radbio_intmld(:,:) = 0.0
-  adic_int100(:,:) = 0.0
+  dicp_int100(:,:) = 0.0
   dic_int100(:,:) = 0.0
   o2_int100(:,:) = 0.0
   no3_int100(:,:) = 0.0
@@ -539,7 +540,8 @@ do n = 1, instances  !{
   ind_dic  = biotic(n)%ind_bgc(id_dic)      ! mmol DIC / m3
   ind_alk  = biotic(n)%ind_bgc(id_alk)      ! mmol Eq / m3
   ind_caco3= biotic(n)%ind_bgc(id_caco3)    ! mmol C / m3
-  ind_adic = biotic(n)%ind_bgc(id_adic)     ! mmol DIC / m3
+  ind_dicp = biotic(n)%ind_bgc(id_dicp)     ! mmol DIC / m3
+  ind_dicr = biotic(n)%ind_bgc(id_dicr)     ! mmol DIC / m3
   ind_phy  = biotic(n)%ind_bgc(id_phy)      ! mmol C / m3
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)      ! mmol C / m3
   ind_det  = biotic(n)%ind_bgc(id_det)      ! mmol C / m3
@@ -580,6 +582,7 @@ do n = 1, instances  !{
           biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
           biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
           biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
+          biotr(i,k,id_dicr) = max(0.0,t_prog(ind_dicr)%field(i,j,k,Time%taum1)) 
 
          enddo ! i
        enddo ! k
@@ -874,7 +877,7 @@ do n = 1, instances  !{
              fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
-             if (biotic(n)%ahtotal(i,j,k).gt.0.0) hp = biotic(n)%ahtotal(i,j,k) * 1.0
+             if (biotic(n)%htotal(i,j,k).gt.0.0) hp = biotic(n)%htotal(i,j,k) * 1.0
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
              precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
@@ -1090,20 +1093,30 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 
-             ! PIC:POC ratio is a function of the substrate:inhibitor ratio, which is the HCO3-
-             ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
-             ! We also add a T-dependent function to scale down CaCO3 production in waters colder
-             ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
-             pic2poc(i,j,k) = min(0.2, (f_inorg(i,j) + 10**(-3.0 + 4.31 * &
-                              (biotic(n)%ahco3(i,j,k)*1e-3) / (biotic(n)%ahfree(i,j,k)*1e9 + epsi)) &
-                              ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0)))
+             if (caco3_dynamics(i,j).gt.0.0) then
 
-             ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
-             ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
-             diss_cal = (0.253 * max(0.0, 1.0 - biotic(n)%aomega_cal(i,j,k))**2.2) / 86400.0
-             diss_ara = (0.090 * max(0.0, 1.0 - biotic(n)%aomega_ara(i,j,k))**1.5) / 86400.0
-             diss_det = (0.500 * biodet * fbc * detlrem(i,j))
-             caco3dis(i,j,k) = caco3rem(i,j) + diss_cal + diss_ara + diss_det 
+               ! PIC:POC ratio is a function of the substrate:inhibitor ratio, which is the HCO3-
+               ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
+               ! We also add a T-dependent function to scale down CaCO3 production in waters colder
+               ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
+               pic2poc(i,j,k) = min(0.2, (f_inorg(i,j) + 10**(-3.0 + 4.31 * &
+                                (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e9 + epsi)) &
+                                ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0)))
+
+               ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
+               ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
+               diss_cal = (0.253 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
+               diss_ara = (0.090 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
+               diss_det = (0.500 * biodet * fbc * detlrem(i,j))
+               caco3dis(i,j,k) = diss_cal + diss_ara + diss_det
+
+             else
+               
+               pic2poc(i,j,k) = f_inorg(i,j) + 0.025
+               caco3dis(i,j,k) = caco3rem(i,j)
+
+             endif
+
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1220,6 +1233,14 @@ do n = 1, instances  !{
              ! DIC equation !
              !!!!!!!!!!!!!!!!
              biotr(i,k,id_dic)  = biotr(i,k,id_dic) + dtsb * ( f41det + f51                        &
+                                                              + z31 + f22phy                       & 
+                                                            + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
+                                                              - f11phy                             &
+                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*pic2poc(i,j,k) )
+             !!!!!!!!!!!!!!!!!!!!!
+             ! DICremin equation !
+             !!!!!!!!!!!!!!!!!!!!!
+             biotr(i,k,id_dicr)  = biotr(i,k,id_dicr) + dtsb * ( f41det + f51                      &
                                                               + z31 + f22phy                       & 
                                                             + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
                                                               - f11phy                             &
@@ -1345,10 +1366,9 @@ do n = 1, instances  !{
            t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
            t_prog(ind_dic)%field(i,j,k,time%taum1) = biotr(i,k,id_dic) 
+           t_prog(ind_dicr)%field(i,j,k,time%taum1) = biotr(i,k,id_dicr)
            t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
            t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
-           t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
-                                                      122./16. * no3_bgc_change - caco3_bgc_change
            t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +     &
                                                      ( -2.0 * caco3_bgc_change - no3_bgc_change )
            t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl)
@@ -1378,7 +1398,7 @@ do n = 1, instances  !{
   
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
-              adic_intmld(i,j)= adic_intmld(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+              dicp_intmld(i,j)= dicp_intmld(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
               dic_intmld(i,j) = dic_intmld(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
               o2_intmld(i,j)  = o2_intmld(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
               no3_intmld(i,j) = no3_intmld(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
@@ -1391,7 +1411,7 @@ do n = 1, instances  !{
               light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
            endif
            if (Grid%zw(k) .le. 100) then
-              adic_int100(i,j)= adic_int100(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+              dicp_int100(i,j)= dicp_int100(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
               dic_int100(i,j) = dic_int100(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
               o2_int100(i,j)  = o2_int100(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
               no3_int100(i,j) = no3_int100(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
