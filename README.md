@@ -48,7 +48,7 @@ Fourth, now we set up the new WOMBAT.
 11. copy bio_v3.inc, bio_v4.inc, csiro_bgc.F90 and ocmip2_co2calc.F90 from this repository into your source code under the /access-om2/src/mom/src/mom5/ocean_csiro_bgc/ directory
 12. _install.sh_
 13. make a new run directory
-14. download the input_files and ocean_files included here. Put the input_files in your home directory. Put the ocean_files in your rundirectory/ocean/ directory.
+14. download the input_files by emailing me (see bottom) and ocean_files included here. Put the input_files in your home directory. Put the ocean_files in your rundirectory/ocean/ directory.
 15. modify the config.yaml file in the run directory to point to your new executable (step 12) and the WOMBAT-lite inputs that were placed somewhere in your home directory (step 14)
 16. _payu sweep; payu setup_
 17. check that all files are present in the newly created _work_ directory
