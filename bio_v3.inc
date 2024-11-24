@@ -859,7 +859,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
              !!! THINGS NEEDING TO BE DONE:
              !!!   - Variable ligand concentration rather than constant?
-             !!!
+             !!!   - Al's authigenic colloidal dFe shunt (Tagliabue et al., 2023 Nature)
 
              ! 1. Determine equilibrium fractionation of total dFe into Fe` and L-Fe
              ligand = 0.7  ! nM ligand concentration
@@ -1107,7 +1107,7 @@ do n = 1, instances  !{
                ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
                diss_cal = (0.253 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
                diss_ara = (0.090 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
-               diss_det = (0.500 * biodet * fbc * detlrem(i,j))
+               diss_det = (0.250 * biodet * fbc * detlrem(i,j))
                caco3dis(i,j,k) = diss_cal + diss_ara + diss_det
 
              else

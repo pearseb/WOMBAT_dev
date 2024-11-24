@@ -1130,7 +1130,7 @@ logical  :: used
          biotic(n)%det_sed_bury(i,j) = biotic(n)%det_sed_depst(i,j) * burfac
          biotic(n)%detfe_sed_bury(i,j) = biotic(n)%detfe_sed_depst(i,j) * burfac
          biotic(n)%detsi_sed_bury(i,j) = biotic(n)%detsi_sed_depst(i,j) * burfac
-         biotic(n)%caco3_sed_bury(i,j) = biotic(n)%caco3_sed_depst(i,j) * burfac
+         biotic(n)%caco3_sed_bury(i,j) = biotic(n)%caco3_sed_depst(i,j) * min(1.0, burfac*2.0)
 
          ! Denitrification (proportion of organic carbon that is consumed by denitrifiers)
          !  Metamodel of Middelburg et al. 1996 
