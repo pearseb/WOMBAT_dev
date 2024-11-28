@@ -192,6 +192,7 @@ real :: zoo_slmor                       ! Scaler [0-1] to depress linear zooopla
 real :: u_phy                           ! Realised growth rate of nanophytoplankton (nutrients & light limitations)
 real :: g_zoo                           ! Realised grazing rate of microzooplankton
 real :: zooprey                         ! Total prey biomass for microzooplankton
+real :: epszoo                          ! Variable prey capture rate coefficient
 real :: fbc                             ! Heterotrophic temperature-dependence function
 real :: mumax_phy(isc:iec,grid%nk)      ! Maximum potential (T-dependent) growth rate of nanophytoplankton
 real :: mu_phy(isc:iec,grid%nk)         ! Realised growth rate of nanophytoplankton (light limitation)
@@ -393,7 +394,8 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(phyqmor_id, time%model_time, phyqmor)   !Phytoplankton quadratic mortality
   call time_interp_external(zooassi_id, time%model_time, zooassi)   !Zooplankton assimilation efficiency
   call time_interp_external(zoogmax_id, time%model_time, zoogmax)   !Zooplankton max grazing rate
-  call time_interp_external(epszoo_id, time%model_time, epszoo)     !Zooplankton prey capture rate
+  call time_interp_external(epszoomin_id, time%model_time, epszoomin) !Zooplankton prey capture rate
+  call time_interp_external(epszoomax_id, time%model_time, epszoomax) !Zooplankton prey capture rate
   call time_interp_external(zprefphy_id, time%model_time, zprefphy) !Zooplankton preference for phytoplankton
   call time_interp_external(zprefdet_id, time%model_time, zprefdet) !Zooplankton preference for Det
   call time_interp_external(zooqmor_id, time%model_time, zooqmor)   !Zooplankton quadratic mortality
@@ -1053,8 +1055,10 @@ do n = 1, instances  !{
 
              ! preferences and prey availability
              zooprey = zprefphy(i,j)*biophy_min + zprefdet(i,j)*biodet_min
-             g_zoo = zoogmax(i,j)*fbc * epszoo(i,j) * zooprey*zooprey /                            & 
-                     ( zoogmax(i,j)*fbc + epszoo(i,j) * zooprey*zooprey + epsi )
+             epszoo = epszoomin(i,j) + (epszoomax(i,j) - epszoomin(i,j)) /                         &
+                                       (1.0 + exp(5.0*(biophy - 2.*phybiot(i,j))))
+             g_zoo = zoogmax(i,j)*fbc * epszoo * zooprey*zooprey /                                 & 
+                     ( zoogmax(i,j)*fbc + epszoo * zooprey*zooprey + epsi )
 
 
 !--------------------------------------------------------------------------------------------------!

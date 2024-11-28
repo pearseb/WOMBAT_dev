@@ -561,8 +561,10 @@ integer                                 :: zoogmax_id
 real, allocatable, dimension(:,:)       :: zoogmax
 integer                                 :: mesgmax_id
 real, allocatable, dimension(:,:)       :: mesgmax
-integer                                 :: epszoo_id
-real, allocatable, dimension(:,:)       :: epszoo
+integer                                 :: epszoomin_id
+real, allocatable, dimension(:,:)       :: epszoomin
+integer                                 :: epszoomax_id
+real, allocatable, dimension(:,:)       :: epszoomax
 integer                                 :: epsmes_id
 real, allocatable, dimension(:,:)       :: epsmes
 integer                                 :: zprefphy_id
@@ -926,7 +928,8 @@ allocate( phyqmor(isd:ied,jsd:jed) )
 allocate( zooassi(isd:ied,jsd:jed) )
 allocate( zoogmax(isd:ied,jsd:jed) )
 allocate( mesgmax(isd:ied,jsd:jed) )
-allocate( epszoo(isd:ied,jsd:jed) )
+allocate( epszoomin(isd:ied,jsd:jed) )
+allocate( epszoomax(isd:ied,jsd:jed) )
 allocate( epsmes(isd:ied,jsd:jed) )
 allocate( zprefphy(isd:ied,jsd:jed) )
 allocate( zprefdia(isd:ied,jsd:jed) )
@@ -3409,8 +3412,10 @@ zoogmax_id = init_external_field("INPUT/bgc_param.nc",          &
         "zoogmax", domain = Domain%domain2d)
 mesgmax_id = init_external_field("INPUT/bgc_param.nc",          &
         "mesgmax", domain = Domain%domain2d)
-epszoo_id = init_external_field("INPUT/bgc_param.nc",          &
-        "epszoo", domain = Domain%domain2d)
+epszoomin_id = init_external_field("INPUT/bgc_param.nc",          &
+        "epszoomin", domain = Domain%domain2d)
+epszoomax_id = init_external_field("INPUT/bgc_param.nc",          &
+        "epszoomax", domain = Domain%domain2d)
 epsmes_id = init_external_field("INPUT/bgc_param.nc",          &
         "epsmes", domain = Domain%domain2d)
 zprefphy_id = init_external_field("INPUT/bgc_param.nc",          &

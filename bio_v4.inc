@@ -588,7 +588,7 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(zooassi_id, time%model_time, zooassi)   !Zooplankton assimilation efficiency
   call time_interp_external(zoogmax_id, time%model_time, zoogmax)   !Zooplankton max grazing rate
   call time_interp_external(mesgmax_id, time%model_time, mesgmax)   !Mesozooplankton max grazing rate
-  call time_interp_external(epszoo_id, time%model_time, epszoo)     !Zooplankton prey capture rate
+  call time_interp_external(epszoomax_id, time%model_time, epszoomax)     !Zooplankton prey capture rate
   call time_interp_external(epsmes_id, time%model_time, epsmes)     !Mesozooplankton prey capture rate
   call time_interp_external(zprefphy_id, time%model_time, zprefphy) !Zooplankton preference for phytoplankton
   call time_interp_external(zprefdia_id, time%model_time, zprefdia) !Zooplankton preference for microphytoplankton
@@ -1577,8 +1577,8 @@ do n = 1, instances  !{
                        + mprefdet(i,j)*biodet_min + mprefpoc(i,j)*biopoc_min                       &
                        + mprefzoo(i,j)*biozoo_min + mprefdiz(i,j)*biodiz_min
 
-             g_zoo = zoogmax(i,j)*fbc * epszoo(i,j) * zooprey*zooprey /                            &
-                     ( zoogmax(i,j)*fbc + epszoo(i,j) * zooprey*zooprey )
+             g_zoo = zoogmax(i,j)*fbc * epszoomax(i,j) * zooprey*zooprey /                            &
+                     ( zoogmax(i,j)*fbc + epszoomax(i,j) * zooprey*zooprey )
              g_mes = mesgmax(i,j)*fbc * epsmes(i,j) * mesprey*mesprey /                            &
                      ( mesgmax(i,j)*fbc + epsmes(i,j) * mesprey*mesprey )
 
