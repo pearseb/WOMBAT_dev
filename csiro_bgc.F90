@@ -353,6 +353,17 @@ integer                                 :: id_npp2d = -1
 integer                                 :: id_npp3d = -1
 integer                                 :: id_nsp3d = -1
 integer                                 :: id_pprod_gross = -1
+integer                                 :: id_detremin = -1
+integer                                 :: id_phylmort = -1
+integer                                 :: id_zoolmort = -1
+integer                                 :: id_phyqmort = -1
+integer                                 :: id_zooqmort = -1
+integer                                 :: id_zooexcre = -1
+integer                                 :: id_zoograzp = -1
+integer                                 :: id_zoograzd = -1
+integer                                 :: id_zooslopp = -1
+integer                                 :: id_calcdiss = -1
+integer                                 :: id_calcprod = -1
 integer                                 :: id_pprod_gross_2d = -1
 integer                                 :: id_zprod_gross = -1
 integer                                 :: id_mprod_gross = -1
@@ -371,6 +382,9 @@ integer                                 :: id_caco3_sed_bury, id_det_sed_bury, i
 integer                                 :: id_det_sed_denit
 integer                                 :: id_detsi_sed_depst, id_detsi_sed_bury, id_detsi_sed_remin
 integer                                 :: id_total_aco2_flux, id_total_co2_flux
+integer                                 :: id_total_alk, id_total_dic, id_total_caco3, id_total_adic
+integer                                 :: id_total_no3, id_total_o2, id_total_fe
+integer                                 :: id_total_phy, id_total_zoo, id_total_det
 real, allocatable, dimension(:,:)       :: kw_co2 
 real, allocatable, dimension(:,:)       :: kw_o2
 real, allocatable, dimension(:,:)       :: patm_t
@@ -448,9 +462,9 @@ real, allocatable, dimension(:,:,:) :: wdet
 real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
-                                       zoo_grazpres, mes_grazpres,                                 &
-                                       phy_KN, phy_KFe,                                            &
-                                       phy_Felimit, dia_Felimit, diz_Felimit,                      & 
+                                       zoo_grazpres, mes_grazpres, phylmort, zoolmort, zooexcre, zooslopp, &
+                                       phy_KN, phy_KFe, detremin, phyqmort, zooqmort, calcdiss, calcprod,  &
+                                       phy_Felimit, dia_Felimit, diz_Felimit, zoograzp, zoograzd,          & 
                                        phy_Nlimit, dia_Nlimit, diz_Nlimit,                         &
                                        phy_Plimit, dia_Plimit, diz_Plimit,                         &
                                        dia_Silimit, dia_SiCupta, nitrific, denitrif, diazofix,     &
@@ -618,7 +632,7 @@ real, allocatable, dimension(:,:)       :: knano_dfe
 
 
 ! for extra restart file(s)
-integer                          :: id_restart(4)=0
+integer                          :: id_restart(9)=0
 type(restart_file_type), save    :: sed_restart
 
 
@@ -747,6 +761,17 @@ allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
 allocate( mprod_gross(isc:iec,jsc:jec,nk) )
+allocate( detremin(isc:iec,jsc:jec,nk) )
+allocate( phylmort(isc:iec,jsc:jec,nk) )
+allocate( zoolmort(isc:iec,jsc:jec,nk) )
+allocate( phyqmort(isc:iec,jsc:jec,nk) )
+allocate( zooqmort(isc:iec,jsc:jec,nk) )
+allocate( zoograzp(isc:iec,jsc:jec,nk) )
+allocate( zoograzd(isc:iec,jsc:jec,nk) )
+allocate( zooexcre(isc:iec,jsc:jec,nk) )
+allocate( zooslopp(isc:iec,jsc:jec,nk) )
+allocate( calcdiss(isc:iec,jsc:jec,nk) )
+allocate( calcprod(isc:iec,jsc:jec,nk) )
 allocate( zeuphot(isc:iec,jsc:jec) )
 allocate( chlorophyll(isc:iec,jsc:jec) )
 allocate( phy_KN(isc:iec,jsc:jec,nk) )
@@ -953,6 +978,11 @@ do n = 1, instances  !{
   biotic(n)%det_sediment(:,:) = 0.0
   biotic(n)%detfe_sediment(:,:) = 0.0
   biotic(n)%detsi_sediment(:,:) = 0.0
+  biotic(n)%caco3_sed_depst(:,:) = 0.0
+  biotic(n)%det_sed_depst(:,:) = 0.0
+  biotic(n)%detfe_sed_depst(:,:) = 0.0
+  biotic(n)%detsi_sed_depst(:,:) = 0.0
+  biotic(n)%det_sed_denit(:,:) = 0.0
 enddo  !} n
 
 return
@@ -1107,11 +1137,12 @@ logical  :: used
          if (id_alk.gt.0) then
            if (id_nh4.gt.0) then
              T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                &
-                                                     + T_prog(ind_nh4)%btf(i,j)                      &
-                                                     - T_prog(ind_no3)%btf(i,j)
+                                         -1.0 * rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)       &
+                                         -1.0 * rho0 * biotic(n)%det_sed_denit(i,j)
            else
-             T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                  &
-                                                     - T_prog(ind_no3)%btf(i,j)
+             T_prog(ind_alk)%btf(i,j)  = -2.0 * rho0 * biotic(n)%caco3_sed_remin(i,j)                &
+                                         +1.0 * rho0 * 16./122. * biotic(n)%det_sed_remin(i,j)       &
+                                         -1.0 * rho0 * biotic(n)%det_sed_denit(i,j)
            endif
          endif
 
@@ -1273,6 +1304,11 @@ do n = 1, instances  !{
   call reset_field_pointer(sed_restart, id_restart(2), biotic(n)%det_sediment(:,:))
   call reset_field_pointer(sed_restart, id_restart(3), biotic(n)%detfe_sediment(:,:))
   call reset_field_pointer(sed_restart, id_restart(4), biotic(n)%detsi_sediment(:,:))
+  call reset_field_pointer(sed_restart, id_restart(5), biotic(n)%caco3_sed_depst(:,:))
+  call reset_field_pointer(sed_restart, id_restart(6), biotic(n)%det_sed_depst(:,:))
+  call reset_field_pointer(sed_restart, id_restart(7), biotic(n)%detfe_sed_depst(:,:))
+  call reset_field_pointer(sed_restart, id_restart(8), biotic(n)%detsi_sed_depst(:,:))
+  call reset_field_pointer(sed_restart, id_restart(9), biotic(n)%det_sed_denit(:,:))
 
   call save_restart(sed_restart)
 
@@ -1316,7 +1352,7 @@ real, intent(in), dimension(isd:ied,jsd:jed), optional          :: atm_co2
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: co2flux
 real, intent(out), dimension(isd:ied,jsd:jed), optional         :: sfc_co2
 real, dimension(isd:ied,jsd:jed)                                :: totdenit
-real :: total_co2_flux, total_aco2_flux
+real :: total_co2_flux, total_aco2_flux, proxfix
 logical :: used
 
 !-----------------------------------------------------------------------
@@ -1684,7 +1720,7 @@ if (id_dic.gt.0) then
        biotic(n)%csat(i,j) = biotic(n)%pco2atm(i,j) / 1e6 * biotic(n)%alpha(i,j) * patm_t(i,j)
        biotic(n)%csat_csurf(i,j) = biotic(n)%csat(i,j) - biotic(n)%csurf(i,j)
        
-       t_prog(ind_dic)%stf(i,j) = rho0 * kw_co2(i,j) *        &
+       t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * kw_co2(i,j) *        &
         biotic(n)%csat_csurf(i,j)*1e3 !convert from  mol/m^3 to mmol/m^3
 
        total_co2_flux = total_co2_flux + kw_co2(i,j) *        &
@@ -1716,7 +1752,7 @@ if (id_adic.gt.0) then
        biotic(n)%csat(i,j) = biotic(n)%paco2atm(i,j) / 1e6 * biotic(n)%alpha(i,j) * patm_t(i,j)
        biotic(n)%csat_acsurf(i,j) = biotic(n)%csat(i,j) - biotic(n)%acsurf(i,j)
        
-       t_prog(ind_adic)%stf(i,j) = rho0 * kw_co2(i,j) *        &
+       t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * kw_co2(i,j) *        &
         biotic(n)%csat_acsurf(i,j)*1e3 !convert from  mol/m^3 to mmol/m^3
 
        total_aco2_flux = total_aco2_flux + kw_co2(i,j) *        &
@@ -1753,7 +1789,7 @@ if (id_o2.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
-        t_prog(ind_o2)%stf(i,j) =   rho0 *     kw_o2(i,j) *        &
+        t_prog(ind_o2)%stf(i,j) = t_prog(ind_o2)%stf(i,j) + rho0 * kw_o2(i,j) *        &
             (o2_saturation(i,j) * patm_t(i,j) -                     &
              t_prog(ind_o2)%field(i,j,1,time%taum1))
       enddo  !} i
@@ -1767,7 +1803,7 @@ if (id_fe.gt.0) then
   do n = 1, instances  !{
     do j = jsc, jec  !{
       do i = isc, iec  !{
-        t_prog(ind_fe)%stf(i,j) =  rho0 * dust_t(i,j)
+        t_prog(ind_fe)%stf(i,j) = t_prog(ind_fe)%stf(i,j) + rho0 * dust_t(i,j)
       enddo  !} i
     enddo  !} j
   enddo  !} n
@@ -1780,22 +1816,23 @@ do n = 1, instances  !{
       ! River input should be in mmol/m2/s
       !  rho0 = 1035.0  (must be needed for the flux calculation)
       if (id_nh4.gt.0) then
-        t_prog(ind_nh4)%stf(i,j) =  rho0 * rivdon_t(i,j)
-        t_prog(ind_no3)%stf(i,j) =  rho0 * rivdin_t(i,j)
+        t_prog(ind_nh4)%stf(i,j) = t_prog(ind_nh4)%stf(i,j) + rho0 * rivdon_t(i,j)
+        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + rho0 * rivdin_t(i,j)
       else
-        t_prog(ind_no3)%stf(i,j) =  rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
+        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + rho0 * ( rivdin_t(i,j) + rivdon_t(i,j) )
       endif
       if (id_po4.gt.0) then
-        t_prog(ind_po4)%stf(i,j) =  rho0 * rivdip_t(i,j)
+        t_prog(ind_po4)%stf(i,j) = t_prog(ind_po4)%stf(i,j) + rho0 * rivdip_t(i,j)
       endif
       if (id_sil.gt.0) then
-        t_prog(ind_sil)%stf(i,j) =  rho0 * rivdsi_t(i,j)
+        t_prog(ind_sil)%stf(i,j) = t_prog(ind_sil)%stf(i,j) + rho0 * rivdsi_t(i,j)
       endif
       t_prog(ind_dic)%stf(i,j) = t_prog(ind_dic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
       if (id_adic.gt.0) then
         t_prog(ind_adic)%stf(i,j) = t_prog(ind_adic)%stf(i,j) + rho0 * (rivdic_t(i,j)+rivdoc_t(i,j))
       endif
-      t_prog(ind_alk)%stf(i,j) =  rho0 * (rivdic_t(i,j)-rivdoc_t(i,j)-rivdin_t(i,j)-rivdon_t(i,j))
+      t_prog(ind_alk)%stf(i,j) = t_prog(ind_alk)%stf(i,j) + rho0 * &
+                                 (rivdic_t(i,j)-rivdoc_t(i,j)-rivdin_t(i,j)-rivdon_t(i,j))
       !! dFe flux from rivers (ratio of carbon input (5.3e-4) and then converted to umol m-2 s-1)
       !if (id_fe.gt.0) then
       !  t_prog(ind_fe)%stf(i,j) = t_prog(ind_fe)%stf(i,j) +                                        &
@@ -1816,10 +1853,12 @@ do n = 1, instances  !{
       totdenit(i,j) = biotic(n)%det_sed_denit(i,j) * grid%dat(i,j) * grid%tmask(i,j,1)
     enddo  !} i
   enddo  !} j
+  proxfix = sum(totdenit(:,:)) / (sum(grid%dat(:,:) * grid%tmask(:,:,1)))
   do j = jsc, jec  !{
     do i = isc, iec  !{
       if (grid%tmask(i,j,1).gt.0.0) then
-        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + sum(totdenit) / sum(grid%dat) * rho0
+        t_prog(ind_no3)%stf(i,j) = t_prog(ind_no3)%stf(i,j) + proxfix * rho0
+        t_prog(ind_alk)%stf(i,j) = t_prog(ind_alk)%stf(i,j) - proxfix * rho0
       endif
     enddo  !} i
   enddo  !} j
@@ -2652,6 +2691,51 @@ if (id_pprod_gross .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
+if (id_detremin .gt. 0) then
+  used = send_data(id_detremin, detremin(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_phylmort .gt. 0) then
+  used = send_data(id_phylmort, phylmort(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoolmort .gt. 0) then
+  used = send_data(id_zoolmort, zoolmort(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoograzp .gt. 0) then
+  used = send_data(id_zoograzp, zoograzp(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoograzd .gt. 0) then
+  used = send_data(id_zoograzd, zoograzd(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zooexcre .gt. 0) then
+  used = send_data(id_zooexcre, zooexcre(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zooslopp .gt. 0) then
+  used = send_data(id_zooslopp, zooslopp(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_phyqmort .gt. 0) then
+  used = send_data(id_phyqmort, phyqmort(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zooqmort .gt. 0) then
+  used = send_data(id_zooqmort, zooqmort(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_calcdiss .gt. 0) then
+  used = send_data(id_calcdiss, calcdiss(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_calcprod .gt. 0) then
+  used = send_data(id_calcprod, calcprod(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+
 if (id_pprod_gross_2d .gt. 0) then
   pprod_gross_2d(:,:)=0.0
   do k=1,grid%nk
@@ -3405,6 +3489,11 @@ do n = 1, instances !{
  id_restart(2) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "det_sediment", biotic(n)%det_sediment(:,:), domain=Domain%domain2d)
  id_restart(3) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detfe_sediment", biotic(n)%detfe_sediment(:,:), domain=Domain%domain2d)
  id_restart(4) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detsi_sediment", biotic(n)%detsi_sediment(:,:), domain=Domain%domain2d)
+ id_restart(5) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "caco3_sed_depst", biotic(n)%caco3_sed_depst(:,:), domain=Domain%domain2d)
+ id_restart(6) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "det_sed_depst", biotic(n)%det_sed_depst(:,:), domain=Domain%domain2d)
+ id_restart(7) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detfe_sed_depst", biotic(n)%detfe_sed_depst(:,:), domain=Domain%domain2d)
+ id_restart(8) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "detsi_sed_depst", biotic(n)%detsi_sed_depst(:,:), domain=Domain%domain2d)
+ id_restart(9) = register_restart_field(sed_restart, "csiro_bgc_sediment.res.nc", "det_sed_denit", biotic(n)%det_sed_denit(:,:), domain=Domain%domain2d)
 enddo !} n
 
 call restore_state(sed_restart)
@@ -3654,6 +3743,50 @@ id_pprod_gross = register_diag_field('ocean_model','pprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross PHY production', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
 
+id_detremin = register_diag_field('ocean_model','detremin', &
+     grid%tracer_axes(1:3),Time%model_time, 'Detritus remineralisation', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_phylmort = register_diag_field('ocean_model','phylmort', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton loss via respiration', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zoolmort = register_diag_field('ocean_model','zoolmort', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton loss via respiration', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zoograzp = register_diag_field('ocean_model','zoograzp', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing on phytoplankton (total loss)', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zoograzd = register_diag_field('ocean_model','zoograzd', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing on detritus (total loss)', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zooexcre = register_diag_field('ocean_model','zooexcre', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton excretion to inorganics', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zooslopp = register_diag_field('ocean_model','zooslopp', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton sloppy feeding to detritus', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_phyqmort = register_diag_field('ocean_model','phyqmort', &
+     grid%tracer_axes(1:3),Time%model_time, 'Phytoplankton loss via viruses/disease', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_zooqmort = register_diag_field('ocean_model','zooqmort', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton loss via predation/disease', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_calcdiss = register_diag_field('ocean_model','calcdiss', &
+     grid%tracer_axes(1:3),Time%model_time, 'CaCO3 dissolution', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
+id_calcprod = register_diag_field('ocean_model','calcprod', &
+     grid%tracer_axes(1:3),Time%model_time, 'CaCO3 production', &
+     'mmolC/m^3/s',missing_value = -1.0e+10)
+
 id_pprod_gross_2d = register_diag_field('ocean_model','pprod_gross_2d', &
      grid%tracer_axes(1:2),Time%model_time, 'Vertically integrated Gross PHY production', &
      'mmolC/m^2/s',missing_value = -1.0e+10)
@@ -3841,6 +3974,47 @@ id_total_co2_flux = register_diag_field('ocean_model','total_co2_flux', &
 id_total_aco2_flux = register_diag_field('ocean_model','total_aco2_flux', &
      Time%model_time, 'Total surface flux of inorganic C (natural + anthropogenic) into ocean', &
      'Pg/yr',missing_value = -1.0e+30)
+
+id_total_alk = register_diag_field('ocean_model','total_alk', &
+     Time%model_time, 'Total alkalinity content of ocean', &
+     'Pmol Eq',missing_value = -1.0e+30)
+
+id_total_dic = register_diag_field('ocean_model','total_dic', &
+     Time%model_time, 'Total DIC content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
+id_total_adic = register_diag_field('ocean_model','total_adic', &
+     Time%model_time, 'Total aDIC content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
+id_total_caco3 = register_diag_field('ocean_model','total_caco3', &
+     Time%model_time, 'Total CaCO3 content of ocean', &
+     'Pmol CaCO3',missing_value = -1.0e+30)
+
+id_total_no3 = register_diag_field('ocean_model','total_no3', &
+     Time%model_time, 'Total nitrate content of ocean', &
+     'Pmol NO3',missing_value = -1.0e+30)
+
+id_total_o2 = register_diag_field('ocean_model','total_o2', &
+     Time%model_time, 'Total oxygen content of ocean', &
+     'Pmol O2',missing_value = -1.0e+30)
+
+id_total_fe = register_diag_field('ocean_model','total_fe', &
+     Time%model_time, 'Total dissolved iron content of ocean', &
+     'Tmol dFe',missing_value = -1.0e+30)
+
+id_total_phy = register_diag_field('ocean_model','total_phy', &
+     Time%model_time, 'Total phytoplankton content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
+id_total_zoo = register_diag_field('ocean_model','total_zoo', &
+     Time%model_time, 'Total zooplankton content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
+id_total_det = register_diag_field('ocean_model','total_det', &
+     Time%model_time, 'Total detritus content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
 
 do n = 1, instances  !{
 
@@ -4114,13 +4288,14 @@ end subroutine  csiro_bgc_start  !}
 ! </DESCRIPTION>
 !
 
-subroutine csiro_bgc_tracer (isc, iec, jsc, jec, t_prog, grid, time, dtts) !{
+subroutine csiro_bgc_tracer (isc, iec, jsc, jec, t_prog, grid, thickness, time, dtts) !{
 
 use mpp_mod, only : mpp_sum
 
 
 type(ocean_prog_tracer_type), dimension(:), intent(inout)       :: T_prog
 type(ocean_grid_type), intent(in)                               :: Grid
+type(ocean_thickness_type), intent(in)                          :: Thickness
 type(ocean_time_type), intent(in)                               :: Time
 integer, intent(in)                             :: isc, iec
 integer, intent(in)                             :: jsc, jec
@@ -4143,7 +4318,8 @@ integer :: j
 integer :: n
 integer :: k
 integer :: nn, ntr_bgc, ind_trc
-real    :: total_trc
+real    :: total_alk, total_dic, total_caco3, total_no3, total_o2, total_fe, &
+           total_phy, total_zoo, total_det, total_adic
 real    :: zno3, zferlim
 integer :: indsal
 logical :: used
@@ -4191,6 +4367,51 @@ do n = 1, instances  !{
 
   enddo !} nn 
  endif ! zero_floor
+
+ ! Calculate total content of tracers in the ocean
+ total_alk = 0.0
+ total_dic = 0.0
+ total_adic = 0.0
+ total_caco3 = 0.0
+ total_no3 = 0.0
+ total_o2 = 0.0
+ total_fe = 0.0
+ total_phy = 0.0
+ total_zoo = 0.0
+ total_det = 0.0
+ do nn=1,ntr_bgc; do k=1,grid%nk; do j=jsc,jec; do i=isc,iec;
+   if (nn.eq.id_alk) total_alk = total_alk + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_dic) total_dic = total_dic + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_adic) total_adic = total_adic + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_caco3) total_caco3 = total_caco3 + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_no3) total_no3 = total_no3 + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_o2) total_o2 = total_o2 + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_fe) total_fe = total_fe + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_phy) total_phy = total_phy + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_zoo) total_zoo = total_zoo + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_det) total_det = total_det + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) &
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+ enddo; enddo; enddo; enddo
+ total_alk = total_alk * 1e-18  ! Pmol Eq
+ total_dic = total_dic * 1e-18  ! Pmol C
+ total_adic = total_adic * 1e-18  ! Pmol C
+ total_caco3 = total_caco3 * 1e-18 ! Pmol CaCO3
+ total_no3 = total_no3 * 1e-18  ! Pmol NO3
+ total_o2 = total_o2 * 1e-18    ! Pmol O2
+ total_fe = total_fe * 1e-18    ! Tmol dFe
+ total_phy = total_phy * 1e-18  ! Pmol C
+ total_zoo = total_zoo * 1e-18  ! Pmol C
+ total_det = total_det * 1e-18  ! Pmol C
+
 
 ! comment out this sediment source of fe while testing equivalent code in csiro_bgc_bbc.  mac, nov12.  
 
@@ -4249,6 +4470,36 @@ do n = 1, instances  !{
  if (id_detsi_sediment .gt. 0) then
     used = send_data(id_detsi_sediment, biotic(n)%detsi_sediment(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+ endif
+ if (id_total_alk .gt. 0) then
+    call mpp_sum(total_alk);  used = send_data(id_total_alk,total_alk,Time%model_time)
+ endif
+ if (id_total_dic .gt. 0) then
+    call mpp_sum(total_dic);  used = send_data(id_total_dic,total_dic,Time%model_time)
+ endif
+ if (id_total_adic .gt. 0) then
+    call mpp_sum(total_adic);  used = send_data(id_total_adic,total_adic,Time%model_time)
+ endif
+ if (id_total_caco3 .gt. 0) then
+    call mpp_sum(total_caco3);  used = send_data(id_total_caco3,total_caco3,Time%model_time)
+ endif
+ if (id_total_no3 .gt. 0) then
+    call mpp_sum(total_no3);  used = send_data(id_total_no3,total_no3,Time%model_time)
+ endif
+ if (id_total_o2 .gt. 0) then
+    call mpp_sum(total_o2);  used = send_data(id_total_o2,total_o2,Time%model_time)
+ endif
+ if (id_total_fe .gt. 0) then
+    call mpp_sum(total_fe);  used = send_data(id_total_fe,total_fe,Time%model_time)
+ endif
+ if (id_total_phy .gt. 0) then
+    call mpp_sum(total_phy);  used = send_data(id_total_phy,total_phy,Time%model_time)
+ endif
+ if (id_total_zoo .gt. 0) then
+    call mpp_sum(total_zoo);  used = send_data(id_total_zoo,total_zoo,Time%model_time)
+ endif
+ if (id_total_det .gt. 0) then
+    call mpp_sum(total_det);  used = send_data(id_total_det,total_det,Time%model_time)
  endif
 
 enddo  !} n

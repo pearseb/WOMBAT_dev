@@ -472,6 +472,17 @@ do n = 1, instances  !{
 
   pprod_gross(:,:,:) = 0.0
   zprod_gross(:,:,:) = 0.0
+  detremin(:,:,:) = 0.0
+  phylmort(:,:,:) = 0.0
+  zoolmort(:,:,:) = 0.0
+  phyqmort(:,:,:) = 0.0
+  zooqmort(:,:,:) = 0.0
+  zoograzp(:,:,:) = 0.0
+  zoograzd(:,:,:) = 0.0
+  zooexcre(:,:,:) = 0.0
+  zooslopp(:,:,:) = 0.0
+  calcdiss(:,:,:) = 0.0
+  calcprod(:,:,:) = 0.0
   light_limit(:,:) = 0.0
   radbio3d(:,:,:) = 0.0
   phy_size(:,:,:) = 0.0
@@ -556,6 +567,7 @@ do n = 1, instances  !{
         do i=isc,iec
 
           biotr(i,k,id_dic) = max(0.0,t_prog(ind_dic)%field(i,j,k,Time%taum1)) 
+          biotr(i,k,id_alk) = max(0.0,t_prog(ind_alk)%field(i,j,k,Time%taum1)) 
           biotr(i,k,id_no3) = max(0.0,t_prog(ind_no3)%field(i,j,k,Time%taum1)) 
           biotr(i,k,id_phy) = max(0.0,t_prog(ind_phy)%field(i,j,k,Time%taum1))
           biotr(i,k,id_zoo) = max(0.0,t_prog(ind_zoo)%field(i,j,k,Time%taum1))
@@ -1189,6 +1201,15 @@ do n = 1, instances  !{
                                                               - f11phy                             &
                                     - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*f_inorg(i,j) )
 
+             !!!!!!!!!!!!!!!!
+             ! Alk equation !
+             !!!!!!!!!!!!!!!!
+             biotr(i,k,id_alk)  = biotr(i,k,id_alk) - dtsb * ( f41det + z31 + f22phy - f11phy      &
+                                                           + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
+                                                           ) * 16.0/122.0                          &
+                                                    - dtsb * 2.*( ( (1.-zooassi(i,j))*0.25*z21phy +&
+                                                              f23phy + z32 ) * f_inorg(i,j) - f51 )
+
              !!!!!!!!!!!!!!!!!!!!!!!!!
              ! Chlorophyll equations !
              !!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1210,6 +1231,29 @@ do n = 1, instances  !{
              ! Gross NPP
              pprod_gross(i,j,k) = pprod_gross(i,j,k) + dtsb*(f11phy)
    
+             ! Remineralisation
+             detremin(i,j,k) = detremin(i,j,k) + dtsb*(f41det)
+
+             ! Zooplankton and phytoplankton linear mortality
+             phylmort(i,j,k) = phylmort(i,j,k) + dtsb*(f22phy)
+             zoolmort(i,j,k) = zoolmort(i,j,k) + dtsb*(z31)
+
+             ! Zooplankton and phytoplankton linear mortality
+             phyqmort(i,j,k) = phyqmort(i,j,k) + dtsb*(f23phy)
+             zooqmort(i,j,k) = zooqmort(i,j,k) + dtsb*(z32)
+
+             ! Zooplankton excretion and sloppy feeding
+             zoograzp(i,j,k) = zoograzp(i,j,k) + dtsb*(z21phy)
+             zoograzd(i,j,k) = zoograzd(i,j,k) + dtsb*(z21det)
+
+             ! Zooplankton excretion and sloppy feeding
+             zooexcre(i,j,k) = zooexcre(i,j,k) + dtsb*((1.-zooassi(i,j))*0.75*(z21det+z21phy))
+             zooslopp(i,j,k) = zooslopp(i,j,k) + dtsb*((1.-zooassi(i,j))*0.25*(z21det+z21phy))
+             
+             ! CaCO3 dissolution
+             calcdiss(i,j,k) = calcdiss(i,j,k) + dtsb*(f51)
+             calcprod(i,j,k) = calcprod(i,j,k) + dtsb*((1.-zooassi(i,j))*0.25*z21phy + f23phy + z32)*f_inorg(i,j)
+
              ! Net NPP (gross minus linear mortality (respiration))
              npp3d(i,j,k) = npp3d(i,j,k) + dtsb*(f11phy - f22phy)
    
@@ -1255,7 +1299,7 @@ do n = 1, instances  !{
                               + biotr(i,k,id_zoo) + biotr(i,k,id_caco3)
              
              if (tn.gt.1) then
-               if (abs(n_pools(i,k,2) - n_pools(i,k,1)) .gt. 1e-6 ) then
+               if (abs(n_pools(i,k,2) - n_pools(i,k,1)) .gt. 1e-10 ) then
                  print*, "Error: Ecosystem model is not conserving nitrogen"
                  print*, "       Longitude = ", grid%xt(i,j)
                  print*, "       Latitude  = ", grid%yt(i,j)
@@ -1264,7 +1308,7 @@ do n = 1, instances  !{
                  print*, "       Biological N budget (mmol N m-3) at two timesteps ", n_pools(i,k,:)
                  stop
                endif
-               if (abs(c_pools(i,k,2) - c_pools(i,k,1)) .gt. 1e-6 ) then
+               if (abs(c_pools(i,k,2) - c_pools(i,k,1)) .gt. 1e-10 ) then
                  print*, "Error: Ecosystem model is not conserving carbon"
                  print*, "       Longitude = ", grid%xt(i,j)
                  print*, "       Latitude  = ", grid%yt(i,j)
@@ -1313,8 +1357,7 @@ do n = 1, instances  !{
            t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
            t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
                                                       122./16. * no3_bgc_change - caco3_bgc_change
-           t_prog(ind_alk)%field(i,j,k,time%taum1) = t_prog(ind_alk)%field(i,j,k,time%taum1) +     &
-                                                     ( -2.0 * caco3_bgc_change - no3_bgc_change )
+           t_prog(ind_alk)%field(i,j,k,time%taum1) = biotr(i,k,id_alk)
            t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl)
            t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe)
            t_prog(ind_zoofe)%field(i,j,k,time%taum1) = biotr(i,k,id_zoofe)
@@ -1335,6 +1378,17 @@ do n = 1, instances  !{
            ! Collect primary and secondary production diagnostic terms
            pprod_gross(i,j,k) = rdtts * pprod_gross(i,j,k) * grid%tmask(i,j,k)
            zprod_gross(i,j,k) = rdtts * zprod_gross(i,j,k) * grid%tmask(i,j,k)
+           detremin(i,j,k)    = rdtts * detremin(i,j,k) * grid%tmask(i,j,k)
+           phylmort(i,j,k)    = rdtts * phylmort(i,j,k) * grid%tmask(i,j,k)
+           zoolmort(i,j,k)    = rdtts * zoolmort(i,j,k) * grid%tmask(i,j,k)
+           phyqmort(i,j,k)    = rdtts * phyqmort(i,j,k) * grid%tmask(i,j,k)
+           zooqmort(i,j,k)    = rdtts * zooqmort(i,j,k) * grid%tmask(i,j,k)
+           zoograzp(i,j,k)    = rdtts * zoograzp(i,j,k) * grid%tmask(i,j,k)
+           zoograzd(i,j,k)    = rdtts * zoograzd(i,j,k) * grid%tmask(i,j,k)
+           zooexcre(i,j,k)    = rdtts * zooexcre(i,j,k) * grid%tmask(i,j,k)
+           zooslopp(i,j,k)    = rdtts * zooslopp(i,j,k) * grid%tmask(i,j,k)
+           calcdiss(i,j,k)    = rdtts * calcdiss(i,j,k) * grid%tmask(i,j,k)
+           calcprod(i,j,k)    = rdtts * calcprod(i,j,k) * grid%tmask(i,j,k)
            npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
            nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
            zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
