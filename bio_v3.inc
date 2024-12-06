@@ -53,10 +53,11 @@ subroutine bio_v3(isc, iec, jsc, jec, isd, ied, jsd, jed, T_prog, Grid, Time, dt
 !       11.9  Temperature dependence of heterotrophy / respiration
 !       11.10 Grazing functions 
 !       11.11 Mortality scalers
-!       11.12 Collect major source and sink terms for tendency equations
-!       11.13 Apply sources and sinks to tendency equations 
-!       11.14 Collect key diagnostics
-!       11.15 Check for conservation of mass by ecosystem component
+!       11.11 CaCO3 calculations
+!       11.13 Collect major source and sink terms for tendency equations
+!       11.14 Apply sources and sinks to tendency equations 
+!       11.15 Collect key diagnostics
+!       11.16 Check for conservation of mass by ecosystem component
 !
 !               [ END do loop over t, k and i indices ]
 !
@@ -280,6 +281,15 @@ real :: zoo_FeC(isc:iec,grid%nk)        ! Microzooplankton Fe:C ratio
 real :: det_FeC(isc:iec,grid%nk)        ! Slow-sinking detritus Fe:C ratio
 real :: phy_Feupt(isc:iec,grid%nk)      ! Nanophytoplankton Fe uptake rate
 
+! ---------------------- !
+!!! ------------------ !!!
+!!! CaCO3 calculations !!!
+!!! ------------------ !!!
+! ---------------------- !
+real :: diss_cal                        ! Dissolution of CaCO3 due to calcite undersaturation
+real :: diss_ara                        ! Dissolution of CaCO3 due to aragonite undersaturation
+real :: diss_det                        ! Dissolution of CaCO3 due to POC remineralisation (particle microenvironment)
+
 ! -------------------- !
 !!! ---------------- !!!
 !!! Detrital sinking !!!
@@ -407,12 +417,14 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
   call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
+  call time_interp_external(wcaco3max_id, time%model_time, wcaco3max) !Maximum sinking rate of CaCO3
   call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
   call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
   call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
   call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
   call time_interp_external(kcoag_dfe_id, time%model_time, kcoag_dfe) !Rate of dFe colloidal coagulation (dFe-->detritus)
+  call time_interp_external(caco3_dynamics_id, time%model_time, caco3_dynamics) !Dynamic CaCO3 feedbacks?
 
 
 !--------------------------------------------------------------------------------------------------!
@@ -492,8 +504,8 @@ do n = 1, instances  !{
   phy_size(:,:,:) = 0.0
   npp3d(:,:,:) = 0.0
   nsp3d(:,:,:) = 0.0
-  adic_intmld(:,:) = 0.0
   dic_intmld(:,:) = 0.0
+  dicp_intmld(:,:) = 0.0
   o2_intmld(:,:) = 0.0
   no3_intmld(:,:) = 0.0
   fe_intmld(:,:) = 0.0
@@ -502,7 +514,7 @@ do n = 1, instances  !{
   pprod_gross_intmld(:,:) = 0.0
   npp_intmld(:,:) = 0.0
   radbio_intmld(:,:) = 0.0
-  adic_int100(:,:) = 0.0
+  dicp_int100(:,:) = 0.0
   dic_int100(:,:) = 0.0
   o2_int100(:,:) = 0.0
   no3_int100(:,:) = 0.0
@@ -515,6 +527,8 @@ do n = 1, instances  !{
   zeuphot(:,:) = 10.0       ! minimum euphotic zone depth is 20 metres
   chlorophyll(:,:) = 0.0    ! total surface chlorophyll
   wdet(:,:,:) = 0.0         ! sinking rate of detritus
+  pic2poc(:,:,:) = 0.0      ! ratio of PIC to POC
+  caco3dis(:,:,:) = 0.0     ! dissolution rate of CaCO3
   phy_parlimit(:,:,:) = 0.0
   phy_Felimit(:,:,:) = 0.0
   phy_Nlimit(:,:,:) = 0.0
@@ -546,7 +560,8 @@ do n = 1, instances  !{
   ind_dic  = biotic(n)%ind_bgc(id_dic)      ! mmol DIC / m3
   ind_alk  = biotic(n)%ind_bgc(id_alk)      ! mmol Eq / m3
   ind_caco3= biotic(n)%ind_bgc(id_caco3)    ! mmol C / m3
-  ind_adic = biotic(n)%ind_bgc(id_adic)     ! mmol DIC / m3
+  ind_dicp = biotic(n)%ind_bgc(id_dicp)     ! mmol DIC / m3
+  ind_dicr = biotic(n)%ind_bgc(id_dicr)     ! mmol DIC / m3
   ind_phy  = biotic(n)%ind_bgc(id_phy)      ! mmol C / m3
   ind_zoo  = biotic(n)%ind_bgc(id_zoo)      ! mmol C / m3
   ind_det  = biotic(n)%ind_bgc(id_det)      ! mmol C / m3
@@ -588,6 +603,7 @@ do n = 1, instances  !{
           biotr(i,k,id_phyfe) = max(0.0,t_prog(ind_phyfe)%field(i,j,k,Time%taum1))
           biotr(i,k,id_zoofe) = max(0.0,t_prog(ind_zoofe)%field(i,j,k,Time%taum1))
           biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
+          biotr(i,k,id_dicr) = max(0.0,t_prog(ind_dicr)%field(i,j,k,Time%taum1)) 
 
          enddo ! i
        enddo ! k
@@ -864,12 +880,11 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
              !!! THINGS NEEDING TO BE DONE:
              !!!   - Variable ligand concentration rather than constant?
-             !!!   - Variable pH value (currently set to constant 7.9)
-             !!!
+             !!!   - Al's authigenic colloidal dFe shunt (Tagliabue et al., 2023 Nature)
 
              ! 1. Determine equilibrium fractionation of total dFe into Fe` and L-Fe
              ligand = 0.7  ! nM ligand concentration
-             fe_keq = 10**( 17.27 - 1565.7 / ztemk ) * 1e-9
+             fe_keq = 10**( 17.27 - 1565.7 / ztemk ) * 1e-9  !!! as it gets colder, Fe is more soluble
              fe_III = ( -( 1. + fe_keq * ligand - fe_keq * biofe )                                 &
                         + SQRT( ( 1. + fe_keq * ligand - fe_keq * biofe )**2                       &
                                 + 4. * biofe * fe_keq) ) / ( 2. * fe_keq + epsi )
@@ -883,17 +898,19 @@ do n = 1, instances  !{
              fesol4 = 10**(-0.2965 - 0.7881*zval**0.5 - 4086.0/max(ztemk, 278.15) )
              fesol5 = 10**(4.4466 - 0.8505*zval**0.5 - 7980.0/max(ztemk, 278.15) )
              hp = 10**(-7.9)
+             if (biotic(n)%htotal(i,j,k).gt.0.0) hp = biotic(n)%htotal(i,j,k) * 1.0
              fe3sol = fesol1 * ( hp**3 + fesol2 * hp**2 + fesol3 * hp + fesol4 + fesol5 / hp ) *1e9
              precip = max(0.0, ( fe_III - fe3sol ) ) * knano_dfe(i,j)/86400.0
 
              ! 3. Scavenging of Fe` (Fe` --> DET)
              partic = (biodet + biocaco3)
-             scaven = fe_III * (3e-8 + kscav_dfe(i,j) * partic) / 86400.0
+             scaven = fe_III * (3e-5 + kscav_dfe(i,j) * partic) / 86400.0
              scadet = scaven * biodet / (partic+epsi)
 
              ! 4. Increased loss of Fe in near-coastal environments
-             zval = min(1.0, 1000.0 / (grid%zt(grid%kmt(i,j))+1) )
-             feloss = 1e-4 / 86400.0 * zval * biofe
+             !zval = min(1.0, 100.0 / (grid%zt(grid%kmt(i,j))+1) )
+             !feloss = 1e-4 / 86400.0 * zval * biofe
+             feloss = 0.0
 
              ! 5. Coagulation of colloidal Fe (nM) into small and large particles (uM)
              fe_col = fe_lig * 0.5
@@ -1082,7 +1099,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 
              !! Depress mortality in nutrient limited regime (i.e., investment in cell maintainence)
-             !phy_slmor = MIN(1.0, MAX(0.0,                                                         &
+             !phy_slmor = MIN(1.0, MAX(0.0,                                                        &
              !            min(phy_limnit(i,k), phy_limfe(i,k))/0.3))
              if (biophy.gt.0.001) then
                 phy_slmor = 1.0
@@ -1096,7 +1113,42 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.12] - Collect major source and sink terms for tendency equations                    !
+!     Step [11.12] - CaCO3 calculations                                                            !
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+
+             if (caco3_dynamics(i,j).gt.0.0) then
+
+               ! PIC:POC ratio is a function of the substrate:inhibitor ratio, which is the HCO3-
+               ! to free H+ ions ratio (mol/nmol), following Lehmann & Bach (2024).
+               ! We also add a T-dependent function to scale down CaCO3 production in waters colder
+               ! than 3 degrees C based off the observation of no E hux growth beneath this (Fielding 2013; L&O)
+               pic2poc(i,j,k) = min(0.2, (f_inorg(i,j) + 10**(-3.0 + 4.31 * &
+                                (biotic(n)%hco3(i,j,k)*1e-3) / (biotic(n)%hfree(i,j,k)*1e9 + epsi)) &
+                                ) * (0.55 + 0.45 * tanh(t_prog(index_temp)%field(i,j,k,time%tau) - 4.0)))
+
+               ! The dissolution rate is a function of omegas for calcite and aragonite, as well the
+               ! concentration of POC, following Kwon et al., 2024, Science Advances; Table S1
+               diss_cal = (0.253 * max(0.0, 1.0 - biotic(n)%omega_cal(i,j,k))**2.2) / 86400.0
+               diss_ara = (0.090 * max(0.0, 1.0 - biotic(n)%omega_ara(i,j,k))**1.5) / 86400.0
+               diss_det = (0.250 * biodet * fbc * detlrem(i,j))
+               caco3dis(i,j,k) = diss_cal + diss_ara + diss_det
+
+             else
+               
+               pic2poc(i,j,k) = f_inorg(i,j) + 0.025
+               caco3dis(i,j,k) = caco3rem(i,j)
+
+             endif
+
+
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!--------------------------------------------------------------------------------------------------!
+!     Step [11.13] - Collect major source and sink terms for tendency equations                    !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1122,18 +1174,15 @@ do n = 1, instances  !{
              z32 = zooqmor(i,j) * biozoo*biozoo                             * biomask(i,k)         ! ZOO --> DET
 
              ! REMINERALISATION
-             f41det = detlrem(i,j) * biodet * fbc                           * biomask(i,k)         ! DET --> DIC
-             if (grid%zw(k) .ge. 180) then
-               f41det = f41det * 0.5   ! reduce decay below 180m
-             endif
-             f51 = caco3rem(i,j) * biocaco3                                 * biomask(i,k)
+             f41det = detlrem(i,j) * biodet*biodet * fbc                    * biomask(i,k)         ! DET --> DIC
+             f51 = caco3dis(i,j,k) * biocaco3                               * biomask(i,k)
 
 
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.13] - Apply sources and sinks to tendency equations                                 !
+!     Step [11.14] - Apply sources and sinks to tendency equations                                 !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1183,9 +1232,9 @@ do n = 1, instances  !{
                                                                             z21det*det_FeC(i,k)) - &
                                                               (z31+z32)*zoo_FeC(i,k) )
 
-
              phyxsize = max(1.0, ( min(phybiot(i,j),biophy) + 3*max(0.0,biophy-phybiot(i,j)) )     &
-                                / (biophy + epsi) )
+                                  / (biophy + epsi) )
+
 
              !!!!!!!!!!!!
              ! Detritus !
@@ -1203,7 +1252,7 @@ do n = 1, instances  !{
              ! CaCO3 equation !
              !!!!!!!!!!!!!!!!!!
              biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + dtsb * ( (                                &
-                                 (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 ) * f_inorg(i,j) - f51)
+                                 (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32) * pic2poc(i,j,k)-f51)
   
 
              !!!!!!!!!!!!!!!!
@@ -1213,7 +1262,15 @@ do n = 1, instances  !{
                                                               + z31 + f22phy                       & 
                                                             + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
                                                               - f11phy                             &
-                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*f_inorg(i,j) )
+                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*pic2poc(i,j,k) )
+             !!!!!!!!!!!!!!!!!!!!!
+             ! DICremin equation !
+             !!!!!!!!!!!!!!!!!!!!!
+             biotr(i,k,id_dicr)  = biotr(i,k,id_dicr) + dtsb * ( f41det + f51                      &
+                                                              + z31 + f22phy                       & 
+                                                            + (1.-zooassi(i,j))*0.75*(z21det+z21phy)&
+                                                              - f11phy                             &
+                                    - ( (1.-zooassi(i,j))*0.25*z21phy + f23phy + z32 )*pic2poc(i,j,k) )
 
              !!!!!!!!!!!!!!!!
              ! Alk equation !
@@ -1236,7 +1293,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.14] - Collect key diagnostics                                                       !
+!     Step [11.15] - Collect key diagnostics                                                       !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1308,7 +1365,7 @@ do n = 1, instances  !{
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
-!     Step [11.15] - Check for conservation of mass by ecosystem component                         !
+!     Step [11.16] - Check for conservation of mass by ecosystem component                         !
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
 !--------------------------------------------------------------------------------------------------!
@@ -1374,10 +1431,9 @@ do n = 1, instances  !{
            t_prog(ind_zoo)%field(i,j,k,time%taum1) = biotr(i,k,id_zoo)
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
            t_prog(ind_dic)%field(i,j,k,time%taum1) = biotr(i,k,id_dic) 
+           t_prog(ind_dicr)%field(i,j,k,time%taum1) = biotr(i,k,id_dicr)
            t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
            t_prog(ind_fe)%field(i,j,k,time%taum1) = biotr(i,k,id_fe)
-           t_prog(ind_adic)%field(i,j,k,time%taum1) = t_prog(ind_adic)%field(i,j,k,time%taum1) +   &
-                                                      122./16. * no3_bgc_change - caco3_bgc_change
            t_prog(ind_alk)%field(i,j,k,time%taum1) = biotr(i,k,id_alk)
            t_prog(ind_pchl)%field(i,j,k,time%taum1) = biotr(i,k,id_pchl)
            t_prog(ind_phyfe)%field(i,j,k,time%taum1) = biotr(i,k,id_phyfe)
@@ -1423,7 +1479,7 @@ do n = 1, instances  !{
   
            ! Collect other diagnostic terms
            if (Grid%zw(k) .le. mld(i,j)) then
-              adic_intmld(i,j)= adic_intmld(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+              dicp_intmld(i,j)= dicp_intmld(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
               dic_intmld(i,j) = dic_intmld(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
               o2_intmld(i,j)  = o2_intmld(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
               no3_intmld(i,j) = no3_intmld(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
@@ -1436,7 +1492,7 @@ do n = 1, instances  !{
               light_limit(i,j) = light_limit(i,j) + phy_lpar(i,k) * thickness%dzt(i,j,k)
            endif
            if (Grid%zw(k) .le. 100) then
-              adic_int100(i,j)= adic_int100(i,j)+ t_prog(ind_adic)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
+              dicp_int100(i,j)= dicp_int100(i,j)+ t_prog(ind_dicp)%field(i,j,k,time%taum1)* thickness%dzt(i,j,k)
               dic_int100(i,j) = dic_int100(i,j) + t_prog(ind_dic)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
               o2_int100(i,j)  = o2_int100(i,j)  + t_prog(ind_o2)%field(i,j,k,time%taum1)  * thickness%dzt(i,j,k)
               no3_int100(i,j) = no3_int100(i,j) + t_prog(ind_no3)%field(i,j,k,time%taum1) * thickness%dzt(i,j,k)
@@ -1467,10 +1523,8 @@ do n = 1, instances  !{
 
          ! Find sinking rate as a function of phytoplankton size at the surface and reduce at coasts
          wdet(i,j,:) = wdetbio(i,j) *                                                              &
-                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
-         !k = grid%kmt(i,j)
-         !wdet(i,j,:) = wdetbio(i,j) * grid%zt(k) / (grid%zt(k) + 100.0) *                           &
-         !              max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)
+                       max(0.0, t_prog(ind_phy)%field(i,j,1,Time%taum1) - phybiot(i,j))**(0.21)    &
+                       + 30.0/86400.0 * pic2poc(i,j,k) 
 
          do k=1,grid%nk
 
@@ -1478,7 +1532,7 @@ do n = 1, instances  !{
            biotr(i,k,id_det) = max(0.0,t_prog(ind_det)%field(i,j,k,Time%taum1))
            biotr(i,k,id_detfe) = max(0.0,t_prog(ind_detfe)%field(i,j,k,Time%taum1))
 
-           ! Sinking rate increases linearly with pressure (also decreased at very shallow depths)
+           ! Sinking rate increases linearly with pressure, and as PIC:POC ratio increases (Bach et al., 2016)
            ! ... so that we approximate the power-law decrease in POC concentration with depth
            wdet(i,j,k) = wdet(i,j,k) + max(0.0, grid%zt(k)/5000.0 * (wdetmax(i,j)-wdet(i,j,k)) )
 
@@ -1559,7 +1613,7 @@ do n = 1, instances  !{
 
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
+           adv_fb1(i,k) = wdet(i,j,k-1) * biotr(i,k-1,id_caco3)
          enddo
        enddo
 

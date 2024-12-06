@@ -236,7 +236,7 @@ end subroutine  ocmip2_co2_alpha
 subroutine ocmip2_co2calc(isd, jsd, isc, iec, jsc, jec, zt, mask, t, s,   &
      dic_in, ta_in, pt_in, sit_in, htotallo, htotalhi, htotal,            &
      co2star, co3_ion, alpha, pCO2surf, k1_out, k2_out, invtk_out,        &
-     omega_ara, omega_cal, scale)
+     omega_ara, omega_cal, hfree, hco3_ion, scale)
 
 real, parameter :: permeg = 1.e-6
 real, parameter :: xacc = 1.0e-10
@@ -247,7 +247,7 @@ integer, intent(in)                                     :: isc
 integer, intent(in)                                     :: iec
 integer, intent(in)                                     :: jsc
 integer, intent(in)                                     :: jec
-real, intent(in)                                        :: zt
+real, dimension(isd:,jsd:), intent(in)                  :: zt
 real, dimension(isd:,jsd:), intent(in)                  :: mask
 real, dimension(isd:,jsd:), intent(in)                  :: t
 real, dimension(isd:,jsd:), intent(in)                  :: s
@@ -260,6 +260,7 @@ real, dimension(isc:,jsc:), intent(in)                  :: htotalhi
 real, dimension(isc:,jsc:), intent(inout)               :: htotal
 real, dimension(isc:,jsc:), intent(out), optional       :: co2star
 real, dimension(isc:,jsc:), intent(out), optional       :: co3_ion
+real, dimension(isc:,jsc:), intent(out), optional       :: hco3_ion
 real, dimension(isc:,jsc:), intent(out), optional       :: alpha
 real, dimension(isc:,jsc:), intent(out), optional       :: pCO2surf
 real, dimension(isc:,jsc:), intent(out), optional       :: invtk_out
@@ -267,6 +268,7 @@ real, dimension(isc:,jsc:), intent(out), optional       :: k1_out
 real, dimension(isc:,jsc:), intent(out), optional       :: k2_out
 real, dimension(isc:,jsc:), intent(out), optional       :: omega_ara 
 real, dimension(isc:,jsc:), intent(out), optional       :: omega_cal
+real, dimension(isc:,jsc:), intent(out), optional       :: hfree 
 real, intent(in), optional                              :: scale
 
 integer :: i
@@ -359,7 +361,7 @@ do j = jsc, jec
       s15       = sqrts ** 3
       scl       = s(i,j) / 1.80655
       logf_of_s = log(1.0 - 0.001005 * s(i,j))
-      prb       = zt / 10.0
+      prb       = zt(i,j) / 10.0
 
       ! k0 from Weiss 1974
 
@@ -570,6 +572,9 @@ do j = jsc, jec
            dic, ta, pt, sit, k1, k2, k1p, k2p, k3p,     &
            bt, ft, st, kb, kw, kf, ks, ksi, xacc)
 
+      if (present(hfree)) then
+        hfree(i,j) = htotal(i,j) * total2free 
+      endif
       ! Calculate [CO2*] as defined in DOE Methods Handbook 1994 Ver.2, 
       ! ORNL/CDIAC-74, Dickson and Goyet, eds. (Ch 2 p 10, Eq A.49)
       ! Convert units of output arguments
@@ -580,6 +585,9 @@ do j = jsc, jec
       co2star_internal = dic * htotal2 / (htotal2 + k1 * (htotal(i,j) + k2)) / scale_factor  !(mol/m^3)
       if (present(co2star)) then
         co2star(i,j) = co2star_internal
+      endif
+      if (present(hco3_ion)) then
+        hco3_ion(i,j) = co2star_internal * k1 / htotal(i,j) * 1e3 ! (mmol/m^3)
       endif
       if (present(co3_ion)) then
         co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2 * 1e3  ! (mmol/m^3)
@@ -623,6 +631,9 @@ do j = jsc, jec
       if (present(co3_ion)) then
         co3_ion(i,j) = 0.0
       endif
+      if (present(hco3_ion)) then
+        hco3_ion(i,j) = 0.0
+      endif
       if (present(k1_out)) then
         k1_out(i,j) = 0.0
       endif
@@ -643,6 +654,9 @@ do j = jsc, jec
       endif
       if (present(omega_cal)) then
         omega_cal(i,j) =0.0
+      endif
+      if (present(hfree)) then
+        hfree(i,j) =0.0
       endif
 
     endif
@@ -821,6 +835,13 @@ b2 = b*b
 db = 2.0*x + k1
 
 !     fn = hco3+co3+borate+oh+hpo4+2*po4+silicate+hfree+hso4+hf+h3po4-ta
+!print*, "b",b
+!print*, "kb", kb
+!print*, "x", x
+!print*, "a", a
+!print*, "ksi", ksi
+!print*, "c", c
+
 fn = k1*x*dic/b + 2.0*dic*k12/b + bt/(1.0 + x/kb) + kw/x +              &
      pt*k12p*x/a + 2.0*pt*k123p/a + sit/(1.0 + x/ksi) -                 &
      x/c - st/ (1.0 + ks/x/c) - ft/(1.0 + kf/x) -                       &
