@@ -415,6 +415,24 @@ diag_table:
             hfree:
             pic2poc:
             caco3dis:
+            detremin:
+            phylmort:
+            zoolmort:
+            phyqmort:
+            zooqmort:
+            zoograzp:
+            zoograzd:
+            zooepsil:
+            zooexcre:
+            zooslopp:
+            zoogpres:
+            zoogpresp:
+            zoogpresd:
+            zoosgrate:
+            zoosgratep:
+            zoosgrated:
+            calcdiss:
+            calcprod:
     'monthly 2d diagnostic BGC fields':
         defaults:  # these can be overridden for individual fields below
             file_name_prefix: oceanbgc
@@ -472,6 +490,17 @@ diag_table:
             packing: 1  # double precision
         fields:
             total_co2_flux:
+            total_alk:
+            total_dic:
+            total_dicr:
+            total_dicp:
+            total_caco3:
+            total_no3:
+            total_o2:
+            total_fe:
+            total_phy:
+            total_zoo:
+            total_det:
     'daily 2d diagnostic BGC fields':
         defaults:  # these can be overridden for individual fields below
             file_name_prefix: oceanbgc
