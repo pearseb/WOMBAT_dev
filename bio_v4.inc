@@ -608,9 +608,6 @@ real :: denitr(isc:iec,grid%nk)         ! Denitrification rate (NO3 --> N2)
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler on sinking rate of detritus
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
-  call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
-  call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
-  call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
   call time_interp_external(knitrif_id, time%model_time, knitrif)   !Rate of nitrification (NH4-->NO3)
   call time_interp_external(kdenitr_id, time%model_time, kdenitr)   !Rate of denitrification (NO3-->N2)
@@ -2287,7 +2284,7 @@ do n = 1, instances  !{
 
        do k=2,grid%nk+1
          do i=isc,iec
-           adv_fb1(i,k) = wcaco3(i,j) * biotr(i,k-1,id_caco3)
+           adv_fb1(i,k) = wdet(i,j,k-1) * biotr(i,k-1,id_caco3)
          enddo
        enddo
 

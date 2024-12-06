@@ -298,8 +298,10 @@ real :: diss_det                        ! Dissolution of CaCO3 due to POC remine
 real :: phyxsize                        ! Proxy for average cell size of phytoplankton community
 real :: biodetsed(isc:iec)              ! Temporary array for rate of accumulation in sediments 
 real :: biodetfesed(isc:iec)            ! Temporary array for rate of accumulation in sediments
+real :: biocaco3sed(isc:iec)            ! Temporary array for rate of accumulation in sediments
 real :: adv_fb1(isc:iec,1:grid%nk+1)    ! Sinking of detritus (carbon)
 real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
+real :: adv_fb3(isc:iec,1:grid%nk+1)    ! Sinking of detritus (CaCO3)
 
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -416,10 +418,6 @@ real :: adv_fb2(isc:iec,1:grid%nk+1)    ! Sinking of detritus (iron)
   call time_interp_external(wdetbio_id, time%model_time, wdetbio)   !Scaler to sinking rate of detritus
   call time_interp_external(wdetmax_id, time%model_time, wdetmax)   !Maximum sinking rate of detritus
   call time_interp_external(caco3rem_id, time%model_time, caco3rem) !CaCO3 remineralisation rate
-  call time_interp_external(wcaco3_id, time%model_time, wcaco3)     !CaCO3 sinking rate
-  call time_interp_external(wcaco3max_id, time%model_time, wcaco3max) !Maximum sinking rate of CaCO3
-  call time_interp_external(tscav_fe_id, time%model_time, tscav_fe) !Iron scavenging rate
-  call time_interp_external(fe_bkgnd_id, time%model_time, fe_bkgnd) !Background dFe concentration
   call time_interp_external(f_inorg_id, time%model_time, f_inorg)   !CaCO3 inorganic fraction
   call time_interp_external(knano_dfe_id, time%model_time, knano_dfe) !Rate of dFe nanoparticle formation (dFe-->)
   call time_interp_external(kscav_dfe_id, time%model_time, kscav_dfe) !Rate of dFe scavenging (dFe-->particles)
@@ -1550,6 +1548,7 @@ do n = 1, instances  !{
        ! Initialise deposition arrays
        biodetsed(:) = 0.0
        biodetfesed(:) = 0.0
+       biocaco3sed(:) = 0.0
 
        ! start timesplitting
        do tn = 1,ts_npzd !{
@@ -1557,7 +1556,7 @@ do n = 1, instances  !{
          ! initialise advective sinking arrays
          adv_fb1(:,:) = 0.0
          adv_fb2(:,:) = 0.0
-
+         adv_fb3(:,:) = 0.0
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
          ! RASF upstream sinking of detritus and particulates !
@@ -1567,6 +1566,7 @@ do n = 1, instances  !{
            do k=2,grid%nk+1
              adv_fb1(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_det))
              adv_fb2(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_detfe))
+             adv_fb3(i,k) = wdet(i,j,k-1) * max(0.0,biotr(i,k-1,id_caco3))
            enddo  ! i
          enddo  ! k
 
@@ -1577,6 +1577,7 @@ do n = 1, instances  !{
            if (k.gt.0) then
              biodetsed(i) = biodetsed(i) + adv_fb1(i,k+1) * dtsb
              biodetfesed(i) = biodetfesed(i) + adv_fb2(i,k+1) * dtsb
+             biocaco3sed(i) = biocaco3sed(i) + adv_fb3(i,k+1) * dtsb
            endif  ! k.gt.0
          enddo  ! i
 
@@ -1587,6 +1588,8 @@ do n = 1, instances  !{
                                  (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
              biotr(i,k,id_detfe) = biotr(i,k,id_detfe) + grid%tmask(i,j,k) * dtsb *                &
                                  (-adv_fb2(i,k+1) + adv_fb2(i,k))/Thickness%dzt(i,j,k)
+             biotr(i,k,id_caco3) = biotr(i,k,id_caco3) + grid%tmask(i,j,k) * dtsb *                &
+                                 (-adv_fb3(i,k+1) + adv_fb3(i,k))/Thickness%dzt(i,j,k)
            enddo  !} i
          enddo  !} k
 
@@ -1597,40 +1600,16 @@ do n = 1, instances  !{
          do k = 1,grid%nk !{
            t_prog(ind_det)%field(i,j,k,time%taum1) = biotr(i,k,id_det)
            t_prog(ind_detfe)%field(i,j,k,time%taum1) = biotr(i,k,id_detfe)
+           t_prog(ind_caco3)%field(i,j,k,time%taum1) = biotr(i,k,id_caco3)
          enddo !}
          !!! det_sed_depst must be in units of per second
          biotic(n)%det_sed_depst(i,j) = biodetsed(i) / dtts
          biotic(n)%detfe_sed_depst(i,j) = biodetfesed(i) / dtts
+         biotic(n)%caco3_sed_depst(i,j) = biocaco3sed(i) / dtts
        enddo !}
 
        ! Make sure we pass this zero array of sediment silicate deposition to subroutine "csiro_bgc_bbc"
        biotic(n)%detsi_sed_depst(:,:) = 0.0
-
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       ! RASF upstream sinking of caco3 !
-       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       adv_fb1(:,:) = 0.0
-
-       do k=2,grid%nk+1
-         do i=isc,iec
-           adv_fb1(i,k) = wdet(i,j,k-1) * biotr(i,k-1,id_caco3)
-         enddo
-       enddo
-
-       ! Deposit tracer to sediment as tracer sinks through base of column.  mac, nov12
-       do i = isc, iec
-         k = grid%kmt(i,j)
-         if (k .gt. 0) then
-           biotic(n)%caco3_sed_depst(i,j) = adv_fb1(i,k+1)
-         endif ! k .gt. 0
-       enddo ! i
-
-       do k =1,grid%nk  !{
-         do i =isc,iec  !{
-           t_prog(ind_caco3)%field(i,j,k,time%taum1)=t_prog(ind_caco3)%field(i,j,k,time%taum1) + &
-               grid%tmask(i,j,k) * dtts * (-adv_fb1(i,k+1) + adv_fb1(i,k))/Thickness%dzt(i,j,k)
-         enddo  ! i
-       enddo  ! k
 
  enddo  !} j
 

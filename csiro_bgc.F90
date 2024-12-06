@@ -411,9 +411,10 @@ integer                                 :: id_caco3_sed_bury, id_det_sed_bury, i
 integer                                 :: id_det_sed_denit
 integer                                 :: id_detsi_sed_depst, id_detsi_sed_bury, id_detsi_sed_remin
 integer                                 :: id_total_co2_flux
-integer                                 :: id_total_alk, id_total_dic, id_total_caco3, id_total_adic
+integer                                 :: id_total_alk, id_total_dic, id_total_caco3
 integer                                 :: id_total_no3, id_total_o2, id_total_fe
 integer                                 :: id_total_phy, id_total_zoo, id_total_det
+integer                                 :: id_total_dicr, id_total_dicp
 real, allocatable, dimension(:,:)       :: kw_co2 
 real, allocatable, dimension(:,:)       :: kw_o2
 real, allocatable, dimension(:,:)       :: patm_t
@@ -638,16 +639,6 @@ integer                                 :: wdetbio_id
 real, allocatable, dimension(:,:)       :: wdetbio
 integer                                 :: wdetmax_id
 real, allocatable, dimension(:,:)       :: wdetmax
-integer                                 :: wcaco3_id
-real, allocatable, dimension(:,:)       :: wcaco3
-integer                                 :: wcaco3max_id
-real, allocatable, dimension(:,:)       :: wcaco3max
-integer                                 :: nat_co2_id
-real, allocatable, dimension(:,:)       :: nat_co2
-integer                                 :: tscav_fe_id
-real, allocatable, dimension(:,:)       :: tscav_fe
-integer                                 :: fe_bkgnd_id
-real, allocatable, dimension(:,:)       :: fe_bkgnd
 integer                                 :: f_inorg_id
 real, allocatable, dimension(:,:)       :: f_inorg
 integer                                 :: knitrif_id
@@ -1000,11 +991,6 @@ allocate( detlrem_sed(isd:ied,jsd:jed) )
 allocate( caco3rem_sed(isd:ied,jsd:jed) )
 allocate( wdetbio(isd:ied,jsd:jed) )
 allocate( wdetmax(isd:ied,jsd:jed) )
-allocate( wcaco3(isd:ied,jsd:jed) )
-allocate( wcaco3max(isd:ied,jsd:jed) )
-allocate( nat_co2(isd:ied,jsd:jed) )
-allocate( tscav_fe(isd:ied,jsd:jed) )
-allocate( fe_bkgnd(isd:ied,jsd:jed) )
 allocate( f_inorg(isd:ied,jsd:jed) )
 allocate( knitrif(isd:ied,jsd:jed) )
 allocate( kdenitr(isd:ied,jsd:jed) )
@@ -1508,7 +1494,6 @@ else
  enddo ! j
 endif ! if (gasx_from_file)
 
-call time_interp_external(nat_co2_id, time%model_time, nat_co2)
 if (gasx_from_file) then
         call time_interp_external(atmpress_id, time%model_time, patm_t)
 else !use the sea level pressure from the forcing (convert Pa to atm)
@@ -3576,16 +3561,6 @@ wdetbio_id = init_external_field("INPUT/bgc_param.nc",          &
         "wdetbio", domain = Domain%domain2d)
 wdetmax_id = init_external_field("INPUT/bgc_param.nc",          &
         "wdetmax", domain = Domain%domain2d)
-wcaco3_id = init_external_field("INPUT/bgc_param.nc",          &
-        "wcaco3", domain = Domain%domain2d)
-wcaco3max_id = init_external_field("INPUT/bgc_param.nc",          &
-        "wcaco3max", domain = Domain%domain2d)
-nat_co2_id = init_external_field("INPUT/bgc_param.nc",          &
-        "nat_co2", domain = Domain%domain2d)
-tscav_fe_id = init_external_field("INPUT/bgc_param.nc",          &
-        "tscav_fe", domain = Domain%domain2d)
-fe_bkgnd_id = init_external_field("INPUT/bgc_param.nc",          &
-        "fe_bkgnd", domain = Domain%domain2d)
 f_inorg_id = init_external_field("INPUT/bgc_param.nc",          &
         "f_inorg", domain = Domain%domain2d)
 knitrif_id = init_external_field("INPUT/bgc_param.nc",          &
@@ -4175,8 +4150,12 @@ id_total_dic = register_diag_field('ocean_model','total_dic', &
      Time%model_time, 'Total DIC content of ocean', &
      'Pmol C',missing_value = -1.0e+30)
 
-id_total_adic = register_diag_field('ocean_model','total_adic', &
-     Time%model_time, 'Total aDIC content of ocean', &
+id_total_dicr = register_diag_field('ocean_model','total_dicr', &
+     Time%model_time, 'Total remineralised DIC content of ocean', &
+     'Pmol C',missing_value = -1.0e+30)
+
+id_total_dicp = register_diag_field('ocean_model','total_dicp', &
+     Time%model_time, 'Total preformed DIC content of ocean', &
      'Pmol C',missing_value = -1.0e+30)
 
 id_total_caco3 = register_diag_field('ocean_model','total_caco3', &
@@ -4517,7 +4496,7 @@ integer :: n
 integer :: k
 integer :: nn, ntr_bgc, ind_trc
 real    :: total_alk, total_dic, total_caco3, total_no3, total_o2, total_fe, &
-           total_phy, total_zoo, total_det, total_adic
+           total_phy, total_zoo, total_det, total_dicr, total_dicp 
 real    :: zno3, zferlim
 integer :: indsal
 logical :: used
@@ -4569,7 +4548,8 @@ do n = 1, instances  !{
  ! Calculate total content of tracers in the ocean
  total_alk = 0.0
  total_dic = 0.0
- total_adic = 0.0
+ total_dicr = 0.0
+ total_dicp = 0.0
  total_caco3 = 0.0
  total_no3 = 0.0
  total_o2 = 0.0
@@ -4582,7 +4562,9 @@ do n = 1, instances  !{
                                  * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
    if (nn.eq.id_dic) total_dic = total_dic + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
                                  * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
-   if (nn.eq.id_adic) total_adic = total_adic + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+   if (nn.eq.id_dicr) total_dicr = total_dicr + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
+                                 * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
+   if (nn.eq.id_dicp) total_dicp = total_dicp + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
                                  * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
    if (nn.eq.id_caco3) total_caco3 = total_caco3 + t_prog(biotic(n)%ind_bgc(nn))%field(i,j,k,time%taup1) & 
                                  * grid%tmask(i,j,k) * grid%dat(i,j) * Thickness%dzt(i,j,k)
@@ -4601,7 +4583,8 @@ do n = 1, instances  !{
  enddo; enddo; enddo; enddo
  total_alk = total_alk * 1e-18  ! Pmol Eq
  total_dic = total_dic * 1e-18  ! Pmol C
- total_adic = total_adic * 1e-18  ! Pmol C
+ total_dicr = total_dicr * 1e-18  ! Pmol C
+ total_dicp = total_dicp * 1e-18  ! Pmol C
  total_caco3 = total_caco3 * 1e-18 ! Pmol CaCO3
  total_no3 = total_no3 * 1e-18  ! Pmol NO3
  total_o2 = total_o2 * 1e-18    ! Pmol O2
@@ -4675,8 +4658,11 @@ do n = 1, instances  !{
  if (id_total_dic .gt. 0) then
     call mpp_sum(total_dic);  used = send_data(id_total_dic,total_dic,Time%model_time)
  endif
- if (id_total_adic .gt. 0) then
-    call mpp_sum(total_adic);  used = send_data(id_total_adic,total_adic,Time%model_time)
+ if (id_total_dicr .gt. 0) then
+    call mpp_sum(total_dicr);  used = send_data(id_total_dicr,total_dicr,Time%model_time)
+ endif
+ if (id_total_dicp .gt. 0) then
+    call mpp_sum(total_dicp);  used = send_data(id_total_dicp,total_dicp,Time%model_time)
  endif
  if (id_total_caco3 .gt. 0) then
     call mpp_sum(total_caco3);  used = send_data(id_total_caco3,total_caco3,Time%model_time)
