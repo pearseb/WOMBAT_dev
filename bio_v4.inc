@@ -734,7 +734,7 @@ do n = 1, instances  !{
   dia_SiCupta(:,:,:) = 0.0
   phy_dFeupt(:,:,:) = 0.0
   dia_dFeupt(:,:,:) = 0.0
-  zoo_grazpres(:,:,:) = 0.0
+  zoogpres(:,:,:) = 0.0
   mes_grazpres(:,:,:) = 0.0
   nitrific(:,:,:) = 0.0
   denitrif(:,:,:) = 0.0
@@ -2000,7 +2000,7 @@ do n = 1, instances  !{
 
              ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
              if (zooprey.gt.0.0) then
-               zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb *                                  &
+               zoogpres(i,j,k) = zoogpres(i,j,k) + dtsb *                                  &
                                     (z21phy+z21dia+z21diz+z21det+z21poc) /                         & 
                                     (biophy+biodia+biodiz+biodet+biopoc) 
              endif
@@ -2142,7 +2142,7 @@ do n = 1, instances  !{
            mprod_gross(i,j,k) = rdtts * mprod_gross(i,j,k) * grid%tmask(i,j,k)
            npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
            nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
-           zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
+           zoogpres(i,j,k)= rdtts * zoogpres(i,j,k)* grid%tmask(i,j,k)
            mes_grazpres(i,j,k)= rdtts * mes_grazpres(i,j,k)* grid%tmask(i,j,k)
            nitrific(i,j,k)    = rdtts * nitrific(i,j,k)    * grid%tmask(i,j,k)
            denitrif(i,j,k)    = rdtts * denitrif(i,j,k)    * grid%tmask(i,j,k)

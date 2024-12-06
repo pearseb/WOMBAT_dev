@@ -340,7 +340,12 @@ integer                                 :: id_dia_Plimit = -1
 integer                                 :: id_diz_Plimit = -1
 integer                                 :: id_dia_Silimit = -1
 integer                                 :: id_dia_SiCupta = -1
-integer                                 :: id_zoo_grazpres = -1
+integer                                 :: id_zoogpres = -1
+integer                                 :: id_zoogpresp = -1
+integer                                 :: id_zoogpresd = -1
+integer                                 :: id_zoosgrate = -1
+integer                                 :: id_zoosgratep = -1
+integer                                 :: id_zoosgrated = -1
 integer                                 :: id_mes_grazpres = -1
 integer                                 :: id_nitrific = -1
 integer                                 :: id_denitrif = -1
@@ -361,6 +366,7 @@ integer                                 :: id_zooqmort = -1
 integer                                 :: id_zooexcre = -1
 integer                                 :: id_zoograzp = -1
 integer                                 :: id_zoograzd = -1
+integer                                 :: id_zooepsil = -1
 integer                                 :: id_zooslopp = -1
 integer                                 :: id_calcdiss = -1
 integer                                 :: id_calcprod = -1
@@ -462,11 +468,11 @@ real, allocatable, dimension(:,:,:) :: wdet
 real, allocatable, dimension(:,:) :: npp2d, zeuphot, chlorophyll
 real, allocatable, dimension(:,:,:) :: npp3d, nsp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross, phy_parlimit, dia_parlimit, diz_parlimit,      &
-                                       zoo_grazpres, mes_grazpres, phylmort, zoolmort, zooexcre, zooslopp, &
+                                       zoogpres, mes_grazpres, phylmort, zoolmort, zooexcre, zooslopp, &
                                        phy_KN, phy_KFe, detremin, phyqmort, zooqmort, calcdiss, calcprod,  &
-                                       phy_Felimit, dia_Felimit, diz_Felimit, zoograzp, zoograzd,          & 
-                                       phy_Nlimit, dia_Nlimit, diz_Nlimit,                         &
-                                       phy_Plimit, dia_Plimit, diz_Plimit,                         &
+                                       phy_Felimit, dia_Felimit, diz_Felimit, zoograzp, zoograzd, zooepsil,& 
+                                       phy_Nlimit, dia_Nlimit, diz_Nlimit, zoogpresp, zoogpresd,      &
+                                       phy_Plimit, dia_Plimit, diz_Plimit, zoosgrate, zoosgratep, zoosgrated,  &
                                        dia_Silimit, dia_SiCupta, nitrific, denitrif, diazofix,     &
                                        phy_dFeupt, dia_dFeupt, diz_dFeupt
 real, allocatable, dimension(:,:) :: pprod_gross_2d
@@ -770,6 +776,7 @@ allocate( phyqmort(isc:iec,jsc:jec,nk) )
 allocate( zooqmort(isc:iec,jsc:jec,nk) )
 allocate( zoograzp(isc:iec,jsc:jec,nk) )
 allocate( zoograzd(isc:iec,jsc:jec,nk) )
+allocate( zooepsil(isc:iec,jsc:jec,nk) )
 allocate( zooexcre(isc:iec,jsc:jec,nk) )
 allocate( zooslopp(isc:iec,jsc:jec,nk) )
 allocate( calcdiss(isc:iec,jsc:jec,nk) )
@@ -792,7 +799,12 @@ allocate( dia_Plimit(isc:iec,jsc:jec,nk) )
 allocate( diz_Plimit(isc:iec,jsc:jec,nk) )
 allocate( dia_Silimit(isc:iec,jsc:jec,nk) )
 allocate( dia_SiCupta(isc:iec,jsc:jec,nk) )
-allocate( zoo_grazpres(isc:iec,jsc:jec,nk) )
+allocate( zoogpres(isc:iec,jsc:jec,nk) )
+allocate( zoogpresp(isc:iec,jsc:jec,nk) )
+allocate( zoogpresd(isc:iec,jsc:jec,nk) )
+allocate( zoosgrate(isc:iec,jsc:jec,nk) )
+allocate( zoosgratep(isc:iec,jsc:jec,nk) )
+allocate( zoosgrated(isc:iec,jsc:jec,nk) )
 allocate( mes_grazpres(isc:iec,jsc:jec,nk) )
 allocate( nitrific(isc:iec,jsc:jec,nk) )
 allocate( denitrif(isc:iec,jsc:jec,nk) )
@@ -1856,7 +1868,7 @@ do n = 1, instances  !{
       totdenit(i,j) = biotic(n)%det_sed_denit(i,j) * grid%dat(i,j) * grid%tmask(i,j,1)
     enddo  !} i
   enddo  !} j
-  proxfix = sum(totdenit(:,:)) / (sum(grid%dat(:,:) * grid%tmask(:,:,1)))
+  proxfix = sum(totdenit(:,:)) / Grid%tcellsurf 
   do j = jsc, jec  !{
     do i = isc, iec  !{
       if (grid%tmask(i,j,1).gt.0.0) then
@@ -2714,6 +2726,10 @@ if (id_zoograzd .gt. 0) then
   used = send_data(id_zoograzd, zoograzd(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
+if (id_zooepsil .gt. 0) then
+  used = send_data(id_zooepsil, zooepsil(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
 if (id_zooexcre .gt. 0) then
   used = send_data(id_zooexcre, zooexcre(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
@@ -2883,9 +2899,30 @@ if (id_dia_SiCupta .gt. 0) then
   used = send_data(id_dia_SiCupta, dia_SiCupta(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
-! Specific zooplankton grazing pressure (µM Z per µM P per second)
-if (id_zoo_grazpres .gt. 0) then
-  used = send_data(id_zoo_grazpres, zoo_grazpres(isc:iec,jsc:jec,:),          &
+! Zooplankton grazing pressure (µM Z per µM P per second)
+if (id_zoogpres .gt. 0) then
+  used = send_data(id_zoogpres, zoogpres(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoogpresp .gt. 0) then
+  used = send_data(id_zoogpresp, zoogpresp(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoogpresd .gt. 0) then
+  used = send_data(id_zoogpresd, zoogpresd(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! Specific zooplankton grazing rate (µM Z per µM Z per second)
+if (id_zoosgrate .gt. 0) then
+  used = send_data(id_zoosgrate, zoosgrate(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoosgratep .gt. 0) then
+  used = send_data(id_zoosgratep, zoosgratep(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+if (id_zoosgrated .gt. 0) then
+  used = send_data(id_zoosgrated, zoosgrated(isc:iec,jsc:jec,:),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 if (id_mes_grazpres .gt. 0) then
@@ -3768,6 +3805,10 @@ id_zoograzd = register_diag_field('ocean_model','zoograzd', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing on detritus (total loss)', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
 
+id_zooepsil = register_diag_field('ocean_model','zooepsil', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton prey capture rate coefficient', &
+     'm^6 / (mmolC)^2 /s',missing_value = -1.0e+10)
+
 id_zooexcre = register_diag_field('ocean_model','zooexcre', &
      grid%tracer_axes(1:3),Time%model_time, 'Zooplankton excretion to inorganics', &
      'mmolC/m^3/s',missing_value = -1.0e+10)
@@ -3872,9 +3913,29 @@ id_dia_SiCupta = register_diag_field('ocean_model','dia_SiCupta', &
      grid%tracer_axes(1:3),Time%model_time, 'Microphytoplankton Si:C ratio of uptake', &
      '[0-1]',missing_value = -1.0e+10)
 
-id_zoo_grazpres = register_diag_field('ocean_model','zoo_grazpres', &
-     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing pressure', &
+id_zoogpres = register_diag_field('ocean_model','zoogpres', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing pressure', &
      'mmolZ/mmolPrey per s ',missing_value = -1.0e+10)
+
+id_zoogpresp = register_diag_field('ocean_model','zoogpresp', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing pressure on phytoplankton', &
+     'mmolZ/mmolPhy per s ',missing_value = -1.0e+10)
+
+id_zoogpresd = register_diag_field('ocean_model','zoogpresd', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton grazing pressure on detritus', &
+     'mmolZ/mmolDet per s ',missing_value = -1.0e+10)
+
+id_zoosgrate = register_diag_field('ocean_model','zoosgrate', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing rate', &
+     'mmolZ/mmolZ per s ',missing_value = -1.0e+10)
+
+id_zoosgratep = register_diag_field('ocean_model','zoosgratep', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing rate on phytoplankton', &
+     'mmolZ/mmolZ per s ',missing_value = -1.0e+10)
+
+id_zoosgrated = register_diag_field('ocean_model','zoosgrated', &
+     grid%tracer_axes(1:3),Time%model_time, 'Zooplankton specific grazing rate on detritus', &
+     'mmolZ/mmolZ per s ',missing_value = -1.0e+10)
 
 id_mes_grazpres = register_diag_field('ocean_model','mes_grazpres', &
      grid%tracer_axes(1:3),Time%model_time, 'mesozooplankton specific grazing pressure', &

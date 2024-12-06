@@ -192,6 +192,7 @@ real :: zoo_slmor                       ! Scaler [0-1] to depress linear zooopla
 real :: u_phy                           ! Realised growth rate of nanophytoplankton (nutrients & light limitations)
 real :: g_zoo                           ! Realised grazing rate of microzooplankton
 real :: zooprey                         ! Total prey biomass for microzooplankton
+real :: epsmin                          ! Variable prey capture rate coefficient (minimum)
 real :: epszoo                          ! Variable prey capture rate coefficient
 real :: fbc                             ! Heterotrophic temperature-dependence function
 real :: mumax_phy(isc:iec,grid%nk)      ! Maximum potential (T-dependent) growth rate of nanophytoplankton
@@ -481,6 +482,7 @@ do n = 1, instances  !{
   zooqmort(:,:,:) = 0.0
   zoograzp(:,:,:) = 0.0
   zoograzd(:,:,:) = 0.0
+  zooepsil(:,:,:) = 0.0
   zooexcre(:,:,:) = 0.0
   zooslopp(:,:,:) = 0.0
   calcdiss(:,:,:) = 0.0
@@ -519,7 +521,12 @@ do n = 1, instances  !{
   phy_Plimit(:,:,:) = 0.0
   phy_KFe(:,:,:) = 0.0
   phy_KN(:,:,:) = 0.0
-  zoo_grazpres(:,:,:) = 0.0
+  zoogpres(:,:,:) = 0.0
+  zoogpresp(:,:,:) = 0.0
+  zoogpresd(:,:,:) = 0.0
+  zoosgrate(:,:,:) = 0.0
+  zoosgratep(:,:,:) = 0.0
+  zoosgrated(:,:,:) = 0.0
   phy_dFeupt(:,:,:) = 0.0
 
 
@@ -1055,8 +1062,11 @@ do n = 1, instances  !{
 
              ! preferences and prey availability
              zooprey = zprefphy(i,j)*biophy_min + zprefdet(i,j)*biodet_min
-             epszoo = epszoomin(i,j) + (epszoomax(i,j) - epszoomin(i,j)) /                         &
-                                       (1.0 + exp(5.0*(biophy - 2.*phybiot(i,j))))
+             ztem = t_prog(index_temp)%field(i,j,k,time%tau)
+             epsmin = epszoomin(i,j) * (1.5 * tanh(0.2*(ztem-15.0)) + 2.5)
+             epszoo = epsmin + (epszoomax(i,j) - epsmin) / &
+                               (1.0 + exp(5.0*(biophy - 2.*phybiot(i,j)))) / &
+                               (1.0 + exp(-(ztem - 10.0)))
              g_zoo = zoogmax(i,j)*fbc * epszoo * zooprey*zooprey /                                 & 
                      ( zoogmax(i,j)*fbc + epszoo * zooprey*zooprey + epsi )
 
@@ -1246,9 +1256,10 @@ do n = 1, instances  !{
              phyqmort(i,j,k) = phyqmort(i,j,k) + dtsb*(f23phy)
              zooqmort(i,j,k) = zooqmort(i,j,k) + dtsb*(z32)
 
-             ! Zooplankton excretion and sloppy feeding
+             ! Zooplankton grazing 
              zoograzp(i,j,k) = zoograzp(i,j,k) + dtsb*(z21phy)
              zoograzd(i,j,k) = zoograzd(i,j,k) + dtsb*(z21det)
+             zooepsil(i,j,k) = zooepsil(i,j,k) + dtsb*(epszoo)
 
              ! Zooplankton excretion and sloppy feeding
              zooexcre(i,j,k) = zooexcre(i,j,k) + dtsb*((1.-zooassi(i,j))*0.75*(z21det+z21phy))
@@ -1279,9 +1290,15 @@ do n = 1, instances  !{
              ! Proxy for average cell/colony size of phytoplankton
              phy_size(i,j,k) = phy_size(i,j,k) + phyxsize*dtsb/dtts
 
-             ! Specific grazing pressure of zooplankton (µM Z per µM P per second)
-             if (zooprey.gt.0.0) then
-               zoo_grazpres(i,j,k) = zoo_grazpres(i,j,k) + dtsb * (z21phy+z21det) / (biophy+biodet)
+             ! Grazing pressure of zooplankton (µM Z per µM P per second)
+             if ((biophy+biodet).gt.0.0) zoogpres(i,j,k) = zoogpres(i,j,k) + dtsb * (z21phy+z21det) / (biophy+biodet)
+             if (biophy.gt.0.0) zoogpresp(i,j,k) = zoogpresp(i,j,k) + dtsb * z21phy / biophy
+             if (biodet.gt.0.0) zoogpresd(i,j,k) = zoogpresd(i,j,k) + dtsb * z21det / biodet
+             ! Specific grazing rate of zooplankton (µM Z per µM Z per second)
+             if (biozoo.gt.0.0) then
+               zoosgrate(i,j,k) = zoosgrate(i,j,k) + dtsb * (z21phy+z21det) / biozoo
+               zoosgratep(i,j,k) = zoosgratep(i,j,k) + dtsb * z21phy / biozoo
+               zoosgrated(i,j,k) = zoosgrated(i,j,k) + dtsb * z21det / biozoo
              endif
 
              ! Phytoplankton uptake of dFe (nM dFe per second)
@@ -1389,13 +1406,19 @@ do n = 1, instances  !{
            zooqmort(i,j,k)    = rdtts * zooqmort(i,j,k) * grid%tmask(i,j,k)
            zoograzp(i,j,k)    = rdtts * zoograzp(i,j,k) * grid%tmask(i,j,k)
            zoograzd(i,j,k)    = rdtts * zoograzd(i,j,k) * grid%tmask(i,j,k)
+           zooepsil(i,j,k)    = rdtts * zooepsil(i,j,k) * grid%tmask(i,j,k)
            zooexcre(i,j,k)    = rdtts * zooexcre(i,j,k) * grid%tmask(i,j,k)
            zooslopp(i,j,k)    = rdtts * zooslopp(i,j,k) * grid%tmask(i,j,k)
            calcdiss(i,j,k)    = rdtts * calcdiss(i,j,k) * grid%tmask(i,j,k)
            calcprod(i,j,k)    = rdtts * calcprod(i,j,k) * grid%tmask(i,j,k)
-           npp3d(i,j,k)       = rdtts * npp3d(i,j,k)       * grid%tmask(i,j,k)
-           nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)       * grid%tmask(i,j,k)
-           zoo_grazpres(i,j,k)= rdtts * zoo_grazpres(i,j,k)* grid%tmask(i,j,k)
+           npp3d(i,j,k)       = rdtts * npp3d(i,j,k)    * grid%tmask(i,j,k)
+           nsp3d(i,j,k)       = rdtts * nsp3d(i,j,k)    * grid%tmask(i,j,k)
+           zoogpres(i,j,k)    = rdtts * zoogpres(i,j,k) * grid%tmask(i,j,k)
+           zoogpresp(i,j,k)   = rdtts * zoogpresp(i,j,k) * grid%tmask(i,j,k)
+           zoogpresd(i,j,k)   = rdtts * zoogpresd(i,j,k) * grid%tmask(i,j,k)
+           zoosgrate(i,j,k)  = rdtts * zoosgrate(i,j,k) * grid%tmask(i,j,k)
+           zoosgratep(i,j,k) = rdtts * zoosgratep(i,j,k) * grid%tmask(i,j,k)
+           zoosgrated(i,j,k) = rdtts * zoosgrated(i,j,k) * grid%tmask(i,j,k)
            phy_dFeupt(i,j,k)  = rdtts * phy_dFeupt(i,j,k)  * grid%tmask(i,j,k)
   
            ! Collect other diagnostic terms
